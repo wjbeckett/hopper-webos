@@ -1,0 +1,12 @@
+{
+  "id": "org.siloserver.webos",
+  "version": "0.2.0",
+  "vendor": "Silo webOS community client",
+  "type": "web",
+  "main": "index.html",
+  "title": "Silo",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "resolution": "1920x1080",
+  "disableBackHistoryAPI": true
+}
