@@ -3349,3 +3349,11 @@ body {
   min-width: 58px;
   max-width: 112px;
 }
+
+.media-card-wrap {
+  min-width: 0;
+}
+
+.card-menu {
+  width: min(420px, 76vw);
+}

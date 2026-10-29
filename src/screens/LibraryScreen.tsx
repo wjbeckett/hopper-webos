@@ -625,7 +625,7 @@ export function LibraryScreen({
               {visibleItems.length ? (
                 <div className="library-grid">
                   {visibleItems.map((item) => (
-                    <MediaCard key={item.Id} item={item} image={imageUrl(session, item)} onOpen={() => { browseReturnTargets.set(surfaceKey, item.Id); onOpen(item); }} variant="browse" />
+                    <MediaCard key={item.Id} session={session} item={item} image={imageUrl(session, item)} onOpen={() => { browseReturnTargets.set(surfaceKey, item.Id); onOpen(item); }} variant="browse" />
                   ))}
                 </div>
               ) : <div className="screen-state">{hasMoreBrowseItems ? "Loading library items…" : libraryEmpty === false || (libraryEmpty === null && (catalogGroups.length || namePrefix)) ? "No titles match the current filters." : "This library is empty."}</div>}

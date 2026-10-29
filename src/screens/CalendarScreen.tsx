@@ -134,7 +134,7 @@ export function CalendarScreen({ session, onOpen }: {
               const item = calendarItemToSiloItem(calendarItem);
               return (
                 <div className="calendar-release" key={calendarItem.contentId}>
-                  <MediaCard item={item} image={imageUrl(session, item)} onOpen={() => onOpen(item)} />
+                  <MediaCard session={session} item={item} image={imageUrl(session, item)} onOpen={() => onOpen(item)} />
                   <div className="calendar-release-meta">
                     {calendarItem.airTime ? <span>{calendarItem.airTime}</span> : null}
                     {calendarItem.badges.map(badge => <span key={badge}>{badge.replace(/_/g, " ")}</span>)}

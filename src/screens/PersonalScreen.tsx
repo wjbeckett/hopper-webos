@@ -110,7 +110,7 @@ export function PersonalScreen({
       {loading ? <div className="screen-state">Loading…</div> : items.length ? (
         <div className="library-grid">
           {filteredItems.map((item) => (
-            <MediaCard key={item.Id} item={item} image={imageUrl(session, item)} onOpen={() => onOpen(item)} />
+            <MediaCard key={item.Id} session={session} item={item} image={imageUrl(session, item)} onOpen={() => onOpen(item)} />
           ))}
         </div>
       ) : (

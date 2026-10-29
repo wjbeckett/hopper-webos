@@ -21,6 +21,7 @@ export function MediaRail({
         {rail.items.map((item) => (
           <MediaCard
             key={`${rail.id}-${item.Id}`}
+            session={session}
             item={item}
             image={landscape ? backdropUrl(session, item) : imageUrl(session, item)}
             landscape={landscape}

@@ -83,6 +83,7 @@ export function SearchScreen({
         {items.map((item) => (
           <MediaCard
             key={item.Id}
+            session={session}
             item={item}
             image={imageUrl(session, item)}
             onOpen={() => onOpen(item)}

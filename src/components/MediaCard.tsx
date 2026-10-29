@@ -1,11 +1,16 @@
-import type { SiloItem } from "../types";
+import { useEffect, useRef, useState } from "react";
+import { isFavorite, setFavorite, setWatched } from "../api/silo";
+import { applyWatchedState, subscribeWatchState } from "../core/watchState";
+import type { Session, SiloItem } from "../types";
 
 type Props = {
+  session: Session;
   item: SiloItem;
   image: string;
   onOpen: () => void;
   landscape?: boolean;
   variant?: "browse";
+  square?: boolean;
 };
 
 function subtitle(item: SiloItem) {
@@ -17,42 +22,127 @@ function subtitle(item: SiloItem) {
   return [item.Type, item.ProductionYear].filter(Boolean).join(" · ") || "Media";
 }
 
-export function MediaCard({ item, image, onOpen, landscape = false, variant }: Props) {
+export function MediaCard({ session, item, image, onOpen, landscape = false, variant, square }: Props) {
   const browse = variant === "browse";
-  const progress = Math.max(0, Math.min(100, item.UserData?.PlayedPercentage ?? 0));
-  const watched = item.UserData?.Played === true || progress >= 100;
+  const [live, setLive] = useState(item);
+  const progress = Math.max(0, Math.min(100, live.UserData?.PlayedPercentage ?? 0));
+  const watched = live.UserData?.Played === true || progress >= 100;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuFavorite, setMenuFavorite] = useState(false);
+  const cardRef = useRef<HTMLButtonElement>(null);
+  const menuFirstRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => setLive(item), [item]);
+
+  useEffect(() => subscribeWatchState(next => {
+    if (next.Id === item.Id) setLive(current => (current.Id === item.Id ? { ...current, UserData: next.UserData } : current));
+  }), [item.Id]);
+
+  useEffect(() => {
+    const onOpenMenu = (event: Event) => {
+      if (!(event.target instanceof HTMLElement)) return;
+      if (!cardRef.current || !cardRef.current.contains(event.target)) return;
+      setMenuOpen(true);
+    };
+    window.addEventListener("silo:open-card-menu", onOpenMenu);
+    return () => window.removeEventListener("silo:open-card-menu", onOpenMenu);
+  }, []);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    let alive = true;
+    isFavorite(session, item.Id).then(next => { if (alive) setMenuFavorite(next); }).catch(() => undefined);
+    requestAnimationFrame(() => menuFirstRef.current?.focus());
+    const onKey = (event: KeyboardEvent) => {
+      if (!["Escape", "Backspace", "Back", "GoBack", "BrowserBack"].includes(event.key) && event.keyCode !== 461 && event.keyCode !== 10009) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setMenuOpen(false);
+      requestAnimationFrame(() => cardRef.current?.focus({ preventScroll: true }));
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => {
+      alive = false;
+      window.removeEventListener("keydown", onKey, true);
+    };
+  }, [menuOpen, session, item.Id]);
+
+  async function toggleMenuWatched(next: boolean) {
+    setMenuOpen(false);
+    setLive(current => applyWatchedState(current, next));
+    try {
+      await setWatched(session, item.Id, next);
+    } catch (cause) {
+      console.error(cause);
+      setLive(item);
+      return;
+    }
+    requestAnimationFrame(() => cardRef.current?.focus({ preventScroll: true }));
+  }
+
+  async function toggleMenuFavorite(next: boolean) {
+    setMenuOpen(false);
+    try {
+      await setFavorite(session, item.Id, next);
+      setMenuFavorite(next);
+    } catch (cause) {
+      console.error(cause);
+    }
+    requestAnimationFrame(() => cardRef.current?.focus({ preventScroll: true }));
+  }
 
   return (
-    <button
-      data-tv-focusable="true"
-      data-media-id={item.Id}
-      className={`media-card ${landscape ? "landscape" : ""} ${watched ? "watched" : ""} ${browse ? "browse" : ""} ${browse && item.Type === "AudioBook" ? "square" : ""}`}
-      onClick={onOpen}
-      aria-label={item.Name}
-    >
-      <div className="media-card-art">
-        <div className="media-card-placeholder" aria-hidden="true">
-          {item.Name.slice(0, 1).toUpperCase()}
+    <div className="media-card-wrap">
+      <button
+        ref={cardRef}
+        data-tv-focusable="true"
+        data-menu-context="true"
+        data-media-id={item.Id}
+        className={`media-card ${landscape ? "landscape" : ""} ${watched ? "watched" : ""} ${browse ? "browse" : ""} ${browse && (square ?? item.Type === "AudioBook") ? "square" : ""}`}
+        onClick={onOpen}
+        aria-label={item.Name}
+      >
+        <div className="media-card-art">
+          <div className="media-card-placeholder" aria-hidden="true">
+            {item.Name.slice(0, 1).toUpperCase()}
+          </div>
+          {image ? (
+            <img
+              src={image}
+              alt=""
+              loading="lazy"
+              onError={(event) => { event.currentTarget.hidden = true; }}
+            />
+          ) : null}
+          {watched ? (
+            browse
+              ? <span className="media-card-watched-check" aria-label="Watched">✓</span>
+              : <span className="media-card-watched" aria-label="Watched">✓ Watched</span>
+          ) : null}
+          {!browse && progress > 0 && progress < 100 ? (
+            <div className="progress-track" aria-label={`${Math.round(progress)}% watched`}><span style={{ width: `${progress}%` }} /></div>
+          ) : null}
         </div>
-        {image ? (
-          <img
-            src={image}
-            alt=""
-            loading="lazy"
-            onError={(event) => { event.currentTarget.hidden = true; }}
-          />
-        ) : null}
-        {watched ? (
-          browse
-            ? <span className="media-card-watched-check" aria-label="Watched">✓</span>
-            : <span className="media-card-watched" aria-label="Watched">✓ Watched</span>
-        ) : null}
-        {!browse && progress > 0 && progress < 100 ? (
-          <div className="progress-track" aria-label={`${Math.round(progress)}% watched`}><span style={{ width: `${progress}%` }} /></div>
-        ) : null}
-      </div>
-      <div className="media-card-title">{item.Name}</div>
-      <div className="media-card-meta">{browse ? item.ProductionYear || "" : subtitle(item)}</div>
-    </button>
+        <div className="media-card-title">{live.Name}</div>
+        <div className="media-card-meta">{browse ? live.ProductionYear || "" : subtitle(live)}</div>
+      </button>
+      {menuOpen ? (
+        <div className="details-more-scrim" data-modal="true" onClick={() => { setMenuOpen(false); requestAnimationFrame(() => cardRef.current?.focus({ preventScroll: true })); }}>
+          <div className="details-more card-menu" role="dialog" aria-label={`${item.Name} Actions`} onClick={event => event.stopPropagation()}>
+            <button ref={menuFirstRef} type="button" data-tv-focusable="true" className="browse-panel-row" onClick={() => { setMenuOpen(false); onOpen(); }}>
+              <span>Play</span>
+            </button>
+            {item.Type !== "Series" && item.Type !== "AudioBook" ? (
+              <button type="button" data-tv-focusable="true" className="browse-panel-row" onClick={() => void toggleMenuWatched(!watched)}>
+                <span>{watched ? "Mark Unwatched" : "Mark Watched"}</span>
+              </button>
+            ) : null}
+            <button type="button" data-tv-focusable="true" className="browse-panel-row" onClick={() => void toggleMenuFavorite(!menuFavorite)}>
+              <span>{menuFavorite ? "Remove from Favorites" : "Add to Favorites"}</span>
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }

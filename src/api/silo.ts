@@ -926,6 +926,10 @@ export async function setWatchlist(session: Session, contentId: string, enabled:
   await request<void>(session, `/watchlist/${encodeURIComponent(contentId)}`, { method: enabled ? "PUT" : "DELETE" });
 }
 
+export async function setWatched(session: Session, contentId: string, enabled: boolean) {
+  await requestV2<void>(session, `/watched/${encodeURIComponent(contentId)}`, { method: enabled ? "POST" : "DELETE" });
+}
+
 export async function searchItems(session: Session, query: string): Promise<SiloItem[]> {
   if (!query.trim()) return [];
   return unpack(await request<NativeList>(session, catalogPath("all", 0, 60, query.trim()))).Items;

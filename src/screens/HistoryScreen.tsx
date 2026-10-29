@@ -82,7 +82,7 @@ export function HistoryScreen({ session, onOpen }: {
       {error ? <div className="error">{error}</div> : null}
       {loading ? <div className="screen-state">Loading watch history…</div> : items.length ? (
         <div className="library-grid">
-          {items.map(item => <MediaCard key={item.Id} item={item} image={imageUrl(session, item)} onOpen={() => onOpen(item)} />)}
+          {items.map(item => <MediaCard key={item.Id} session={session} item={item} image={imageUrl(session, item)} onOpen={() => onOpen(item)} />)}
         </div>
       ) : !error ? <div className="empty-state"><h2>No watch history yet</h2><p>Titles you watch will appear here.</p></div> : null}
       {cursor ? <div className="history-load-more" ref={sentinel} aria-live="polite">

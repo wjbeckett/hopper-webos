@@ -107,7 +107,7 @@ export function CollectionsScreen({ session, onOpen }: {
         {error ? <div className="error">{error}</div> : null}
         {loading ? <div className="screen-state">Loading collection…</div> : items.length ? (
           <div className="library-grid">
-            {items.map(item => <MediaCard key={item.Id} item={item} image={imageUrl(session, item)} onOpen={() => onOpen(item)} />)}
+            {items.map(item => <MediaCard key={item.Id} session={session} item={item} image={imageUrl(session, item)} onOpen={() => onOpen(item)} />)}
           </div>
         ) : !error ? <div className="empty-state compact-empty-state"><h2>This collection is empty</h2></div> : null}
         {cursor ? (

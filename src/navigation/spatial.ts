@@ -413,6 +413,7 @@ function navigateLibrary(current: HTMLElement, direction: Direction) {
 }
 
 export function installSpatialNavigation() {
+  const pendingPress: { current: { element: HTMLElement; timer: number } | null } = { current: null };
   const onKeyDown = (event: KeyboardEvent) => {
     const direction = directionKeys[event.key];
     if (event.key === "Enter" || event.key === "OK") {
@@ -420,13 +421,41 @@ export function installSpatialNavigation() {
       if (activeElement instanceof HTMLElement && activeElement.matches("[data-tv-focusable='true']")) {
         event.preventDefault();
         if (!event.repeat) {
-          consumeEnterKeyUp = true;
-          activeElement.click();
+          if (activeElement.matches("[data-menu-context='true']")) {
+            // Hold-to-menu: keydown arms the long-press timer; keyup inside the
+            // window activates the card, keyup after the menu opened is swallowed.
+            pendingPress.current = { element: activeElement, timer: window.setTimeout(() => {
+              pendingPress.current = null;
+              consumeEnterKeyUp = true;
+              activeElement.dispatchEvent(new CustomEvent("silo:open-card-menu", { bubbles: true }));
+            }, 500) };
+          } else {
+            consumeEnterKeyUp = true;
+            activeElement.click();
+          }
         }
       }
       return;
     }
     if (!direction) return;
+
+    const modal = document.querySelector<HTMLElement>('[data-modal="true"]');
+    if (modal) {
+      const rows = Array.from(modal.querySelectorAll<HTMLElement>("[data-tv-focusable='true']"))
+        .filter(item => item.offsetParent !== null);
+      if (rows.length) {
+        const active = document.activeElement instanceof HTMLElement && modal.contains(document.activeElement) ? document.activeElement : null;
+        if (!active) {
+          focusElement(rows[0]);
+        } else {
+          const index = rows.indexOf(active);
+          const next = direction === "down" ? rows[index + 1] : direction === "up" ? rows[index - 1] : undefined;
+          if (next) focusElement(next);
+        }
+        event.preventDefault();
+        return;
+      }
+    }
 
     const browsePanelOpen = document.querySelector(".browse-panel-scrim") !== null;
     const allFocusables = focusables(browsePanelOpen
@@ -504,6 +533,15 @@ export function installSpatialNavigation() {
     }
   };
   const onKeyUp = (event: KeyboardEvent) => {
+    if ((event.key === "Enter" || event.key === "OK") && pendingPress.current) {
+      const pending = pendingPress.current;
+      window.clearTimeout(pending.timer);
+      pendingPress.current = null;
+      consumeEnterKeyUp = true;
+      pending.element.click();
+      event.preventDefault();
+      return;
+    }
     if ((event.key === "Enter" || event.key === "OK") && consumeEnterKeyUp) {
       consumeEnterKeyUp = false;
       event.preventDefault();
