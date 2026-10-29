@@ -627,23 +627,17 @@ export function installSpatialNavigation() {
       }
     }
 
-    const leavingSeriesBody = current.closest(".series-body") && (direction === "up" || direction === "down");
+    const leavingSeriesBody = current.closest(".series-body") && direction === "up";
     if (leavingSeriesBody) {
       const screen = current.closest<HTMLElement>(".series-screen");
       const rail = screen?.querySelector<HTMLElement>(".episode-rail");
-      if (direction === "up" && !current.closest(".episode-rail") && rail) {
+      const sections = Array.from(current.closest<HTMLElement>(".series-body")?.querySelectorAll<HTMLElement>(".detail-section, .media-rail") ?? []);
+      const firstSection = sections[0];
+      if (direction === "up" && !current.closest(".episode-rail") && rail && (!firstSection || firstSection.contains(current))) {
         const lastId = screen?.dataset.lastEpisode;
         const card = lastId ? rail.querySelector<HTMLElement>(`[data-episode-id="${CSS.escape(lastId)}"]`) : undefined;
         if (card) {
           focusElement(card);
-          event.preventDefault();
-          return;
-        }
-      }
-      if (direction === "down") {
-        const tab = screen?.querySelector<HTMLElement>(".season-tab.active") ?? screen?.querySelector<HTMLElement>(".season-tab");
-        if (tab) {
-          focusElement(tab);
           event.preventDefault();
           return;
         }
