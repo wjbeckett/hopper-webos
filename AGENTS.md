@@ -1,5 +1,9 @@
 # Silo webOS agent notes
 
+## Hard rules (always apply)
+1. Never overwrite the entire codebase. No bulk checkouts, resets, restores, regenerations, or whole-tree copies over `src/`. Make targeted edits to specific files only; rewrite a whole file only when that single file requires it. Commit to `dev` after each verified step so work is never held only in the working tree.
+2. The Android TV app (`./silo-android/androidTvApp/...`) is the reference for design and behaviour. Read the relevant Android source before building or changing any screen, component, focus flow, or server action, and match it as closely as webOS allows. Deviate only where the user has explicitly decided (see `docs/FIRST_GRADE_ROADMAP.md` and `docs/RECONSTRUCTION.md`).
+
 ## Goal
 Build a first-class LG webOS TV client for Silo with feature parity directionally matching the official Apple tvOS and Android TV clients.
 
