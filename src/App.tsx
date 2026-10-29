@@ -1,20 +1,27 @@
 import { useCallback, useEffect, useState } from "react";
-import { TopNav, type AppSection } from "./components/TopNav";
-import { getCatalogItem, getLibraries, getProfileAppearance, restoreDefaultProfile } from "./api/silo";
+import { TopNav, type AppSection, type LibraryLanding } from "./components/TopNav";
+import { advanceShuffle, createShuffle, deleteShuffle, getCatalogItem, getLibraries, getProfileAppearance, getRequestsFeatureStatus, restoreDefaultProfile } from "./api/silo";
 import { serverRegistry } from "./core/serverRegistry";
-import { installSpatialNavigation } from "./navigation/spatial";
+import { focusTopNavigation, installSpatialNavigation } from "./navigation/spatial";
 import { DetailsScreen } from "./screens/DetailsScreen";
+import { CalendarScreen } from "./screens/CalendarScreen";
+import { CollectionsScreen } from "./screens/CollectionsScreen";
 import { DeviceLoginScreen } from "./screens/DeviceLoginScreen";
+import { ForYouScreen } from "./screens/ForYouScreen";
 import { HomeScreen } from "./screens/HomeScreen";
+import { HistoryScreen } from "./screens/HistoryScreen";
 import { LibraryScreen } from "./screens/LibraryScreen";
+import { LibraryRecommendationsScreen } from "./screens/LibraryRecommendationsScreen";
 import { LoginScreen } from "./screens/LoginScreen";
 import { PlayerScreen } from "./screens/PlayerScreen";
 import { PersonalScreen } from "./screens/PersonalScreen";
+import { ProfileSelectionScreen } from "./screens/ProfileSelectionScreen";
+import { RequestsScreen } from "./screens/RequestsScreen";
 import { SearchScreen } from "./screens/SearchScreen";
 import { SeriesScreen } from "./screens/SeriesScreen";
 import { ServerSetupScreen } from "./screens/ServerSetupScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
-import type { Session, SiloItem, SiloLibrary } from "./types";
+import type { Session, SiloItem, SiloLibrary, SiloProfile } from "./types";
 
 type AuthRoute = "server-setup" | "device-login" | "password-login";
 type DetailRoute =
@@ -22,7 +29,7 @@ type DetailRoute =
   | { name: "details"; item: SiloItem }
   | { name: "series"; item: SiloItem; selectedEpisode?: SiloItem }
   | { name: "play-choice"; item: SiloItem; returnTo?: { series: SiloItem; selectedEpisode: SiloItem } }
-  | { name: "player"; item: SiloItem; startPosition?: number; returnTo?: { series: SiloItem; selectedEpisode: SiloItem } };
+  | { name: "player"; item: SiloItem; startPosition?: number; returnTo?: { series: SiloItem; selectedEpisode: SiloItem }; shuffleId?: string };
 
 const DEV_SERVER_URL = "/__silo";
 const NAVIGATION_KEY = "silo-webos-navigation-v1";
@@ -39,7 +46,7 @@ function safeBrowsingRoute(route: DetailRoute): DetailRoute {
 }
 
 const THEME_TOKENS: Record<string, Record<string, string>> = {
-  "midnight-cinema": { "--background": "#141417", "--foreground": "#e8e8ec", "--primary": "#e8e8ec", "--primary-foreground": "#141417", "--secondary": "#232328", "--surface": "#1c1c20", "--ring": "#e8e8ec", "--muted-foreground": "#9696a0", "--font-body": "Outfit, system-ui, sans-serif", "--font-display": "Outfit, system-ui, sans-serif" },
+  "midnight-cinema": { "--background": "#070809", "--foreground": "#f4f4f2", "--primary": "#f4f4f2", "--primary-foreground": "#08090a", "--secondary": "#1b1c1e", "--surface": "#101113", "--ring": "#f4f4f2", "--muted-foreground": "#929398", "--font-body": "Outfit, system-ui, sans-serif", "--font-display": "Outfit, system-ui, sans-serif" },
   "cinema-light": { "--background": "#f4f4f6", "--foreground": "#1a1a1e", "--primary": "#1a1a1e", "--primary-foreground": "#f4f4f6", "--secondary": "#e8e8ec", "--surface": "#ffffff", "--ring": "#1a1a1e", "--muted-foreground": "#63636b", "--font-body": "Outfit, system-ui, sans-serif", "--font-display": "Outfit, system-ui, sans-serif" },
   "cobalt-studio": { "--background": "#101722", "--foreground": "#f4f8ff", "--primary": "#78aefc", "--primary-foreground": "#0f1722", "--secondary": "#1b2634", "--surface": "#151e2b", "--ring": "#78aefc", "--muted-foreground": "#90a0b5", "--font-body": "Outfit, system-ui, sans-serif", "--font-display": "Outfit, system-ui, sans-serif" },
   "oxblood-noir": { "--background": "#171113", "--foreground": "#f7edef", "--primary": "#d16a78", "--primary-foreground": "#1b0e11", "--secondary": "#2b1b1f", "--surface": "#211619", "--ring": "#d16a78", "--muted-foreground": "#ad9298", "--font-body": "Outfit, system-ui, sans-serif", "--font-display": "Outfit, system-ui, sans-serif" },
@@ -94,14 +101,17 @@ export default function App() {
   const [serverUrl, setServerUrl] = useState(initial.serverUrl);
   const [authRoute, setAuthRoute] = useState<AuthRoute>(initial.auth);
   const [section, setSection] = useState<AppSection>("home");
+  const [selectedSeriesLibraryId, setSelectedSeriesLibraryId] = useState<number | null>(null);
+  const [libraryLanding, setLibraryLanding] = useState<LibraryLanding>("recommended");
   const [libraries, setLibraries] = useState<SiloLibrary[]>([]);
   const [librariesLoaded, setLibrariesLoaded] = useState(false);
+  const [requestsAvailable, setRequestsAvailable] = useState<boolean | undefined>();
   const [profileError, setProfileError] = useState("");
   const [profileHydrated, setProfileHydrated] = useState(false);
   const [route, setRoute] = useState<DetailRoute>({ name: "main" });
   const [navigationRestored, setNavigationRestored] = useState(false);
 
-  useEffect(() => installSpatialNavigation(), [route.name, authRoute, section, session]);
+  useEffect(() => installSpatialNavigation(), [route.name, authRoute, session]);
 
   useEffect(() => {
     if (!session || profileHydrated) return;
@@ -124,6 +134,7 @@ export default function App() {
     if (!session || !session.profileId) {
       setLibraries([]);
       setLibrariesLoaded(false);
+      setRequestsAvailable(undefined);
       return;
     }
     let alive = true;
@@ -132,7 +143,7 @@ export default function App() {
         if (!alive) return;
         setLibraries(next);
         setLibrariesLoaded(true);
-        if (!["home", "search", "settings", "favorites", "watchlist"].includes(section)) {
+        if (!["home", "forYou", "calendar", "requests", "search", "settings", "favorites", "watchlist", "history", "collections", "profiles"].includes(section)) {
           const matches = librariesForSection(section, next);
           if (matches.length === 0) setSection("home");
         }
@@ -140,6 +151,23 @@ export default function App() {
       .catch((error) => { console.error("[Silo webOS] libraries", error); if (alive) setLibrariesLoaded(true); });
     return () => { alive = false; };
   }, [session]);
+
+  useEffect(() => {
+    if (!session?.profileId) return;
+    let alive = true;
+    setRequestsAvailable(undefined);
+    getRequestsFeatureStatus(session)
+      .then(status => {
+        if (alive) setRequestsAvailable(
+          status.requests_enabled && status.allowed === true && status.state === "available"
+        );
+      })
+      .catch(error => {
+        console.warn("[Silo webOS] request availability", error);
+        if (alive) setRequestsAvailable(undefined);
+      });
+    return () => { alive = false; };
+  }, [session?.serverUrl, session?.profileId, session?.accessToken]);
 
   useEffect(() => {
     if (!session?.profileId || !profileHydrated || !librariesLoaded || navigationRestored) return;
@@ -150,7 +178,7 @@ export default function App() {
       catch { localStorage.removeItem(NAVIGATION_KEY); }
       if (!saved || saved.serverUrl !== session.serverUrl || saved.profileId !== session.profileId) return;
 
-      const allowedSection = ["home", "library", "search", "settings", "favorites", "watchlist"].includes(saved.section)
+      const allowedSection = ["home", "forYou", "calendar", "requests", "library", "search", "settings", "favorites", "watchlist"].includes(saved.section)
         || librariesForSection(saved.section, libraries).length > 0;
       if (!allowedSection) return;
 
@@ -211,8 +239,52 @@ export default function App() {
 
   useEffect(() => {
     const onBack = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" && event.key !== "Backspace" && event.keyCode !== 461) return;
+      if (!["Escape", "Backspace", "Back", "GoBack", "BrowserBack"].includes(event.key) && event.keyCode !== 461 && event.keyCode !== 10009) return;
       if (!session) return;
+      // The player owns Back while it is mounted (close panel first, then exit);
+      // this handler must not route over it.
+      if (document.querySelector(".player-shell")) return;
+      if (document.querySelector(".browse-panel-scrim")) {
+        window.dispatchEvent(new Event("silo:browse-panel-back"));
+        event.preventDefault();
+        return;
+      }
+      const nav = document.querySelector<HTMLElement>(".tv-nav");
+      if (nav) {
+        const activeElement = document.activeElement;
+        const openCallout = nav.querySelector(".nav-callout");
+        const activeNav = nav.querySelector<HTMLElement>("[data-nav-primary][aria-current='page']")
+          ?? nav.querySelector<HTMLElement>("[data-nav-primary]");
+        if (openCallout) {
+          const entry = activeElement instanceof HTMLElement
+            ? activeElement.closest<HTMLElement>(".nav-entry")
+            : null;
+          const parent = entry?.querySelector<HTMLElement>("[data-nav-primary]");
+          focusTopNavigation(parent ?? activeNav);
+          window.dispatchEvent(new Event("silo:close-nav-callout"));
+          event.preventDefault();
+          return;
+        }
+        if (route.name !== "main") {
+          setRoute({ name: "main" });
+          focusTopNavigation(activeNav);
+          event.preventDefault();
+          return;
+        }
+        if (
+          section !== "home"
+          && activeElement instanceof HTMLElement
+          && activeElement.closest(".tv-nav")
+        ) {
+          setSection("home");
+          focusTopNavigation(nav.querySelector<HTMLElement>("[data-nav-primary='home']"));
+          event.preventDefault();
+          return;
+        }
+        if (activeNav) focusTopNavigation(activeNav);
+        event.preventDefault();
+        return;
+      }
       if (route.name !== "main") {
         setRoute({ name: "main" });
         event.preventDefault();
@@ -283,6 +355,56 @@ export default function App() {
     else setRoute({ name: "player", item, startPosition: 0, returnTo });
   }
 
+  async function shuffleLibrary(libraryId: number) {
+    if (!session) throw new Error("A connected server session is required to shuffle.");
+    const shuffle = await createShuffle(session, "library", libraryId);
+    setRoute({ name: "player", item: shuffle.current, startPosition: 0, shuffleId: shuffle.id });
+  }
+
+  async function advanceShuffleRoute(shuffleId: string, finished: SiloItem) {
+    if (!session) return;
+    try {
+      const shuffle = await advanceShuffle(session, shuffleId, finished.Id);
+      if (shuffle.current.Id === finished.Id) throw new Error("Nothing else can play.");
+      setRoute({ name: "player", item: shuffle.current, startPosition: 0, shuffleId });
+    } catch {
+      void deleteShuffle(session, shuffleId).catch(() => undefined);
+      setRoute({ name: "main" });
+    }
+  }
+
+  function leavePlayer(current: Extract<DetailRoute, { name: "player" }>) {
+    if (current.shuffleId) {
+      if (session) void deleteShuffle(session, current.shuffleId).catch(() => undefined);
+      setRoute({ name: "main" });
+      return;
+    }
+    setRoute(current.returnTo
+      ? { name: "series", item: current.returnTo.series, selectedEpisode: current.returnTo.selectedEpisode }
+      : { name: "details", item: current.item });
+  }
+
+  function activateProfile(profile: SiloProfile, profileToken?: string) {
+    if (!session) return;
+    const nextSession: Session = {
+      ...session,
+      profileId: profile.id,
+      profileToken,
+      profileAvatar: profile.avatarUrl ?? profile.avatarEmoji,
+      profileMetadataLoaded: true,
+      username: profile.name
+    };
+    serverRegistry.saveSession(nextSession);
+    setSession(nextSession);
+    setProfileError("");
+    setProfileHydrated(true);
+    setLibrariesLoaded(false);
+    setRequestsAvailable(undefined);
+    setSection("home");
+    setRoute({ name: "main" });
+    setNavigationRestored(true);
+  }
+
   if (!session) {
     if (authRoute === "server-setup") return <ServerSetupScreen onContinue={chooseServer} />;
     if (authRoute === "password-login") {
@@ -305,6 +427,10 @@ export default function App() {
     );
   }
 
+  if (profileError) {
+    return <ProfileSelectionScreen session={session} onSelect={activateProfile} />;
+  }
+
   if (!session.profileId) {
     return (
       <main className="login-shell">
@@ -320,12 +446,12 @@ export default function App() {
   if (route.name === "player") {
     return (
       <PlayerScreen
+        key={route.item.Id}
         session={session}
         item={route.item}
         startPosition={route.startPosition}
-        onBack={() => setRoute(route.returnTo
-          ? { name: "series", item: route.returnTo.series, selectedEpisode: route.returnTo.selectedEpisode }
-          : { name: "details", item: route.item })}
+        onBack={() => leavePlayer(route)}
+        onEnded={route.shuffleId ? () => void advanceShuffleRoute(route.shuffleId!, route.item) : undefined}
       />
     );
   }
@@ -375,50 +501,74 @@ export default function App() {
 
   let body;
   if (section === "home") body = <HomeScreen session={session} onOpen={openItem} />;
+  else if (section === "forYou") body = <ForYouScreen session={session} onOpen={openItem} />;
   else if (section === "search") body = <SearchScreen session={session} onOpen={openItem} />;
   else if (section === "favorites" || section === "watchlist") {
     body = <PersonalScreen session={session} kind={section} onOpen={openItem} />;
   }
+  else if (section === "history") body = <HistoryScreen session={session} onOpen={openItem} />;
+  else if (section === "collections") body = <CollectionsScreen session={session} onOpen={openItem} />;
+  else if (section === "profiles") body = <ProfileSelectionScreen session={session} onSelect={activateProfile} />;
   else if (section === "settings") {
     body = <SettingsScreen session={session} onSignOut={signOut} onChangeServer={changeServer} />;
   } else if (section === "library") {
-    body = <LibraryScreen session={session} title="All Libraries" libraries={libraries} selectableLibraries onOpen={openItem} />;
-  } else {
-    const matchingLibraries = librariesForSection(section, libraries);
-    body = matchingLibraries.length ? (
-      <LibraryScreen
-        session={session}
-        title={sectionTitle(section)}
-        libraries={matchingLibraries}
-        itemTypes={section === "movies" ? ["Movie"] : section === "series" ? ["Series"] : undefined}
-        onOpen={openItem}
-      />
-    ) : <div className="screen-state">Loading library…</div>;
+    body = <LibraryScreen session={session} libraries={libraries} selectableLibraries onOpen={openItem} onShuffleLibrary={shuffleLibrary} />;
+  }   else if (section === "calendar") body = <CalendarScreen session={session} onOpen={openItem} />;
+  else if (section === "requests") body = <RequestsScreen session={session} />; else {
+    const sectionLibraries = librariesForSection(section, libraries);
+    const defaultSeriesLibraryId = sectionLibraries.some(library => library.id === selectedSeriesLibraryId)
+      ? selectedSeriesLibraryId
+      : sectionLibraries[0]?.id;
+    const matchingLibraries = section === "series" && defaultSeriesLibraryId !== undefined
+      ? sectionLibraries.filter(library => library.id === defaultSeriesLibraryId)
+      : sectionLibraries;
+    if (!matchingLibraries.length) {
+      body = <div className="screen-state">Loading library…</div>;
+    } else if ((section === "movies" || section === "series") && libraryLanding === "recommended") {
+      body = (
+        <LibraryRecommendationsScreen
+          session={session}
+          title={section === "series" ? matchingLibraries[0].name : sectionTitle(section)}
+          libraries={matchingLibraries}
+          onOpen={openItem}
+        />
+      );
+    } else {
+      body = (
+        <LibraryScreen
+          session={session}
+          libraries={matchingLibraries}
+          itemTypes={section === "movies" ? ["Movie"] : section === "series" ? ["Series"] : undefined}
+          onOpen={openItem}
+          onShuffleLibrary={shuffleLibrary}
+        />
+      );
+    }
   }
 
-  const librarySections = (["movies", "series", "music", "audiobooks"] as AppSection[])
-    .filter((candidate) => librariesForSection(candidate, libraries).length > 0)
-    .map((candidate) => ({ id: candidate, label: sectionTitle(candidate) }));
-  const navSections = [
-    { id: "home" as const, label: "Home" },
-    { id: "library" as const, label: "Library" },
-    ...librarySections,
-    { id: "watchlist" as const, label: "Watchlist" },
-    { id: "favorites" as const, label: "Favorites" },
-    { id: "search" as const, label: "Search" }
-  ];
-
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${section === "library" || ((section === "movies" || section === "series") && libraryLanding === "browse") ? "app-shell-library" : ""} ${section === "home" && route.name === "main" ? "app-shell-home" : ""}`}>
       <TopNav
         active={section}
-        sections={navSections}
+        libraries={libraries}
+        requestsAvailable={requestsAvailable}
         username={session.username}
         session={session}
-        onSelect={(next) => { setSection(next); setRoute({ name: "main" }); }}
+        onSelect={(next, libraryId, landing = "recommended") => {
+          if (next === "series") {
+            const firstSeriesLibrary = librariesForSection("series", libraries)[0];
+            setSelectedSeriesLibraryId(libraryId ?? firstSeriesLibrary?.id ?? null);
+          }
+          setLibraryLanding(landing);
+          setSection(next);
+          setRoute({ name: "main" });
+        }}
         onProfile={() => setSection("settings")}
         onFavorites={() => { setSection("favorites"); setRoute({ name: "main" }); }}
         onWatchlist={() => { setSection("watchlist"); setRoute({ name: "main" }); }}
+        onLibraries={() => { setSection("library"); setRoute({ name: "main" }); }}
+        onHistory={() => { setSection("history"); setRoute({ name: "main" }); }}
+        onProfiles={() => { setSection("profiles"); setRoute({ name: "main" }); }}
       />
       {body}
     </div>

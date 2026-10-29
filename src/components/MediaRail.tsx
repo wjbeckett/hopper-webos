@@ -1,4 +1,4 @@
-import { imageUrl } from "../api/silo";
+import { backdropUrl, imageUrl } from "../api/silo";
 import type { HomeRail, Session, SiloItem } from "../types";
 import { MediaCard } from "./MediaCard";
 
@@ -11,16 +11,19 @@ export function MediaRail({
   session: Session;
   onOpen: (item: SiloItem) => void;
 }) {
+  const isContinueWatching = rail.title.toLocaleLowerCase().includes("continue watching");
+  const landscape = Boolean(rail.featured || isContinueWatching);
+
   return (
-    <section className="media-rail">
+    <section className={`media-rail ${isContinueWatching ? "continue-watching-rail" : ""} ${landscape ? "wide-media-rail" : ""}`}>
       <h2>{rail.title}</h2>
-      <div className="rail-track">
+      <div className={`rail-track ${landscape ? "wide-rail" : ""}`}>
         {rail.items.map((item) => (
           <MediaCard
             key={`${rail.id}-${item.Id}`}
             item={item}
-            image={imageUrl(session, item)}
-            landscape={rail.featured}
+            image={landscape ? backdropUrl(session, item) : imageUrl(session, item)}
+            landscape={landscape}
             onOpen={() => onOpen(item)}
           />
         ))}

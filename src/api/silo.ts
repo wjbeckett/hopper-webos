@@ -1,27 +1,29 @@
-import type { HomeRail, ItemsResponse, Session, SiloCollection, SiloItem, SiloLibrary, SiloProfile } from "../types";
+import type { HomeRail, ItemsResponse, Session, SiloCalendarDay, SiloCalendarItem, SiloCollection, SiloItem, SiloLibrary, SiloMediaRequest, SiloProfile, SiloRequestResult } from "../types";
 import { serverRegistry } from "../core/serverRegistry";
 
 function normalizeServerUrl(input: string): string {
   return input.trim().replace(/\/+$/, "");
 }
 
-function apiUrl(serverUrl: string, path: string): string {
-  return `${normalizeServerUrl(serverUrl)}/api/v1${path}`;
+function apiUrl(serverUrl: string, path: string, version = "v1"): string {
+  return `${normalizeServerUrl(serverUrl)}/api/${version}${path}`;
 }
 
-export async function siloRequest<T>(
+async function requestApi<T>(
   session: Session,
   path: string,
-  init: RequestInit = {}
+  init: RequestInit,
+  version: string,
+  includeProfile = true
 ): Promise<T> {
-  const perform = () => fetch(apiUrl(session.serverUrl, path), {
+  const perform = () => fetch(apiUrl(session.serverUrl, path, version), {
     ...init,
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
       Authorization: `Bearer ${session.accessToken}`,
-      ...(session.profileId ? { "X-Profile-Id": session.profileId } : {}),
-      ...(session.profileToken ? { "X-Profile-Token": session.profileToken } : {}),
+      ...(includeProfile && session.profileId ? { "X-Profile-Id": session.profileId } : {}),
+      ...(includeProfile && session.profileToken ? { "X-Profile-Token": session.profileToken } : {}),
       ...(init.headers ?? {})
     }
   });
@@ -44,6 +46,14 @@ export async function siloRequest<T>(
     throw new Error(`${path}: Silo returned ${contentType || "a non-JSON response"}`);
   }
   return response.json() as Promise<T>;
+}
+
+export function siloRequest<T>(session: Session, path: string, init: RequestInit = {}) {
+  return requestApi<T>(session, path, init, "v1");
+}
+
+function requestV2<T>(session: Session, path: string, init: RequestInit = {}) {
+  return requestApi<T>(session, path, init, "v2");
 }
 
 const request = siloRequest;
@@ -87,6 +97,12 @@ type NativeItem = Record<string, unknown> & {
   description?: string;
   year?: number;
   release_year?: number;
+  release_date?: string;
+  added_at?: string;
+  date_added?: string;
+  resolution?: string;
+  author?: string;
+  narrator?: string;
   duration?: number;
   duration_seconds?: number;
   series_id?: string | number;
@@ -95,11 +111,91 @@ type NativeItem = Record<string, unknown> & {
   episode_number?: number;
   episode_count?: number;
   runtime?: number;
+  runtime_minutes?: number;
+  runtime_seconds?: number;
+  sort_metrics?: {
+    author?: string;
+    narrator?: string;
+    series_name?: string;
+    runtime_minutes?: number;
+    release_date?: string;
+    resolution?: string;
+  };
+  overlay_summary?: {
+    resolution?: string;
+  };
+  genres?: string[];
+  content_rating?: string;
+  rating_imdb?: number;
+  rating_tmdb?: number;
+  logo_url?: string;
   still_url?: string;
-  user_data?: { played?: boolean; position_seconds?: number; progress_percent?: number };
+  progress_percent?: number;
+  position_seconds?: number;
+  user_data?: {
+    played?: boolean;
+    position_seconds?: number;
+    progress_percent?: number;
+  };
+  user_state?: {
+    played?: boolean;
+    is_favorite?: boolean;
+    position_seconds?: number;
+    progress_percent?: number;
+  };
 };
 
 type NativeList = NativeItem[] | { items?: NativeItem[]; total?: number; total_count?: number };
+
+type NativeCatalogPage = {
+  items?: NativeItem[];
+  page?: {
+    has_more?: boolean;
+    next_cursor?: string;
+  };
+};
+
+export type CatalogQueryRule = {
+  field: string;
+  op: string;
+  value: string | string[];
+};
+
+export type CatalogQueryGroup = {
+  match: "all" | "any";
+  rules: CatalogQueryRule[];
+};
+
+export type CatalogFilterOptions = {
+  genres: string[];
+  studios: string[];
+  networks: string[];
+  countries: string[];
+  originalLanguages: string[];
+  contentRatings: string[];
+  authors: string[];
+  narrators: string[];
+  series: string[];
+  resolutions: string[];
+  audioLanguages: string[];
+  subtitleLanguages: string[];
+};
+
+export async function searchCatalogFacet(
+  session: Session,
+  libraryIds: Array<number | string>,
+  facet: "author" | "narrator" | "series",
+  query: string,
+  limit = 100
+): Promise<{ matches: string[]; hasMore: boolean }> {
+  const params = new URLSearchParams({ source: "query", facet, q: query, limit: String(limit) });
+  for (const id of libraryIds) params.append("library_ids", String(id));
+  const response = await requestV2<{ matches?: string[]; has_more?: boolean }>(
+    session,
+    `/catalog/filters/search?${params}`
+  );
+  return { matches: response.matches ?? [], hasMore: response.has_more ?? false };
+}
 
 type NativeHomeLayout = {
   sections?: Array<{
@@ -115,6 +211,16 @@ type NativeHomeSectionResponse = {
   section?: {
     items?: NativeItem[];
   };
+};
+
+type NativeRecommendationRow = {
+  type: string;
+  title: string;
+  items: NativeItem[];
+};
+
+type NativeRecommendationRows = {
+  items?: NativeRecommendationRow[];
 };
 
 type NativeLibrary = {
@@ -138,27 +244,53 @@ function itemType(value?: string) {
 }
 
 function toItem(item: NativeItem): SiloItem {
-  const duration = item.duration_seconds ?? item.duration;
+  const runtimeMinutes = item.sort_metrics?.runtime_minutes ?? item.runtime_minutes;
+  const runtimeSeconds = item.duration_seconds
+    ?? item.runtime_seconds
+    ?? (typeof runtimeMinutes === "number"
+      ? runtimeMinutes * 60
+      : typeof item.runtime === "number"
+        ? item.runtime * 60
+        : item.duration);
+  const position = item.position_seconds ?? item.user_data?.position_seconds ?? item.user_state?.position_seconds;
+  const progress = item.progress_percent
+    ?? item.user_data?.progress_percent
+    ?? item.user_state?.progress_percent
+    ?? (typeof position === "number" && typeof runtimeSeconds === "number" && runtimeSeconds > 0
+      ? position / runtimeSeconds * 100
+      : undefined);
+  const userState = {
+    Played: item.user_state?.played ?? item.user_data?.played,
+    IsFavorite: item.user_state?.is_favorite,
+    PlaybackPositionTicks: position == null ? undefined : position * 10_000_000,
+    PlayedPercentage: progress
+  };
+  const hasUserState = Boolean(item.user_data || item.user_state || position != null || progress != null);
   return {
     Id: String(item.content_id ?? item.id ?? ""),
     Name: item.title ?? item.name ?? "Untitled",
     Type: itemType(item.type ?? item.media_type),
-    SeriesName: item.series_title,
+    SeriesName: item.sort_metrics?.series_name ?? item.series_title,
     SeriesId: item.series_id == null ? undefined : String(item.series_id),
     ParentIndexNumber: item.season_number,
     IndexNumber: item.episode_number ?? (itemType(item.type ?? item.media_type) === "Season" ? item.season_number : undefined),
     ProductionYear: item.release_year ?? item.year,
+    DateAdded: item.added_at ?? item.date_added,
+    ReleaseDate: item.sort_metrics?.release_date ?? item.release_date,
+    Resolution: item.sort_metrics?.resolution ?? item.overlay_summary?.resolution ?? item.resolution,
+    Author: item.sort_metrics?.author ?? item.author,
+    Narrator: item.sort_metrics?.narrator ?? item.narrator,
     Overview: item.overview ?? item.description,
-    RunTimeTicks: typeof (item.runtime ?? duration) === "number" ? (item.runtime ?? duration)! * 10_000_000 : undefined,
+    Genres: item.genres,
+    ContentRating: item.content_rating,
+    ImdbRating: item.rating_imdb,
+    TmdbRating: item.rating_tmdb,
+    RuntimeMinutes: typeof runtimeSeconds === "number" ? Math.round(runtimeSeconds / 60) : undefined,
+    RunTimeTicks: typeof runtimeSeconds === "number" ? runtimeSeconds * 10_000_000 : undefined,
     PosterUrl: item.poster_url ?? item.still_url,
     BackdropUrl: item.backdrop_url,
-    UserData: item.user_data ? {
-      Played: item.user_data.played,
-      PlaybackPositionTicks: item.user_data.position_seconds == null
-        ? undefined
-        : item.user_data.position_seconds * 10_000_000,
-      PlayedPercentage: item.user_data.progress_percent
-    } : undefined
+    LogoUrl: item.logo_url,
+    UserData: hasUserState ? userState : undefined
   };
 }
 
@@ -199,6 +331,30 @@ export async function getProfiles(session: Session): Promise<SiloProfile[]> {
     hasPin: Boolean(profile.has_pin),
     isPrimary: Boolean(profile.is_primary)
   }));
+}
+
+export async function getHouseholdProfiles(session: Session): Promise<SiloProfile[]> {
+  const data = await requestApi<{ items?: NativeProfile[] }>(session, "/profiles", {}, "v2", false);
+  return (data.items ?? []).map(profile => ({
+    id: String(profile.id),
+    name: profile.name ?? "Profile",
+    avatarEmoji: profile.avatar ?? profile.avatar_emoji,
+    avatarUrl: profile.avatar_url,
+    hasPin: Boolean(profile.has_pin),
+    isPrimary: Boolean(profile.is_primary)
+  }));
+}
+
+export async function verifyProfilePin(session: Session, profileId: string, pin: string): Promise<string> {
+  const result = await requestApi<{ valid: boolean; profile_token?: string }>(
+    session,
+    `/profiles/${encodeURIComponent(profileId)}/verify-pin`,
+    { method: "POST", body: JSON.stringify({ pin }) },
+    "v2",
+    false
+  );
+  if (!result.valid || !result.profile_token) throw new Error("The PIN was not accepted.");
+  return result.profile_token;
 }
 
 export async function restoreDefaultProfile(session: Session): Promise<Session> {
@@ -278,6 +434,217 @@ export async function getHomeRails(session: Session): Promise<HomeRail[]> {
   }).filter((rail) => rail.items.length > 0);
 }
 
+export async function getForYouRails(session: Session): Promise<HomeRail[]> {
+  const response = await requestV2<NativeRecommendationRows>(session, "/recommendations/for-you/rows?limit=20");
+  return (response.items ?? [])
+    .map((row, index) => ({
+      id: `for-you-${row.type}-${index}`,
+      title: row.title,
+      items: row.items.map(toItem).filter(item => item.Id)
+    }))
+    .filter(rail => rail.items.length > 0);
+}
+
+export async function getCalendar(
+  session: Session,
+  start: string,
+  end: string,
+  filter: "all" | "following" | "trending" = "all"
+): Promise<SiloCalendarDay[]> {
+  const params = new URLSearchParams({ start, end, filter, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+  const response = await requestV2<{ events?: Array<{ date: string; items?: Array<Record<string, unknown>> }> }>(
+    session,
+    `/calendar?${params}`
+  );
+  return (response.events ?? []).map(day => ({
+    date: day.date,
+    items: (day.items ?? []).map((raw): SiloCalendarItem => ({
+      contentId: String(raw.content_id ?? ""),
+      type: String(raw.type ?? ""),
+      title: String(raw.title ?? "Untitled"),
+      episodeTitle: typeof raw.episode_title === "string" ? raw.episode_title : undefined,
+      seriesId: raw.series_id == null ? undefined : String(raw.series_id),
+      seasonNumber: typeof raw.season_number === "number" ? raw.season_number : undefined,
+      episodeNumber: typeof raw.episode_number === "number" ? raw.episode_number : undefined,
+      airDate: String(raw.air_date ?? day.date),
+      airTime: typeof raw.air_time === "string" ? raw.air_time : undefined,
+      localAirDate: String(raw.local_air_date ?? day.date),
+      posterUrl: typeof raw.poster_url === "string" ? raw.poster_url : undefined,
+      watched: raw.watched === true,
+      badges: Array.isArray(raw.badges) ? raw.badges.filter((badge): badge is string => typeof badge === "string") : []
+    })).filter(item => item.contentId)
+  }));
+}
+
+type NativeRequestResult = {
+  media_type: string;
+  tmdb_id: number;
+  title: string;
+  year?: number;
+  overview?: string;
+  poster_path?: string;
+  backdrop_path?: string;
+  availability?: string;
+  library_content_id?: string;
+  request?: {
+    requestable?: boolean;
+    reason?: string;
+    request_id?: string;
+    following?: boolean;
+  };
+};
+
+type NativeMediaRequest = {
+  id: string;
+  media_type: string;
+  tmdb_id: number;
+  title: string;
+  year?: number;
+  status: string;
+  outcome: string;
+  state?: string;
+  created_at: string;
+};
+
+function toRequestResult(item: NativeRequestResult): SiloRequestResult {
+  return {
+    mediaType: item.media_type,
+    tmdbId: item.tmdb_id,
+    title: item.title,
+    year: item.year,
+    overview: item.overview ?? "",
+    posterPath: item.poster_path,
+    backdropPath: item.backdrop_path,
+    availability: item.availability ?? "missing",
+    libraryContentId: item.library_content_id,
+    requestable: item.request?.requestable === true,
+    reason: item.request?.reason ?? "",
+    requestId: item.request?.request_id,
+    following: item.request?.following === true
+  };
+}
+
+function toMediaRequest(request: NativeMediaRequest): SiloMediaRequest {
+  return {
+    id: request.id,
+    mediaType: request.media_type,
+    tmdbId: request.tmdb_id,
+    title: request.title,
+    year: request.year,
+    status: request.status,
+    outcome: request.outcome,
+    state: request.state,
+    createdAt: request.created_at
+  };
+}
+
+function tvRequestType(mediaType: string) {
+  return ["movie", "series", "audiobook"].includes(mediaType.toLowerCase());
+}
+
+export async function getRequestsFeatureStatus(session: Session) {
+  return requestV2<{
+    requests_enabled: boolean;
+    allowed?: boolean;
+    state?: string;
+    follow_supported?: boolean;
+  }>(session, "/requests/status");
+}
+
+export async function getRequestsDiscover(session: Session) {
+  const response = await requestV2<{
+    items?: Array<{ key: string; title: string; results?: NativeRequestResult[] }>;
+    row_order?: Array<{ key: string }>;
+  }>(session, "/requests/discover");
+  const rows = response.items ?? [];
+  const byKey = new Map(rows.map(row => [row.key, row]));
+  const orderedRows = response.row_order?.length
+    ? [
+      ...response.row_order.flatMap(reference => {
+        const row = byKey.get(reference.key);
+        return row ? [row] : [];
+      }),
+      ...rows.filter(row => !response.row_order?.some(reference => reference.key === row.key))
+    ]
+    : rows;
+  return orderedRows.map(row => ({
+    key: row.key,
+    title: row.title,
+    items: (row.results ?? []).filter(item => tvRequestType(item.media_type)).map(toRequestResult)
+  }));
+}
+
+export async function searchRequests(session: Session, query: string, mediaType = "all") {
+  const params = new URLSearchParams({ q: query, media_type: mediaType, page: "1" });
+  const response = await requestV2<{ results?: NativeRequestResult[] }>(session, `/requests/search?${params}`);
+  return (response.results ?? []).filter(item => tvRequestType(item.media_type)).map(toRequestResult);
+}
+
+export async function getRequestDetail(session: Session, item: SiloRequestResult) {
+  const response = await requestV2<NativeRequestResult>(
+    session,
+    `/requests/detail/${encodeURIComponent(item.mediaType)}/${item.tmdbId}`
+  );
+  return toRequestResult(response);
+}
+
+export async function getMyRequests(session: Session) {
+  const requests: SiloMediaRequest[] = [];
+  const seenCursors = new Set<string>();
+  let cursor: string | undefined;
+  for (let pageIndex = 0; pageIndex < 100; pageIndex += 1) {
+    const params = new URLSearchParams({ limit: "50" });
+    if (cursor) params.set("cursor", cursor);
+    const response = await requestV2<{
+      items?: NativeMediaRequest[];
+      page?: { has_more?: boolean; next_cursor?: string };
+    }>(session, `/requests/mine?${params}`);
+    requests.push(...(response.items ?? []).filter(item => tvRequestType(item.media_type)).map(toMediaRequest));
+    if (!response.page?.has_more) return requests;
+    const next = response.page.next_cursor;
+    if (!next || seenCursors.has(next)) throw new Error("Silo returned invalid request pagination.");
+    seenCursors.add(next);
+    cursor = next;
+  }
+  throw new Error("The request list exceeded the page limit.");
+}
+
+export async function createMediaRequest(session: Session, item: SiloRequestResult) {
+  const response = await requestApi<NativeMediaRequest>(session, "/requests", {
+    method: "POST",
+    body: JSON.stringify({
+      media_type: item.mediaType,
+      tmdb_id: item.tmdbId,
+      title: item.title,
+      year: item.year,
+      overview: item.overview,
+      poster_path: item.posterPath,
+      backdrop_path: item.backdropPath
+    })
+  }, "v2");
+  return toMediaRequest(response);
+}
+
+export async function cancelMediaRequest(session: Session, requestId: string) {
+  const response = await requestApi<NativeMediaRequest>(
+    session,
+    `/requests/${encodeURIComponent(requestId)}/cancel`,
+    { method: "POST", body: JSON.stringify({}) },
+    "v2"
+  );
+  return toMediaRequest(response);
+}
+
+export async function setRequestFollow(session: Session, item: SiloRequestResult, following: boolean) {
+  const method = following ? "PUT" : "DELETE";
+  await requestApi<void>(
+    session,
+    `/requests/follows/${encodeURIComponent(item.mediaType)}/${item.tmdbId}`,
+    { method },
+    "v2"
+  );
+}
+
 export async function getLibraries(session: Session): Promise<SiloLibrary[]> {
   const data = await request<NativeLibrary[] | { libraries?: NativeLibrary[] }>(session, "/user/libraries");
   const libraries = Array.isArray(data) ? data : data.libraries ?? [];
@@ -313,6 +680,155 @@ export async function getLibraryRails(session: Session, library: SiloLibrary): P
 export async function getLibrariesRails(session: Session, libraries: SiloLibrary[]): Promise<HomeRail[]> {
   const results = await Promise.allSettled(libraries.map((library) => getLibraryRails(session, library)));
   return results.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+}
+
+export async function getCollections(session: Session): Promise<SiloCollection[]> {
+  const response = await requestV2<{
+    items?: Array<NativeCollection & { description?: string; group_id?: string | null }>;
+    groups?: Array<{ id: string; name: string }>;
+  }>(session, "/collections");
+  const groupNames = new Map((response.groups ?? []).map(group => [group.id, group.name]));
+  return (response.items ?? []).map(collection =>
+    toCollection(collection, collection.group_id ? groupNames.get(collection.group_id) : undefined, "user_collection")
+  );
+}
+
+export async function getCollectionItemsPage(
+  session: Session,
+  collection: SiloCollection,
+  cursor?: string
+): Promise<{ items: SiloItem[]; nextCursor?: string }> {
+  const params = new URLSearchParams({
+    source: "user_collection",
+    collection_id: collection.id,
+    limit: "40"
+  });
+  if (cursor) params.set("cursor", cursor);
+  const page = await requestV2<NativeCatalogPage>(session, `/catalog?${params}`);
+  if (page.page?.has_more && !page.page.next_cursor) {
+    throw new Error("Silo returned another collection page without a continuation cursor.");
+  }
+  return {
+    items: (page.items ?? []).map(toItem).filter(item => item.Id),
+    nextCursor: page.page?.has_more ? page.page.next_cursor : undefined
+  };
+}
+
+export async function getHistoryPage(
+  session: Session,
+  cursor?: string,
+  limit = 40
+): Promise<{ items: SiloItem[]; nextCursor?: string }> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) params.set("cursor", cursor);
+  const page = await requestV2<{
+    items?: NativeItem[];
+    page?: { has_more?: boolean; next_cursor?: string };
+  }>(session, `/history?${params}`);
+  if (page.page?.has_more && !page.page.next_cursor) {
+    throw new Error("Silo returned another history page without a continuation cursor.");
+  }
+  return {
+    items: (page.items ?? []).map(toItem).filter(item => item.Id),
+    nextCursor: page.page?.has_more ? page.page.next_cursor : undefined
+  };
+}
+
+export async function getLibraryItemsPage(
+  session: Session,
+  libraryId: number | string,
+  cursor?: string,
+  type?: string,
+  limit = 100,
+  sort = "title",
+  order: "asc" | "desc" = "asc",
+  groups: CatalogQueryGroup[] = [],
+  match: "all" | "any" = "all",
+  namePrefix?: string
+): Promise<{ items: SiloItem[]; nextCursor?: string }> {
+  if (groups.length) {
+    const page = await requestV2<NativeCatalogPage>(session, "/catalog/query", {
+      method: "POST",
+      body: JSON.stringify({
+        source: "query",
+        library_id: String(libraryId),
+        ...(type ? { type: type.toLowerCase() } : {}),
+        sort,
+        order,
+        match,
+        groups,
+        limit,
+        ...(namePrefix ? { name_prefix: namePrefix } : {}),
+        ...(cursor ? { cursor } : {})
+      })
+    });
+    if (page.page?.has_more && !page.page.next_cursor) {
+      throw new Error("Silo returned another library page without a continuation cursor.");
+    }
+    return {
+      items: (page.items ?? []).map(toItem).filter(item => item.Id),
+      nextCursor: page.page?.has_more ? page.page.next_cursor : undefined
+    };
+  }
+
+  const params = new URLSearchParams({
+    source: "query",
+    library_id: String(libraryId),
+    limit: String(limit)
+  });
+  if (cursor) params.set("cursor", cursor);
+  if (type) params.set("type", type.toLowerCase());
+  if (namePrefix) params.set("name_prefix", namePrefix);
+  params.set("sort", order === "desc" ? `-${sort}` : sort);
+
+  const page = await requestV2<NativeCatalogPage>(session, `/catalog?${params}`);
+  if (page.page?.has_more && !page.page.next_cursor) {
+    throw new Error("Silo returned another library page without a continuation cursor.");
+  }
+  return {
+    items: (page.items ?? []).map(toItem).filter((item) => item.Id),
+    nextCursor: page.page?.has_more ? page.page.next_cursor : undefined
+  };
+}
+
+export async function getCatalogFilterOptions(
+  session: Session,
+  libraryId: number | string
+): Promise<CatalogFilterOptions> {
+  const params = new URLSearchParams({
+    library_id: String(libraryId),
+    skip_technical: "false"
+  });
+  const response = await requestV2<{
+    genres?: string[];
+    studios?: string[];
+    networks?: string[];
+    countries?: string[];
+    original_languages?: string[];
+    content_ratings?: string[];
+    authors?: string[];
+    narrators?: string[];
+    series?: string[];
+    technical?: {
+      resolutions?: string[];
+      audio_languages?: string[];
+      subtitle_languages?: string[];
+    };
+  }>(session, `/catalog/filters?${params}`);
+  return {
+    genres: response.genres ?? [],
+    studios: response.studios ?? [],
+    networks: response.networks ?? [],
+    countries: response.countries ?? [],
+    originalLanguages: response.original_languages ?? [],
+    contentRatings: response.content_ratings ?? [],
+    authors: response.authors ?? [],
+    narrators: response.narrators ?? [],
+    series: response.series ?? [],
+    resolutions: response.technical?.resolutions ?? [],
+    audioLanguages: response.technical?.audio_languages ?? [],
+    subtitleLanguages: response.technical?.subtitle_languages ?? []
+  };
 }
 
 type NativeCollection = {
@@ -468,4 +984,60 @@ export function imageUrl(session: Session, item: SiloItem | string): string {
 
 export function backdropUrl(session: Session, item: SiloItem | string): string {
   return typeof item === "string" ? "" : assetUrl(session, item.BackdropUrl ?? item.PosterUrl);
+}
+
+export function mediaLogoUrl(session: Session, item: SiloItem): string {
+  return assetUrl(session, item.LogoUrl);
+}
+
+export function requestArtworkUrl(path?: string): string {
+  if (!path) return "";
+  if (/^https?:\/\//i.test(path)) return path;
+  return `https://image.tmdb.org/t/p/w780${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+export type Shuffle = { id: string; current: SiloItem; next: SiloItem };
+
+type NativeShuffle = { id?: string; current?: NativeItem; next?: NativeItem };
+
+function toShuffle(response: NativeShuffle): Shuffle {
+  if (!response.id || !response.current || !response.next) throw new Error("The shuffle response has no pick.");
+  return { id: response.id, current: toItem(response.current), next: toItem(response.next) };
+}
+
+export async function getShuffleCapability(session: Session): Promise<{ available: boolean; scopeKinds: string[] }> {
+  const response = await requestV2<{ state?: string; allowed?: boolean; scope_kinds?: string[] }>(session, "/shuffles/capabilities");
+  return {
+    available: response.allowed === true && response.state === "available",
+    scopeKinds: response.scope_kinds ?? []
+  };
+}
+
+export async function createShuffle(session: Session, kind: string, id: string | number): Promise<Shuffle> {
+  return toShuffle(await requestV2<NativeShuffle>(session, "/shuffles?image_size=large", {
+    method: "POST",
+    body: JSON.stringify({ scope: { kind, id: String(id) } })
+  }));
+}
+
+export async function advanceShuffle(session: Session, shuffleId: string, fromContentId: string): Promise<Shuffle> {
+  return toShuffle(await requestV2<NativeShuffle>(session, `/shuffles/${encodeURIComponent(shuffleId)}/advance?image_size=large`, {
+    method: "POST",
+    body: JSON.stringify({ from_content_id: fromContentId })
+  }));
+}
+
+export async function deleteShuffle(session: Session, shuffleId: string): Promise<void> {
+  await requestV2<unknown>(session, `/shuffles/${encodeURIComponent(shuffleId)}`, { method: "DELETE" });
+}
+
+export async function libraryHasItems(session: Session, libraryId: number | string, type?: string): Promise<boolean | null> {
+  try {
+    const params = new URLSearchParams({ source: "query", library_id: String(libraryId), limit: "1", skip_total: "true" });
+    if (type) params.set("type", type.toLowerCase());
+    const page = await requestV2<NativeCatalogPage>(session, `/catalog?${params}`);
+    return (page.items ?? []).length > 0;
+  } catch {
+    return null;
+  }
 }

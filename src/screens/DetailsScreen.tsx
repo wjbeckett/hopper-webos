@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { imageUrl, isFavorite, isInWatchlist, setFavorite, setWatchlist } from "../api/silo";
+import { backdropUrl, isFavorite, isInWatchlist, setFavorite, setWatchlist } from "../api/silo";
 import { TvButton } from "../components/TvButton";
 import type { Session, SiloItem } from "../types";
 
@@ -48,7 +48,7 @@ export function DetailsScreen({ session, item, onPlay, onBack }: Props) {
       <TvButton className="secondary top-back" onClick={onBack}>‹ Back</TvButton>
       <div
         className="details-backdrop"
-        style={{ backgroundImage: `url("${imageUrl(session, item)}")` }}
+        style={{ backgroundImage: `url("${backdropUrl(session, item)}")` }}
       />
       <div className="details-scrim" />
       <div className="details-content">

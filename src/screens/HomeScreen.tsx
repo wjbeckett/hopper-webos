@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getHomeRails } from "../api/silo";
-import { MediaRail } from "../components/MediaRail";
+import { FeaturedRailsScreen } from "../components/FeaturedRailsScreen";
+import { focusFirstContentCard } from "../navigation/spatial";
 import type { HomeRail, Session, SiloItem } from "../types";
 
 export function HomeScreen({
@@ -23,18 +24,22 @@ export function HomeScreen({
     return () => { alive = false; };
   }, [session]);
 
+  useEffect(() => {
+    if (loading) return;
+    const frame = requestAnimationFrame(focusFirstContentCard);
+    return () => cancelAnimationFrame(frame);
+  }, [loading, rails]);
+
   if (loading) return <div className="screen-state">Loading your Silo…</div>;
 
   return (
-    <main className="content-screen">
-      <section className="hero-copy">
-        <div className="eyebrow">Welcome back</div>
-        <h1>{session.username}</h1>
-      </section>
-      {error ? <div className="error">{error}</div> : null}
-      {rails.map((rail) => (
-        <MediaRail key={rail.id} rail={rail} session={session} onOpen={onOpen} />
-      ))}
-    </main>
+    <FeaturedRailsScreen
+      rails={rails}
+      session={session}
+      onOpen={onOpen}
+      error={error}
+      emptyTitle="Your library will show up here"
+      emptyDescription="Connect a library on your Silo server to get started."
+    />
   );
 }

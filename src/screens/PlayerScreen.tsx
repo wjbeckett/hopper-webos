@@ -37,7 +37,7 @@ function clientDiagnostic(event: string, details: Record<string, unknown>) {
   }
 }
 
-export function PlayerScreen({ session, item, startPosition, onBack }: { session: Session; item: SiloItem; startPosition?: number; onBack: () => void }) {
+export function PlayerScreen({ session, item, startPosition, onBack, onEnded }: { session: Session; item: SiloItem; startPosition?: number; onBack: () => void; onEnded?: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const closedSessions = useRef(new Set<string>());
@@ -313,15 +313,42 @@ export function PlayerScreen({ session, item, startPosition, onBack }: { session
   }
 
   useEffect(() => {
+    const isBackKey = (event: KeyboardEvent) =>
+      event.key === "Escape" || event.key === "Backspace" || event.key === "GoBack"
+      || event.keyCode === 461 || event.keyCode === 10009;
+
+    const movePanelFocus = (offset: number) => {
+      const rows = Array.from(document.querySelectorAll<HTMLElement>(".player-options .option-row"));
+      if (!rows.length) return;
+      const index = rows.indexOf(document.activeElement as HTMLElement);
+      const next = index < 0 ? 0 : (index + offset + rows.length) % rows.length;
+      rows[next].focus();
+    };
+
     const onKey = (event: KeyboardEvent) => {
       const video = videoRef.current;
       if (!video) return;
       revealHud();
-      if (event.key === "MediaPlayPause" || ((event.key === "Enter" || event.key === " ") && !panel)) video.paused ? void video.play() : video.pause();
-      else if (event.key === "ArrowLeft" && !panel) seekBy(-10);
-      else if (event.key === "ArrowRight" && !panel) seekBy(10);
-      else if ((event.key === "Escape" || event.key === "Backspace" || event.keyCode === 461) && panel) setPanel(null);
-      else if (event.key === "Escape" || event.key === "Backspace" || event.keyCode === 461) { closePlayback(false); onBack(); }
+      if (panel) {
+        // The options panel owns the remote: rows are arrow-driven, OK activates
+        // the row natively, and Back closes the panel. Global navigation must not
+        // move focus out of the panel while it is open.
+        if (event.key === "ArrowDown") { event.preventDefault(); event.stopPropagation(); movePanelFocus(1); }
+        else if (event.key === "ArrowUp") { event.preventDefault(); event.stopPropagation(); movePanelFocus(-1); }
+        else if (event.key === "ArrowLeft" || event.key === "ArrowRight") { event.preventDefault(); event.stopPropagation(); }
+        else if (isBackKey(event)) { event.preventDefault(); event.stopPropagation(); setPanel(null); }
+        return;
+      }
+      const onFocusedControl = document.activeElement instanceof HTMLElement && document.activeElement.hasAttribute("data-tv-focusable");
+      if (event.key === "MediaStop") { closePlayback(false); onBack(); }
+      else if (event.key === "MediaPlay") void video.play();
+      else if (event.key === "MediaPause") video.pause();
+      else if (event.key === "MediaPlayPause" || ((event.key === "Enter" || event.key === " ") && !onFocusedControl)) video.paused ? void video.play() : video.pause();
+      else if (event.key === "MediaFastForward") seekBy(30);
+      else if (event.key === "MediaRewind") seekBy(-30);
+      else if (event.key === "ArrowLeft") seekBy(-10);
+      else if (event.key === "ArrowRight") seekBy(10);
+      else if (isBackKey(event)) { closePlayback(false); onBack(); }
       else return;
       event.preventDefault(); event.stopPropagation();
     };
@@ -366,14 +393,14 @@ export function PlayerScreen({ session, item, startPosition, onBack }: { session
   }
 
   return <main className="player-shell" onMouseMove={revealHud}>
-    <video ref={videoRef} className="player" playsInline onPlay={() => revealHud()} onPause={() => revealHud()} onTimeUpdate={(event) => { setPosition(sourcePosition()); setDuration(version?.duration ?? event.currentTarget.duration ?? 0); }} onDurationChange={(event) => setDuration(version?.duration ?? event.currentTarget.duration ?? 0)} onError={handleMediaError} />
+    <video ref={videoRef} className="player" playsInline onPlay={() => revealHud()} onPause={() => revealHud()} onEnded={() => { if (onEnded) { closePlayback(false); onEnded(); } }} onTimeUpdate={(event) => { setPosition(sourcePosition()); setDuration(version?.duration ?? event.currentTarget.duration ?? 0); }} onDurationChange={(event) => setDuration(version?.duration ?? event.currentTarget.duration ?? 0)} onError={handleMediaError} />
     <div className={`player-chrome ${hud || panel ? "visible" : ""}`}>
       <button data-tv-focusable="true" className="tv-button secondary top-back player-back" onClick={() => { closePlayback(false); onBack(); }}>‹ Back</button>
       <div className="player-title"><div className="eyebrow">{detail?.series_title ?? item.SeriesName ?? "Now Playing"}</div><h2>{episode}{detail?.title ?? item.Name}</h2>{(detail?.overview ?? item.Overview) ? <p>{detail?.overview ?? item.Overview}</p> : null}</div>
       <div className="player-controls">
-        <button className="tv-button" onClick={() => setPanel("audio")} disabled={!audioTracks.length}>Audio</button>
-        <button className="tv-button" onClick={() => setPanel("subtitles")}>Subtitles</button>
-        <button className="tv-button" onClick={() => setPanel("quality")} disabled={!qualities.length}>Quality · {qualityRef.current}</button>
+        <button data-tv-focusable="true" className="tv-button" onClick={() => setPanel("audio")} disabled={!audioTracks.length}>Audio</button>
+        <button data-tv-focusable="true" className="tv-button" onClick={() => setPanel("subtitles")}>Subtitles</button>
+        <button data-tv-focusable="true" className="tv-button" onClick={() => setPanel("quality")} disabled={!qualities.length}>Quality · {qualityRef.current}</button>
       </div>
       <div className={`player-timeline ${scrubbing ? "scrubbing" : ""}`}>
         {scrubbing ? <div className="chapter-preview" style={{ left: `${Math.max(8, Math.min(92, progress))}%` }}>{currentChapter?.thumbnail_url ? <img src={currentChapter.thumbnail_url} alt="" /> : null}<strong>{currentChapter?.title || (chapters.length ? `Chapter ${currentChapter?.index != null ? currentChapter.index + 1 : 1}` : detail?.title ?? item.Name)}</strong><span>{formatTime(position)}</span></div> : null}

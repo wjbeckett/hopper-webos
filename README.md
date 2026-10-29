@@ -10,8 +10,12 @@ An early, community-built LG webOS TV client for the [Silo](https://silo.tv/) se
 - Native Silo device/QR sign-in, with username and password as a fallback
 - Multiple saved Silo servers and locally persisted sessions
 - Profile-aware home layout, libraries, favorites, and watchlist
+- Focused-item home artwork backdrop with TV-safe crossfades
 - Movies, TV, music, and audiobook library surfaces
+- Library Browse with catalog-backed sorting, facets, server-side A–Z prefix, remembered sort/filters, and TV-remote-friendly filter panels
 - Series, season, and episode navigation
+- Calendar releases, collections, watch history, and request workflows
+- Household profile switching with PIN verification
 - Continue Watching and other server-defined home rails
 - Debounced catalog search
 - D-pad spatial navigation and LG Back-key handling
