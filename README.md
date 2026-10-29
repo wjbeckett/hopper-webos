@@ -13,10 +13,12 @@ An early, community-built LG webOS TV client for the [Silo](https://silo.tv/) se
 - Focused-item home artwork backdrop with TV-safe crossfades
 - Movies, TV, music, and audiobook library surfaces
 - Library Browse with catalog-backed sorting, facets, server-side A–Z prefix, remembered sort/filters, and TV-remote-friendly filter panels
+- Per-library Collections (grouped, with collection detail), audiobook Authors/Series, A–Z, empty-library states, and server-backed Shuffle for libraries and collections
 - Series, season, and episode navigation
 - Calendar releases, collections, watch history, and request workflows
 - Household profile switching with PIN verification
-- Continue Watching and other server-defined home rails
+- Continue Watching and other server-defined home rails, refreshed live from the server's realtime events socket (user_state/catalog), with a polling fallback
+- Watch state (watched, favorite, watchlist, resume position) updates cards and rails in place without refetching
 - Debounced catalog search
 - D-pad spatial navigation and LG Back-key handling
 - Protocol-v3 playback planning and replanning
@@ -231,7 +233,7 @@ Architecture boundaries are deliberate: API access belongs in `src/api`, LG-spec
 - Token refresh and single-flight retry are not implemented.
 - Household profile selection and PIN entry are not implemented.
 - Network-loss recovery and expired-session UX need work.
-- Subtitle styling and intro/credits controls are incomplete.
+- Subtitle styling and quick-subtitle pickers are incomplete; trickplay previews, intro/credits skip pills, and the rebuilt player chrome need device qualification.
 - Automated tests for navigation, auth, parsing, and player state are not yet present.
 - Store assets, accessibility review, privacy copy, trademark permission, and LG certification remain outstanding.
 

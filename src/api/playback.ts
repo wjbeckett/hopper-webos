@@ -3,10 +3,11 @@ import type { Session, SiloItem } from "../types";
 import { siloRequest } from "./silo";
 
 export type AudioTrack = { index?: number; codec?: string; channels?: number; layout?: string; language?: string; title?: string; embedded_title?: string; default?: boolean };
-export type SubtitleTrack = { index?: number; codec?: string; language?: string; title?: string; embedded_title?: string; forced?: boolean; hearing_impaired?: boolean; default?: boolean; external?: boolean; file_name?: string };
+export type SubtitleTrack = { index?: number; codec?: string; language?: string; title?: string; embedded_title?: string; forced?: boolean; hearing_impaired?: boolean; default?: boolean; external?: boolean; source?: string; file_name?: string };
 export type Chapter = { index: number; title?: string; start_seconds: number; end_seconds?: number; source?: string; thumbnail_url?: string; thumbnail_thumbhash?: string };
-export type FileVersion = { file_id: number; resolution?: string; codec_video?: string; codec_audio?: string; container?: string; bitrate?: number; duration?: number; audio_tracks?: AudioTrack[]; subtitle_tracks?: SubtitleTrack[]; chapters?: Chapter[]; effective_audio_track_index?: number };
-export type WatchDetail = { content_id: string; title: string; overview?: string; series_id?: string; series_title?: string; season_number?: number; episode_number?: number; versions: FileVersion[]; user_data?: { position_seconds?: number } };
+export type FileVersion = { file_id: number; resolution?: string; codec_video?: string; codec_audio?: string; container?: string; edition_raw?: string; edition_key?: string; bitrate?: number; duration?: number; audio_tracks?: AudioTrack[]; subtitle_tracks?: SubtitleTrack[]; chapters?: Chapter[]; effective_audio_track_index?: number };
+export type WatchDetail = { content_id: string; title: string; overview?: string; series_id?: string; series_title?: string; season_number?: number; episode_number?: number; versions: FileVersion[]; user_data?: { position_seconds?: number; last_file_id?: number } };
+export type PlaybackChoices = { fileId?: number; audioIndex?: number; subtitleIndex?: number; subtitleOff?: boolean };
 export type Quality = { label: string; height?: number; bitrate_kbps?: number; preserves_source: boolean };
 export type SubtitleInventory = { track_id: string; combined_index: number; source: string; codec?: string; language?: string; label?: string; forced: boolean; default: boolean; hearing_impaired: boolean; delivery: string; url?: string };
 export type TrackIdentity = { id: string; index?: number };
@@ -64,7 +65,11 @@ function resolutionHeight(resolution?: string): number {
   return match ? Number(match[1]) : 0;
 }
 
-export function bestVersionForDevice(versions: FileVersion[]): FileVersion | undefined {
+export function bestVersionForDevice(versions: FileVersion[], preferredFileId?: number): FileVersion | undefined {
+  if (preferredFileId != null) {
+    const last = versions.find(version => version.file_id === preferredFileId);
+    if (last) return last;
+  }
   // webOS reports a 1920x1080 CSS viewport even on many UHD televisions. A
   // real LG TV can negotiate a 2160p source; desktop development is bounded
   // by its physical screen to avoid needlessly selecting a larger edition.
@@ -89,10 +94,33 @@ export async function getWatchDetail(session: Session, item: SiloItem): Promise<
   return siloRequest(session, `/watch/${encodeURIComponent(item.Id)}`);
 }
 
+export type TrickplaySheet = { index: number; url: string };
+export type Trickplay = { file_id: string; interval_ms: number; thumbnail_count: number; thumbnail_width: number; thumbnail_height: number; tile_columns: number; tile_rows: number; sheets: TrickplaySheet[]; expires_at: string };
+export type MarkerSegment = { start_seconds: number; end_seconds: number; provider?: string; source?: string; confidence?: number; algorithm?: string; detected_at?: string };
+export type MarkerOccurrence = { kind: string; start_seconds: number; end_seconds: number; thumbnail_url?: string; thumbnail_thumbhash?: string; thumbnail_capture_seconds?: number };
+export type FileMarkers = { file_id: string; intro: MarkerSegment | null; credits: MarkerSegment | null; recap: MarkerSegment | null; preview: MarkerSegment | null; marker_segments: MarkerOccurrence[] };
+
+async function optionalSiloJson<T>(session: Session, path: string): Promise<T | null> {
+  try {
+    return await siloRequest<T>(session, path);
+  } catch (reason) {
+    if (reason instanceof Error && /: 404[ :]/.test(reason.message)) return null;
+    throw reason;
+  }
+}
+
+export function getTrickplay(session: Session, itemId: string, fileId?: number): Promise<Trickplay | null> {
+  return optionalSiloJson(session, `/watch/${encodeURIComponent(itemId)}/trickplay${fileId ? `?file_id=${encodeURIComponent(String(fileId))}` : ""}`);
+}
+
+export function getMarkers(session: Session, itemId: string): Promise<FileMarkers | null> {
+  return optionalSiloJson(session, `/markers/items/${encodeURIComponent(itemId)}`);
+}
+
 export async function startPlaybackV3(session: Session, detail: WatchDetail, version: FileVersion, quality = "auto", audioIndex?: number, subtitleIndex?: number, startPosition?: number) {
   if (!session.profileId) throw new Error("A Silo profile is required for playback.");
   const playbackAttemptId = uuid("webos");
-  const body = { protocol_version: 3, client_features: features, file_id: version.file_id, profile_id: session.profileId, playback_attempt_id: playbackAttemptId, quality_preference: quality, subtitle_fidelity_preference: "compatible", start_position: startPosition ?? detail.user_data?.position_seconds ?? 0, ...(audioIndex == null ? {} : { audio_track_id: `file:${version.file_id}:audio:${audioIndex}`, audio_track_index: audioIndex }), ...(subtitleIndex == null ? {} : { subtitle_track_id: `file:${version.file_id}:subtitle:${subtitleIndex}`, subtitle_track_index: subtitleIndex }), metered: false, ...snapshot() };
+  const body = { protocol_version: 3, client_features: features, file_id: version.file_id, profile_id: session.profileId, playback_attempt_id: playbackAttemptId, quality_preference: quality, subtitle_fidelity_preference: "compatible", start_position: startPosition ?? detail.user_data?.position_seconds ?? 0, ...(audioIndex == null ? {} : { audio_track_id: `file:${version.file_id}:audio:${audioIndex}`, audio_track_index: audioIndex }), ...(subtitleIndex == null ? {} : subtitleIndex < 0 ? { subtitle_track_index: -1 } : { subtitle_track_id: `file:${version.file_id}:subtitle:${subtitleIndex}`, subtitle_track_index: subtitleIndex }), metered: false, ...snapshot() };
   const decision = await siloRequest<Decision>(session, "/playback/start", { method: "POST", body: JSON.stringify(body) });
   return { plan: requirePlan(decision), playbackAttemptId, planAttemptId: uuid("plan") };
 }
@@ -125,6 +153,19 @@ export function playbackUrl(session: Session, url: string) {
   const root = session.serverUrl.replace(/\/+$/, "");
   const path = url.startsWith("/") ? url : `/${url}`;
   return `${root}/api/v1${path}`;
+}
+
+function serverLanguageTag(language?: string) {
+  const key = language?.trim().toLowerCase();
+  return !key || key === "und" || key === "undetermined" ? "" : key;
+}
+
+export function saveAudioChoice(session: Session, seriesId: string, track: AudioTrack, ordinal: number) {
+  return siloRequest<void>(session, `/audio-prefs/${encodeURIComponent(seriesId)}`, { method: "PUT", body: JSON.stringify({ audio_track_index: Math.max(0, ordinal), audio_language: serverLanguageTag(track.language), track_signature: { language: serverLanguageTag(track.language) || null, title: track.title?.trim() || null, embedded_title: track.embedded_title?.trim() || null, codec: track.codec?.trim() || null, layout: track.layout?.trim() || null, channels: track.channels && track.channels > 0 ? track.channels : null } }) });
+}
+
+export function saveSubtitleChoice(session: Session, seriesId: string, track: SubtitleTrack | undefined, index: number) {
+  return siloRequest<void>(session, `/subtitle-prefs/${encodeURIComponent(seriesId)}`, { method: "PUT", body: JSON.stringify({ subtitle_language: track ? serverLanguageTag(track.language) : "", subtitle_track_index: track ? Math.max(0, index) : -1, external_subtitle_path: "", subtitle_mode: track ? "always" : "off", track_signature: track ? { source: track.source ?? (track.external ? "external" : "embedded"), language: serverLanguageTag(track.language) || null, codec: track.codec?.trim() || null, label: track.title?.trim() || null, forced: track.forced ?? false, hearing_impaired: track.hearing_impaired ?? false } : null }) });
 }
 
 export function saveAudioPreference(session: Session, seriesId: string, track: AudioTrack) {

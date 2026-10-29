@@ -4,14 +4,73 @@ import type { SiloItem } from "../types";
 type Listener = (item: SiloItem) => void;
 
 const listeners = new Set<Listener>();
+const refreshListeners = new Set<() => void>();
 
 export function publishWatchState(item: SiloItem) {
   for (const listener of [...listeners]) listener({ ...item });
 }
 
+export function publishRailsChanged() {
+  for (const listener of [...refreshListeners]) listener();
+}
+
 export function subscribeWatchState(listener: Listener) {
   listeners.add(listener);
   return () => { listeners.delete(listener); };
+}
+
+function subscribeRailsChanged(listener: () => void) {
+  refreshListeners.add(listener);
+  return () => { refreshListeners.delete(listener); };
+}
+
+export function useWatchStateRefresh(refresh: () => unknown, debounceMs = 300, pollMs?: number) {
+  const busyRef = useRef(false);
+  const queuedRef = useRef(false);
+  const pollRef = useRef<number | undefined>(undefined);
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+
+  useEffect(() => {
+    const run = () => {
+      if (busyRef.current) {
+        queuedRef.current = true;
+        return;
+      }
+      busyRef.current = true;
+      Promise.resolve(refreshRef.current()).catch(() => undefined).finally(() => {
+        busyRef.current = false;
+        if (queuedRef.current) {
+          queuedRef.current = false;
+          run();
+        }
+      });
+    };
+    const schedule = (timer: number | undefined, delay: number, set: (next: number | undefined) => void) => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      set(window.setTimeout(() => {
+        set(undefined);
+        run();
+      }, delay));
+    };
+    let busTimer: number | undefined;
+    let signalTimer: number | undefined;
+    const unsubscribeBus = subscribeWatchState(() => schedule(busTimer, debounceMs, next => { busTimer = next; }));
+    const unsubscribeSignals = subscribeRailsChanged(() => schedule(signalTimer, 2_000, next => { signalTimer = next; }));
+    if (pollMs) {
+      const tick = () => {
+        if (document.visibilityState === "visible") run();
+      };
+      pollRef.current = window.setInterval(tick, pollMs);
+    }
+    return () => {
+      unsubscribeBus();
+      unsubscribeSignals();
+      if (busTimer !== undefined) window.clearTimeout(busTimer);
+      if (signalTimer !== undefined) window.clearTimeout(signalTimer);
+      if (pollRef.current !== undefined) window.clearInterval(pollRef.current);
+    };
+  }, [debounceMs, pollMs]);
 }
 
 export function applyWatchedState(item: SiloItem, watched: boolean): SiloItem {
@@ -28,34 +87,4 @@ export function applyResumeState(item: SiloItem, positionSeconds: number): SiloI
     ...item,
     UserData: { ...item.UserData, Played: false, PlaybackPositionTicks: Math.round(positionSeconds * 10_000_000), PlayedPercentage: percent }
   };
-}
-
-let refreshTimer: number | undefined;
-let refreshInFlight = false;
-let refreshQueued = false;
-
-function scheduleWatchRefresh(run: () => void | Promise<void>) {
-  if (refreshTimer != null) window.clearTimeout(refreshTimer);
-  refreshTimer = window.setTimeout(() => {
-    refreshTimer = undefined;
-    if (refreshInFlight) {
-      refreshQueued = true;
-      return;
-    }
-    refreshInFlight = true;
-    Promise.resolve(run()).finally(() => {
-      refreshInFlight = false;
-      if (refreshQueued) {
-        refreshQueued = false;
-        scheduleWatchRefresh(run);
-      }
-    });
-  }, 300);
-}
-
-/** Debounced (300ms), single-flight rail refresh driven by the watch bus. */
-export function useWatchStateRefresh(refresh: () => void | Promise<void>) {
-  const refreshRef = useRef(refresh);
-  useEffect(() => { refreshRef.current = refresh; });
-  useEffect(() => subscribeWatchState(() => scheduleWatchRefresh(() => refreshRef.current())), []);
 }

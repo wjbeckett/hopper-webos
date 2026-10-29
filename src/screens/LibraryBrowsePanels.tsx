@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { searchCatalogFacet } from "../api/silo";
-import type { CatalogFilterOptions } from "../api/silo";
+import type { CatalogFilterOptions, CatalogScope } from "../api/silo";
 import type { Session } from "../types";
 
-export type BrowseSortKey = "title" | "added_at" | "release_date" | "year" | "rating_imdb" | "runtime" | "resolution" | "author" | "narrator" | "series";
+export type BrowseSortKey = "title" | "added_at" | "release_date" | "year" | "rating_imdb" | "runtime" | "resolution" | "author" | "narrator" | "series" | "collection";
 export type BrowseSortOption = {
   id: BrowseSortKey;
   label: string;
@@ -25,7 +25,8 @@ type BrowsePanelProps = {
   session: Session;
   libraryIds: string[];
   preserve: boolean;
-  onPreserveChange: (preserve: boolean) => void;
+  onPreserveChange?: (preserve: boolean) => void;
+  scope?: CatalogScope;
 };
 
 type Facet = { id: string; label: string; options: { value: string; label: string }[]; mode?: "single" };
@@ -48,6 +49,7 @@ function sortedOptions(values: string[] | undefined) {
 }
 
 function directionLabel(sort: BrowseSortKey, order: "asc" | "desc") {
+  if (sort === "collection") return "Default";
   if (["title", "author", "narrator", "series"].includes(sort)) return order === "asc" ? "A–Z" : "Z–A";
   if (["release_date", "year", "added_at"].includes(sort)) return order === "asc" ? "Oldest" : "Newest";
   if (sort === "runtime") return order === "asc" ? "Shortest" : "Longest";
@@ -69,7 +71,8 @@ export function LibraryBrowsePanels({
   session,
   libraryIds,
   preserve,
-  onPreserveChange
+  onPreserveChange,
+  scope
 }: BrowsePanelProps) {
   const [activePanel] = useState(initialPanel);
   const [draft, setDraft] = useState(selection);
@@ -143,7 +146,9 @@ export function LibraryBrowsePanels({
         session,
         libraryIdsKey.split(","),
         facet,
-        query
+        query,
+        undefined,
+        scope
       ).then(result => {
         if (!alive) return;
         setFacetMatches(result.matches);
@@ -158,7 +163,7 @@ export function LibraryBrowsePanels({
       alive = false;
       window.clearTimeout(timer);
     };
-  }, [activeFacet, facetQuery, libraryIdsKey, session]);
+  }, [activeFacet, facetQuery, libraryIdsKey, session, scope]);
 
   const selectedFacet = facets.find(facet => facet.id === activeFacet) ?? null;
   const activeFacetCount = Object.values(draft).filter(values => values.length > 0).length;
@@ -254,14 +259,17 @@ export function LibraryBrowsePanels({
                   className={`browse-panel-row ${selected ? "selected" : ""}`}
                   key={option.id}
                   onClick={() => {
-                    if (selected) onSort(option.id, order === "asc" ? "desc" : "asc");
+                    if (selected && option.id !== "collection") onSort(option.id, order === "asc" ? "desc" : "asc");
+                    else if (selected) onSort(option.id, option.order);
                     else onSort(option.id, option.order);
                     onClose();
                   }}
                 >
                   <span className="browse-panel-check">{selected ? "✓" : ""}</span>
                   <span>{option.label}</span>
-                  {selected ? (
+                  {selected && option.id === "collection" ? (
+                    <span className="browse-panel-direction">Default</span>
+                  ) : selected ? (
                     <>
                       <span className="browse-panel-direction">{directionLabel(sort, order)}</span>
                       <span className="browse-panel-arrow">{order === "asc" ? "↑" : "↓"}</span>
@@ -374,18 +382,22 @@ export function LibraryBrowsePanels({
                 <span className="browse-panel-check round">{!draftMatchAll ? "✓" : ""}</span>
                 <span>Any selected filter</span>
               </button>
-              <div className="browse-panel-section-heading">OPTIONS</div>
-              <button
-                type="button"
-                role="checkbox"
-                aria-checked={preserve}
-                data-tv-focusable="true"
-                className={`browse-panel-row ${preserve ? "selected" : ""}`}
-                onClick={() => onPreserveChange(!preserve)}
-              >
-                <span className="browse-panel-check">{preserve ? "✓" : ""}</span>
-                <span>Preserve sort &amp; filters</span>
-              </button>
+              {onPreserveChange ? (
+                <>
+                  <div className="browse-panel-section-heading">OPTIONS</div>
+                  <button
+                    type="button"
+                    role="checkbox"
+                    aria-checked={preserve}
+                    data-tv-focusable="true"
+                    className={`browse-panel-row ${preserve ? "selected" : ""}`}
+                    onClick={() => onPreserveChange(!preserve)}
+                  >
+                    <span className="browse-panel-check">{preserve ? "✓" : ""}</span>
+                    <span>Preserve sort &amp; filters</span>
+                  </button>
+                </>
+              ) : null}
               <button
                 type="button"
                 data-tv-focusable="true"

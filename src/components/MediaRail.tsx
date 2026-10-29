@@ -15,7 +15,7 @@ export function MediaRail({
   const landscape = Boolean(rail.featured || isContinueWatching);
 
   return (
-    <section className={`media-rail ${isContinueWatching ? "continue-watching-rail" : ""} ${landscape ? "wide-media-rail" : ""}`}>
+    <section data-rail-id={rail.id} className={`media-rail ${isContinueWatching ? "continue-watching-rail" : ""} ${landscape ? "wide-media-rail" : ""}`}>
       <h2>{rail.title}</h2>
       <div className={`rail-track ${landscape ? "wide-rail" : ""}`}>
         {rail.items.map((item) => (

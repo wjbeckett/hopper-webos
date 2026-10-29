@@ -1,5 +1,5 @@
 export type AppSection = "home" | "forYou" | "calendar" | "requests" | "library" | "collections" | "movies" | "series" | "music" | "audiobooks" | "search" | "favorites" | "watchlist" | "history" | "profiles" | "settings";
-export type LibraryLanding = "recommended" | "browse";
+export type LibraryLanding = "recommended" | "browse" | "collections" | "authors" | "series" | "alphabet";
 
 type PrimaryNavId = "home" | "movies" | "series" | "music" | "audiobooks" | "forYou" | "calendar" | "requests" | "search";
 
@@ -49,6 +49,9 @@ export function TopNav({
     const type = library.type.replace(/[\s_-]/g, "").toLowerCase();
     return ["series", "show", "shows", "tv", "mixed"].includes(type);
   });
+  const [collectionsPresent, setCollectionsPresent] = useState<Record<number, boolean>>({});
+  const librariesKey = libraries.map(library => library.id).join(",");
+  const hasCollections = (candidates: SiloLibrary[]) => candidates.length === 0 || candidates.some(library => collectionsPresent[library.id] !== false);
   const navItems: { id: PrimaryNavId; label: string }[] = [
     { id: "search", label: "Search" },
     { id: "home", label: "Home" },
@@ -62,6 +65,16 @@ export function TopNav({
   ];
 
   useEffect(() => {
+    let alive = true;
+    for (const library of libraries) {
+      getLibraryCollectionSections(session, library.id)
+        .then(sections => { if (alive) setCollectionsPresent(current => ({ ...current, [library.id]: sections.length > 0 })); })
+        .catch(() => undefined);
+    }
+    return () => { alive = false; };
+  }, [session, librariesKey]);
+
+  useEffect(() => {
     const closeMenu = () => {
       setOpenMenu(null);
       setOpenSeriesLibrary(null);
@@ -71,7 +84,7 @@ export function TopNav({
   }, []);
 
   function showMenu(id: PrimaryNavId) {
-    setOpenMenu(["movies", "series", "forYou"].includes(id) ? id : null);
+    setOpenMenu(["movies", "series", "music", "audiobooks", "forYou"].includes(id) ? id : null);
     if (id !== "series") setOpenSeriesLibrary(null);
   }
 
@@ -113,7 +126,7 @@ export function TopNav({
                 className={`nav-item ${isActive ? "active" : ""}`}
                 aria-current={isActive ? "page" : undefined}
                 aria-label={item.id === "search" ? "Search" : undefined}
-                aria-haspopup={["movies", "series", "forYou"].includes(item.id) ? "menu" : undefined}
+                aria-haspopup={["movies", "series", "music", "audiobooks", "forYou"].includes(item.id) ? "menu" : undefined}
                 aria-expanded={openMenu === item.id}
                 onFocus={() => showMenu(item.id)}
                 onClick={() => selectSection(item.id)}
@@ -131,7 +144,29 @@ export function TopNav({
                   <div data-nav-callout-group>
                     <CalloutButton icon="sparkles" onClick={() => selectSection("movies", undefined, "recommended")}>Recommended</CalloutButton>
                     <CalloutButton icon="grid" onClick={() => selectSection("movies", undefined, "browse")}>Browse</CalloutButton>
-                    <CalloutButton icon="collections" onClick={() => selectSection("collections")}>Collections</CalloutButton>
+                    {hasCollections(movieLibraries) ? <CalloutButton icon="collections" onClick={() => selectSection("movies", undefined, "collections")}>Collections</CalloutButton> : null}
+                  </div>
+                </div>
+              ) : null}
+              {openMenu === item.id && item.id === "music" ? (
+                <div className="nav-callout" role="menu" aria-label="Music">
+                  <div className="nav-callout-header">Music</div>
+                  <div data-nav-callout-group>
+                    <CalloutButton icon="sparkles" onClick={() => selectSection("music", undefined, "recommended")}>Recommended</CalloutButton>
+                    <CalloutButton icon="grid" onClick={() => selectSection("music", undefined, "browse")}>Browse</CalloutButton>
+                  </div>
+                </div>
+              ) : null}
+              {openMenu === item.id && item.id === "audiobooks" ? (
+                <div className="nav-callout" role="menu" aria-label="Audiobooks">
+                  <div className="nav-callout-header">Audiobooks</div>
+                  <div data-nav-callout-group>
+                    <CalloutButton icon="sparkles" onClick={() => selectSection("audiobooks", undefined, "recommended")}>Recommended</CalloutButton>
+                    <CalloutButton icon="grid" onClick={() => selectSection("audiobooks", undefined, "browse")}>Browse</CalloutButton>
+                    <CalloutButton icon="series" onClick={() => selectSection("audiobooks", undefined, "authors")}>Authors</CalloutButton>
+                    <CalloutButton icon="collections" onClick={() => selectSection("audiobooks", undefined, "series")}>Series</CalloutButton>
+                    {hasCollections(audiobookLibraries) ? <CalloutButton icon="collections" onClick={() => selectSection("audiobooks", undefined, "collections")}>Collections</CalloutButton> : null}
+                    <CalloutButton icon="grid" onClick={() => selectSection("audiobooks", undefined, "alphabet")}>A-Z</CalloutButton>
                   </div>
                 </div>
               ) : null}
@@ -163,7 +198,7 @@ export function TopNav({
                             <div data-nav-callout-group>
                               <CalloutButton icon="sparkles" onClick={() => selectSection("series", library.id, "recommended")}>Recommended</CalloutButton>
                               <CalloutButton icon="grid" onClick={() => selectSection("series", library.id, "browse")}>Browse</CalloutButton>
-                              <CalloutButton icon="collections" onClick={() => selectSection("collections")}>Collections</CalloutButton>
+                              {hasCollections([library]) ? <CalloutButton icon="collections" onClick={() => selectSection("series", library.id, "collections")}>Collections</CalloutButton> : null}
                             </div>
                           </div>
                         ) : null}
@@ -214,7 +249,7 @@ function CalloutButton({
   onClick
 }: {
   children: string;
-  icon: "sparkles" | "grid" | "collections" | "heart" | "bookmark";
+  icon: "sparkles" | "grid" | "collections" | "heart" | "bookmark" | "series";
   onClick: () => void;
 }) {
   return (
@@ -332,4 +367,5 @@ function avatarImageUrl(value: string, serverUrl: string) {
   return `${serverUrl.replace(/\/+$/, "")}/${value.replace(/^\/+/, "")}`;
 }
 import { useEffect, useState } from "react";
+import { getLibraryCollectionSections } from "../api/silo";
 import type { Session, SiloLibrary } from "../types";

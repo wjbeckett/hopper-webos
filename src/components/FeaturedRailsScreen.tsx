@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { UIEvent } from "react";
 import { backdropUrl, mediaLogoUrl } from "../api/silo";
+import { focusFirstContentCard, focusNavigationTarget } from "../navigation/spatial";
+import { subscribeWatchState } from "../core/watchState";
 import { MediaRail } from "./MediaRail";
 import type { HomeRail, Session, SiloItem } from "../types";
 
@@ -111,9 +113,19 @@ export function FeaturedRailsScreen({
   const ambientTintTimer = useRef<number | undefined>(undefined);
   const focusedItemRef = useRef<SiloItem | undefined>(undefined);
   const focusedRailIndexRef = useRef<number | undefined>(undefined);
+  const focusedCardRef = useRef<{ element: HTMLElement; railId: string; index: number } | undefined>(undefined);
+  const restoredFocusRef = useRef(false);
+  const mainRef = useRef<HTMLElement>(null);
   const heroImageRef = useRef("");
   const backdropRef = useRef<HTMLDivElement>(null);
-  const itemsById = new Map(rails.flatMap(rail => rail.items.map(item => [item.Id, item] as const)));
+  const [watchVersion, setWatchVersion] = useState(0);
+  useEffect(() => subscribeWatchState(() => setWatchVersion(version => version + 1)), []);
+  const displayRails = useMemo(() => rails.map(rail => {
+    if (!rail.title.toLocaleLowerCase().includes("continue watching")) return rail;
+    const kept = rail.items.filter(item => item.UserData?.Played !== true);
+    return kept.length === rail.items.length ? rail : { ...rail, items: kept };
+  }), [rails, watchVersion]);
+  const itemsById = new Map(displayRails.flatMap(rail => rail.items.map(item => [item.Id, item] as const)));
 
   function showHero(item: SiloItem, railIndex: number) {
     const previousItem = focusedItemRef.current;
@@ -156,9 +168,39 @@ export function FeaturedRailsScreen({
   }
 
   useEffect(() => {
-    const firstItem = rails[0]?.items[0];
+    if (restoredFocusRef.current) {
+      restoredFocusRef.current = false;
+      return;
+    }
+    const firstItem = displayRails[0]?.items[0];
     if (firstItem && (!focusedItem || !itemsById.has(focusedItem.Id))) showHero(firstItem, 0);
-  }, [rails, session, focusedItem]);
+  }, [displayRails, session, focusedItem]);
+
+  useLayoutEffect(() => {
+    const record = focusedCardRef.current;
+    if (!record || record.element.isConnected) return;
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active.isConnected && active !== document.body) return;
+    focusedCardRef.current = undefined;
+    const railIndex = displayRails.findIndex(node => node.id === record.railId);
+    const rail = railIndex >= 0 ? displayRails[railIndex] : undefined;
+    const slot = rail ? Math.max(0, Math.min(record.index, rail.items.length - 1)) : -1;
+    const item = rail?.items[slot];
+    const railElement = rail
+      ? mainRef.current?.querySelectorAll<HTMLElement>(".media-rail")[railIndex]
+      : undefined;
+    const target = item
+      ? railElement?.querySelectorAll<HTMLElement>(".media-card-wrap")[slot]?.querySelector<HTMLElement>("[data-tv-focusable='true']")
+      : undefined;
+    if (item && target) {
+      focusedCardRef.current = { element: target, railId: record.railId, index: slot };
+      restoredFocusRef.current = true;
+      showHero(item, railIndex);
+      focusNavigationTarget(target);
+      return;
+    }
+    focusFirstContentCard();
+  }, [rails]);
 
   useEffect(() => () => {
     if (heroTimer.current !== undefined) window.clearTimeout(heroTimer.current);
@@ -199,6 +241,7 @@ export function FeaturedRailsScreen({
 
   return (
     <main
+      ref={mainRef}
       className="content-screen home-screen"
       onFocusCapture={(event) => {
         const card = (event.target as HTMLElement).closest<HTMLElement>("[data-media-id]");
@@ -212,6 +255,11 @@ export function FeaturedRailsScreen({
           previewFocusedItem(item, railIndex);
           keepFocusedRailInView(card);
         }
+        const wrap = card?.closest<HTMLElement>(".media-card-wrap");
+        const track = card?.closest<HTMLElement>(".rail-track");
+        const slot = wrap && track ? Array.from(track.children).indexOf(wrap) : -1;
+        const railId = rail?.dataset.railId;
+        if (card && railId && slot >= 0) focusedCardRef.current = { element: card, railId, index: slot };
       }}
     >
       <div ref={backdropRef} className="home-hero-backdrop" aria-hidden="true">
@@ -309,10 +357,10 @@ export function FeaturedRailsScreen({
       ) : null}
       {error ? <div className="error">{error}</div> : null}
       <div className="home-rails" onScroll={syncBackdropScroll}>
-        {rails.map(rail => (
+        {displayRails.map(rail => (
           <MediaRail key={rail.id} rail={rail} session={session} onOpen={onOpen} />
         ))}
-        {!rails.length && !error ? (
+        {!displayRails.length && !error ? (
           <div className="empty-state">
             <span className="empty-state-mark" aria-hidden="true">{emptyMark}</span>
             <h2>{emptyTitle}</h2>

@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getLibrariesRails } from "../api/silo";
 import { FeaturedRailsScreen } from "../components/FeaturedRailsScreen";
 import { focusFirstContentCard } from "../navigation/spatial";
+import { useWatchStateRefresh } from "../core/watchState";
 import type { HomeRail, Session, SiloItem, SiloLibrary } from "../types";
 
 export function LibraryRecommendationsScreen({
@@ -32,11 +33,17 @@ export function LibraryRecommendationsScreen({
     return () => { alive = false; };
   }, [session, libraries, title]);
 
+  const refreshRails = useCallback(() => getLibrariesRails(session, libraries)
+    .then(next => setRails(next))
+    .catch(() => undefined), [session, libraries]);
+
+  useWatchStateRefresh(refreshRails, 300, 20_000);
+
   useEffect(() => {
     if (loading) return;
     const frame = requestAnimationFrame(focusFirstContentCard);
     return () => cancelAnimationFrame(frame);
-  }, [loading, rails]);
+  }, [loading]);
 
   if (loading) return <div className="screen-state">Loading {title}…</div>;
 

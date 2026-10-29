@@ -110,6 +110,8 @@ type NativeItem = Record<string, unknown> & {
   season_number?: number;
   episode_number?: number;
   episode_count?: number;
+  season_count?: number;
+  air_date?: string;
   runtime?: number;
   runtime_minutes?: number;
   runtime_seconds?: number;
@@ -140,6 +142,7 @@ type NativeItem = Record<string, unknown> & {
   user_state?: {
     played?: boolean;
     is_favorite?: boolean;
+    in_watchlist?: boolean;
     position_seconds?: number;
     progress_percent?: number;
   };
@@ -181,14 +184,18 @@ export type CatalogFilterOptions = {
   subtitleLanguages: string[];
 };
 
+export type CatalogScope = { source: "library_collection" | "user_collection"; collectionId: string };
+
 export async function searchCatalogFacet(
   session: Session,
   libraryIds: Array<number | string>,
   facet: "author" | "narrator" | "series",
   query: string,
-  limit = 100
+  limit = 100,
+  scope?: CatalogScope
 ): Promise<{ matches: string[]; hasMore: boolean }> {
-  const params = new URLSearchParams({ source: "query", facet, q: query, limit: String(limit) });
+  const params = new URLSearchParams({ source: scope?.source ?? "query", facet, q: query, limit: String(limit) });
+  if (scope) params.set("collection_id", scope.collectionId);
   for (const id of libraryIds) params.append("library_ids", String(id));
   const response = await requestV2<{ matches?: string[]; has_more?: boolean }>(
     session,
@@ -247,11 +254,11 @@ function toItem(item: NativeItem): SiloItem {
   const runtimeMinutes = item.sort_metrics?.runtime_minutes ?? item.runtime_minutes;
   const runtimeSeconds = item.duration_seconds
     ?? item.runtime_seconds
+    ?? item.duration
     ?? (typeof runtimeMinutes === "number"
       ? runtimeMinutes * 60
       : typeof item.runtime === "number"
-        ? item.runtime * 60
-        : item.duration);
+        ? item.runtime * 60 : undefined);
   const position = item.position_seconds ?? item.user_data?.position_seconds ?? item.user_state?.position_seconds;
   const progress = item.progress_percent
     ?? item.user_data?.progress_percent
@@ -262,6 +269,7 @@ function toItem(item: NativeItem): SiloItem {
   const userState = {
     Played: item.user_state?.played ?? item.user_data?.played,
     IsFavorite: item.user_state?.is_favorite,
+    InWatchlist: item.user_state?.in_watchlist,
     PlaybackPositionTicks: position == null ? undefined : position * 10_000_000,
     PlayedPercentage: progress
   };
@@ -277,6 +285,9 @@ function toItem(item: NativeItem): SiloItem {
     ProductionYear: item.release_year ?? item.year,
     DateAdded: item.added_at ?? item.date_added,
     ReleaseDate: item.sort_metrics?.release_date ?? item.release_date,
+    AirDate: item.air_date,
+    SeasonCount: item.season_count,
+    EpisodeCount: item.episode_count,
     Resolution: item.sort_metrics?.resolution ?? item.overlay_summary?.resolution ?? item.resolution,
     Author: item.sort_metrics?.author ?? item.author,
     Narrator: item.sort_metrics?.narrator ?? item.narrator,
@@ -744,17 +755,20 @@ export async function getLibraryItemsPage(
   order: "asc" | "desc" = "asc",
   groups: CatalogQueryGroup[] = [],
   match: "all" | "any" = "all",
-  namePrefix?: string
+  namePrefix?: string,
+  scope?: CatalogScope
 ): Promise<{ items: SiloItem[]; nextCursor?: string }> {
+  const collectionOrder = sort === "collection";
+  const includeLibrary = !scope || Boolean(type);
   if (groups.length) {
     const page = await requestV2<NativeCatalogPage>(session, "/catalog/query", {
       method: "POST",
       body: JSON.stringify({
-        source: "query",
-        library_id: String(libraryId),
+        source: scope?.source ?? "query",
+        ...(scope ? { collection_id: scope.collectionId } : {}),
+        ...(includeLibrary ? { library_id: String(libraryId) } : {}),
         ...(type ? { type: type.toLowerCase() } : {}),
-        sort,
-        order,
+        ...(collectionOrder ? {} : { sort, order }),
         match,
         groups,
         limit,
@@ -772,14 +786,15 @@ export async function getLibraryItemsPage(
   }
 
   const params = new URLSearchParams({
-    source: "query",
-    library_id: String(libraryId),
+    source: scope?.source ?? "query",
     limit: String(limit)
   });
+  if (scope) params.set("collection_id", scope.collectionId);
+  if (includeLibrary) params.set("library_id", String(libraryId));
   if (cursor) params.set("cursor", cursor);
   if (type) params.set("type", type.toLowerCase());
   if (namePrefix) params.set("name_prefix", namePrefix);
-  params.set("sort", order === "desc" ? `-${sort}` : sort);
+  if (!collectionOrder) params.set("sort", order === "desc" ? `-${sort}` : sort);
 
   const page = await requestV2<NativeCatalogPage>(session, `/catalog?${params}`);
   if (page.page?.has_more && !page.page.next_cursor) {
@@ -793,12 +808,17 @@ export async function getLibraryItemsPage(
 
 export async function getCatalogFilterOptions(
   session: Session,
-  libraryId: number | string
+  libraryId: number | string,
+  scope?: CatalogScope
 ): Promise<CatalogFilterOptions> {
   const params = new URLSearchParams({
     library_id: String(libraryId),
     skip_technical: "false"
   });
+  if (scope) {
+    params.set("source", scope.source);
+    params.set("collection_id", scope.collectionId);
+  }
   const response = await requestV2<{
     genres?: string[];
     studios?: string[];
@@ -926,10 +946,6 @@ export async function setWatchlist(session: Session, contentId: string, enabled:
   await request<void>(session, `/watchlist/${encodeURIComponent(contentId)}`, { method: enabled ? "PUT" : "DELETE" });
 }
 
-export async function setWatched(session: Session, contentId: string, enabled: boolean) {
-  await requestV2<void>(session, `/watched/${encodeURIComponent(contentId)}`, { method: enabled ? "POST" : "DELETE" });
-}
-
 export async function searchItems(session: Session, query: string): Promise<SiloItem[]> {
   if (!query.trim()) return [];
   return unpack(await request<NativeList>(session, catalogPath("all", 0, 60, query.trim()))).Items;
@@ -938,6 +954,108 @@ export async function searchItems(session: Session, query: string): Promise<Silo
 export async function getCatalogItem(session: Session, contentId: string): Promise<SiloItem> {
   const data = await request<NativeItem>(session, `/catalog/items/${encodeURIComponent(contentId)}`);
   return toItem(data);
+}
+
+export async function setWatched(session: Session, contentId: string, watched: boolean) {
+  await requestV2<void>(session, `/watched/${encodeURIComponent(contentId)}`, { method: watched ? "POST" : "DELETE" });
+}
+
+export type NativeEventsTicket = { ticket: string; expires_in: number; max_connection_seconds: number; protocol: string };
+
+export async function mintEventsTicket(session: Session): Promise<NativeEventsTicket> {
+  return requestV2<NativeEventsTicket>(session, "/events/ws-ticket", { method: "POST" });
+}
+
+export function eventsSocketUrl(session: Session, channels: string[]): string {
+  const base = normalizeServerUrl(session.serverUrl).replace(/^http/, "ws");
+  const raw = `${base}/api/v2/events/ws?channels=${encodeURIComponent(channels.join(","))}`;
+  return new URL(raw, window.location.href).toString().replace(/^http/, "ws");
+}
+
+export async function getSimilarItems(session: Session, contentId: string, limit = 12): Promise<SiloItem[]> {
+  const data = await requestV2<NativeList>(session, `/recommendations/similar/${encodeURIComponent(contentId)}?limit=${limit}`);
+  return unpack(data).Items.filter(item => item.Id && item.Id !== contentId);
+}
+
+export type DetailPerson = { name: string; role?: string; personId?: string; photoUrl?: string };
+export type DetailTrailer = { key: string; title: string; kind: "youtube" | "local"; youtubeKey?: string; contentId?: string; fileId?: number; durationSeconds?: number; thumbnail?: string };
+export type DetailExtras = {
+  tagline?: string;
+  cast: DetailPerson[];
+  crew: DetailPerson[];
+  studios: string[];
+  networks: string[];
+  countries: string[];
+  showStatus?: string;
+  originalLanguage?: string;
+  trailers: DetailTrailer[];
+};
+
+type NativeDetailExtras = {
+  tagline?: string;
+  cast?: Array<{ name: string; character?: string; order?: number; person_id?: string | number; photo_url?: string }>;
+  crew?: Array<{ name: string; job?: string; person_id?: string | number; photo_url?: string }>;
+  studios?: string[];
+  networks?: string[];
+  countries?: string[];
+  show_status?: string;
+  original_language?: string;
+  videos?: Array<{ site?: string; site_key?: string; name?: string; kind?: string }>;
+  extras?: Array<{ content_id: string; kind?: string; title?: string; duration_seconds?: number; file_id?: number; still_url?: string }>;
+};
+
+export async function getDetailExtras(session: Session, contentId: string): Promise<DetailExtras> {
+  const data = await requestV2<NativeDetailExtras>(session, `/catalog/items/${encodeURIComponent(contentId)}`);
+  const trailers: DetailTrailer[] = [];
+  const seen = new Set<string>();
+  for (const extra of data.extras ?? []) {
+    const key = `local:${extra.content_id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    trailers.push({ key, title: extra.title || extra.kind || "Extra", kind: "local", contentId: extra.content_id, fileId: extra.file_id, durationSeconds: extra.duration_seconds, thumbnail: assetUrl(session, extra.still_url) || undefined });
+  }
+  for (const video of data.videos ?? []) {
+    if (video.site?.toLowerCase() !== "youtube" || !video.site_key?.trim()) continue;
+    const key = `youtube:${video.site_key}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    trailers.push({ key, title: video.name || video.kind || "Trailer", kind: "youtube", youtubeKey: video.site_key, thumbnail: `https://i.ytimg.com/vi/${video.site_key}/hqdefault.jpg` });
+  }
+  return {
+    tagline: data.tagline,
+    cast: [...(data.cast ?? [])].sort((l, r) => (l.order ?? 0) - (r.order ?? 0)).map(member => ({ name: member.name, role: member.character, personId: member.person_id == null ? undefined : String(member.person_id), photoUrl: assetUrl(session, member.photo_url) || undefined })),
+    crew: (data.crew ?? []).map(member => ({ name: member.name, role: member.job, personId: member.person_id == null ? undefined : String(member.person_id), photoUrl: assetUrl(session, member.photo_url) || undefined })),
+    studios: data.studios ?? [],
+    networks: data.networks ?? [],
+    countries: data.countries ?? [],
+    showStatus: data.show_status,
+    originalLanguage: data.original_language,
+    trailers
+  };
+}
+
+export type PersonDetail = { id: string; name: string; bio?: string; birthDate?: string; deathDate?: string; birthplace?: string; photoUrl?: string };
+
+export async function getPerson(session: Session, personId: string): Promise<PersonDetail> {
+  const data = await requestV2<{ id: string | number; name: string; bio?: string; birth_date?: string; death_date?: string; birthplace?: string; photo_url?: string }>(session, `/catalog/people/${encodeURIComponent(personId)}`);
+  return { id: String(data.id), name: data.name, bio: data.bio, birthDate: data.birth_date, deathDate: data.death_date, birthplace: data.birthplace, photoUrl: assetUrl(session, data.photo_url) || undefined };
+}
+
+export async function findPersonId(session: Session, name: string): Promise<string | undefined> {
+  const data = await requestV2<{ items?: Array<{ id: string | number; name: string }> }>(session, `/catalog/people?q=${encodeURIComponent(name)}&limit=20`);
+  const items = data.items ?? [];
+  const match = items.find(person => person.name.toLowerCase() === name.toLowerCase()) ?? items[0];
+  return match ? String(match.id) : undefined;
+}
+
+export async function getPersonFilmographyPage(session: Session, personId: string, cursor?: string): Promise<{ items: SiloItem[]; nextCursor?: string }> {
+  const params = new URLSearchParams({ source: "person", person_id: personId, limit: "60" });
+  if (cursor) params.set("cursor", cursor);
+  const page = await requestV2<NativeCatalogPage>(session, `/catalog?${params}`);
+  return {
+    items: (page.items ?? []).map(toItem).filter(item => item.Id),
+    nextCursor: page.page?.has_more ? page.page.next_cursor : undefined
+  };
 }
 
 export type SiloAppearance = { theme: string; variables: Record<string, string>; textScale: string; textWeight: string; highContrast: boolean };
@@ -1044,4 +1162,78 @@ export async function libraryHasItems(session: Session, libraryId: number | stri
   } catch {
     return null;
   }
+}
+
+export type CollectionSection = { name: string; kind: "regular" | "user_collection"; collections: SiloCollection[] };
+
+type NativeCollectionCard = { id: string | number; title?: string; poster_url?: string; item_count?: number };
+type NativeLibraryCollectionTab = {
+  collections?: NativeCollectionCard[];
+  groups?: Array<{ name?: string; kind?: string; sort_order?: number; collections?: NativeCollectionCard[] }>;
+  ungrouped?: { sort_order?: number; collections?: NativeCollectionCard[] };
+};
+
+export async function getLibraryCollectionSections(session: Session, libraryId: number | string): Promise<CollectionSection[]> {
+  const tab = await requestV2<NativeLibraryCollectionTab>(session, `/library/${encodeURIComponent(String(libraryId))}/collections`);
+  const card = (item: NativeCollectionCard, kind: SiloCollection["kind"]): SiloCollection => ({
+    id: String(item.id),
+    name: item.title ?? "Collection",
+    itemCount: item.item_count,
+    posterUrl: item.poster_url || undefined,
+    kind
+  });
+  if (!tab.groups?.length && !tab.ungrouped) {
+    const collections = (tab.collections ?? []).map(item => card(item, "regular"));
+    return collections.length ? [{ name: "", kind: "regular", collections }] : [];
+  }
+  const ranked: Array<{ order: number; section: CollectionSection }> = [];
+  for (const group of tab.groups ?? []) {
+    const kind = group.kind === "user_collections" ? "user_collection" : "regular";
+    const collections = (group.collections ?? []).map(item => card(item, kind));
+    if (collections.length) ranked.push({ order: group.sort_order ?? 0, section: { name: group.name ?? "", kind, collections } });
+  }
+  const loose = (tab.ungrouped?.collections ?? []).map(item => card(item, "regular"));
+  if (loose.length) ranked.push({ order: tab.ungrouped?.sort_order ?? 0, section: { name: "", kind: "regular", collections: loose } });
+  return ranked.sort((a, b) => a.order - b.order).map(entry => entry.section);
+}
+
+export type AudiobookGroup = {
+  name: string;
+  itemCount: number;
+  durationSeconds?: number;
+  inProgressCount: number;
+  posterUrls: string[];
+};
+
+export async function getAudiobookGroupsPage(
+  session: Session,
+  libraryId: number | string,
+  groupBy: "author" | "series",
+  cursor?: string
+): Promise<{ groups: AudiobookGroup[]; nextCursor?: string }> {
+  const params = new URLSearchParams({
+    library_id: String(libraryId),
+    group_by: groupBy,
+    sort: "name",
+    limit: "100",
+    skip_total: "false"
+  });
+  if (cursor) params.set("cursor", cursor);
+  const page = await requestV2<{
+    items?: Array<{ name?: string; item_count?: number; total_duration_seconds?: number; in_progress_count?: number; poster_urls?: string[] }>;
+    page?: { has_more?: boolean; next_cursor?: string };
+  }>(session, `/catalog/audiobook-groups?${params}`);
+  if (page.page?.has_more && !page.page.next_cursor) {
+    throw new Error("Silo returned another group page without a continuation cursor.");
+  }
+  return {
+    groups: (page.items ?? []).filter(item => item.name).map(item => ({
+      name: item.name as string,
+      itemCount: item.item_count ?? 0,
+      durationSeconds: item.total_duration_seconds,
+      inProgressCount: item.in_progress_count ?? 0,
+      posterUrls: item.poster_urls ?? []
+    })),
+    nextCursor: page.page?.has_more ? page.page.next_cursor : undefined
+  };
 }

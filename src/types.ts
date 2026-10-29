@@ -22,6 +22,9 @@ export type SiloItem = {
   ProductionYear?: number;
   DateAdded?: string;
   ReleaseDate?: string;
+  AirDate?: string;
+  SeasonCount?: number;
+  EpisodeCount?: number;
   Resolution?: string;
   Author?: string;
   Narrator?: string;
@@ -42,6 +45,7 @@ export type SiloItem = {
     PlaybackPositionTicks?: number;
     PlayedPercentage?: number;
     IsFavorite?: boolean;
+    InWatchlist?: boolean;
   };
 };
 

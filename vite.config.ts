@@ -31,7 +31,13 @@ export default defineConfig({
         target: process.env.SILO_DEV_SERVER,
         changeOrigin: true,
         secure: false,
-        rewrite: (path) => path.replace(/^\/__silo/, "")
+        ws: true,
+        rewrite: (path) => path.replace(/^\/__silo/, ""),
+        configure: (proxy) => {
+          proxy.on("proxyReqWs", (proxyReq) => {
+            proxyReq.setHeader("Origin", process.env.SILO_DEV_SERVER);
+          });
+        }
       }
     }
   },
