@@ -181,7 +181,7 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
     if (!moreOpen) return;
     requestAnimationFrame(() => moreFirstRef.current?.focus());
     const onKey = (event: KeyboardEvent) => {
-      if (!["Escape", "Backspace", "Back", "GoBack", "BrowserBack"].includes(event.key) && event.keyCode !== 461) return;
+      if (!["Escape", "Backspace", "Back", "GoBack", "BrowserBack"].includes(event.key) && event.keyCode !== 461 && event.keyCode !== 10009) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       closeMore();
@@ -291,7 +291,6 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
 
   return (
     <main className="series-screen" data-last-episode={rememberedEpisodeId ?? ""}>
-      <button type="button" data-tv-focusable="true" className="tv-button secondary top-back" onClick={onBack}>‹ Back</button>
       <div className="series-hero" style={{ backgroundImage: heroBackdrop ? `url("${heroBackdrop}")` : undefined }}>
         <div className="series-hero-scrim" />
         <div className="series-copy">
@@ -456,7 +455,7 @@ function EpisodeCard({ session, episode, current, onFocus, onOpen, onSetWatched 
     isFavorite(session, episode.Id).then(next => { if (alive) setMenuFavorite(next); }).catch(() => undefined);
     requestAnimationFrame(() => menuFirstRef.current?.focus());
     const onKey = (event: KeyboardEvent) => {
-      if (!["Escape", "Backspace", "Back", "GoBack", "BrowserBack"].includes(event.key) && event.keyCode !== 461) return;
+      if (!["Escape", "Backspace", "Back", "GoBack", "BrowserBack"].includes(event.key) && event.keyCode !== 461 && event.keyCode !== 10009) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       setMenuOpen(false);

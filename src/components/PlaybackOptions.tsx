@@ -258,7 +258,7 @@ export function PlaybackOptionsDialog({ session, detail, choices, onChange, onCl
   useEffect(() => {
     requestAnimationFrame(() => firstRef.current?.focus());
     const onKey = (event: KeyboardEvent) => {
-      if (!["Escape", "Backspace", "Back", "GoBack", "BrowserBack"].includes(event.key) && event.keyCode !== 461) return;
+      if (!["Escape", "Backspace", "Back", "GoBack", "BrowserBack"].includes(event.key) && event.keyCode !== 461 && event.keyCode !== 10009) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       onClose();

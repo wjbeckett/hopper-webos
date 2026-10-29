@@ -316,6 +316,9 @@ export default function App() {
       if (route.name === "person") {
         setRoute(route.back);
         event.preventDefault();
+      } else if (route.name === "play-choice") {
+        setRoute(route.returnTo ? { name: "series", item: route.returnTo.series, selectedEpisode: route.returnTo.selectedEpisode } : { name: "details", item: route.item });
+        event.preventDefault();
       } else if (route.name !== "main") {
         setRoute({ name: "main" });
         event.preventDefault();
@@ -505,7 +508,6 @@ export default function App() {
     const seconds = Math.floor(resumeAt % 60);
     const destination = route.returnTo;
     return <main className="play-choice-shell">
-      <button data-tv-focusable="true" className="tv-button secondary top-back" onClick={() => setRoute(destination ? { name: "series", item: destination.series, selectedEpisode: destination.selectedEpisode } : { name: "details", item: route.item })}>‹ Back</button>
       <section className="play-choice-card">
         <div className="eyebrow">Continue watching</div>
         <h1>{route.item.Name}</h1>

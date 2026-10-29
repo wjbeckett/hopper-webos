@@ -141,7 +141,7 @@ export function RequestsScreen({ session }: { session: Session }) {
   if (selected) {
     return (
       <main className="content-screen requests-screen" onKeyDownCapture={event => {
-        if (["Escape", "Backspace", "Back", "GoBack", "BrowserBack"].includes(event.key) || event.keyCode === 461) {
+        if (["Escape", "Backspace", "Back", "GoBack", "BrowserBack"].includes(event.key) || event.keyCode === 461 || event.keyCode === 10009) {
           setSelected(null);
           event.preventDefault();
           event.stopPropagation();

@@ -284,7 +284,6 @@ input:focus {
   inset: 0;
   background: black;
 }
-.top-back { position: absolute; z-index: 20; top: 28px; left: 32px; margin-top: 0; }
 .details-content { padding-top: 112px; }
 .player-back { pointer-events: auto; }
 .play-choice-shell { position: fixed; inset: 0; display: grid; place-items: center; padding: 48px; background: radial-gradient(circle at 50% 35%, rgba(70,76,96,.34), transparent 40%), #080b11; }

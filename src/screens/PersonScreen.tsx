@@ -74,7 +74,6 @@ export function PersonScreen({ session, personId, name, onOpen, onBack }: {
 
   return (
     <main className="content-screen person-screen">
-      <button type="button" data-tv-focusable="true" className="tv-button secondary" onClick={onBack}>‹ Back</button>
       {loading ? <div className="screen-state">Loading...</div> : error ? <div className="screen-state">{error}</div> : person ? (
         <>
           <header className="person-header">

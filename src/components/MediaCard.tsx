@@ -67,7 +67,7 @@ export function MediaCard({ session, item, image, onOpen, landscape = false, var
     isFavorite(session, item.Id).then(next => { if (alive) setMenuFavorite(next); }).catch(() => undefined);
     requestAnimationFrame(() => menuFirstRef.current?.focus());
     const onKey = (event: KeyboardEvent) => {
-      if (!["Escape", "Backspace", "Back", "GoBack", "BrowserBack"].includes(event.key) && event.keyCode !== 461) return;
+      if (!["Escape", "Backspace", "Back", "GoBack", "BrowserBack"].includes(event.key) && event.keyCode !== 461 && event.keyCode !== 10009) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       setMenuOpen(false);

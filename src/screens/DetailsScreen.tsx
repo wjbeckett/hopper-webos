@@ -88,7 +88,7 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
   useEffect(() => {
     if (!moreOpen) return;
     const onKey = (event: KeyboardEvent) => {
-      if (!["Escape", "Backspace", "Back", "GoBack", "BrowserBack"].includes(event.key) && event.keyCode !== 461) return;
+      if (!["Escape", "Backspace", "Back", "GoBack", "BrowserBack"].includes(event.key) && event.keyCode !== 461 && event.keyCode !== 10009) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       closeMore();
@@ -151,7 +151,6 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
 
   return (
     <main className="details-shell">
-      <TvButton className="secondary top-back" onClick={onBack}>‹ Back</TvButton>
       <div
         className="details-backdrop"
         style={{ backgroundImage: `url("${backdropUrl(session, detail)}")` }}

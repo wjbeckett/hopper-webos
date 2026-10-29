@@ -86,12 +86,6 @@ function focusElement(element: HTMLElement) {
     }
     return;
   }
-  if (element.matches(".top-back")) {
-    const scroller = element.closest<HTMLElement>(".details-shell, .series-screen, .person-screen");
-    scroller?.scrollTo({ top: 0, behavior: "smooth" });
-    window.scrollTo({ top: 0, behavior: "smooth" });
-    return;
-  }
   const rail = element.closest<HTMLElement>(".episode-rail, .detail-cast-track, .detail-trailer-track, .rail-track");
   if (rail && rail.scrollWidth > rail.clientWidth + 1) {
     const rect = element.getBoundingClientRect();
