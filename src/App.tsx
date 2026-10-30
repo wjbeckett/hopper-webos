@@ -268,6 +268,12 @@ export default function App() {
         event.preventDefault();
         return;
       }
+      const settingsPane = document.querySelector(".settings-pane");
+      if (settingsPane && document.activeElement instanceof HTMLElement && settingsPane.contains(document.activeElement)) {
+        document.querySelector<HTMLElement>(".settings-rail [aria-current='true']")?.focus();
+        event.preventDefault();
+        return;
+      }
       if (document.querySelector(".browse-panel-scrim")) {
         window.dispatchEvent(new Event("silo:browse-panel-back"));
         event.preventDefault();
@@ -578,7 +584,7 @@ export default function App() {
   else if (section === "collections") body = <CollectionsScreen session={session} onOpen={openItem} />;
   else if (section === "profiles") body = <ProfileSelectionScreen session={session} onSelect={activateProfile} />;
   else if (section === "settings") {
-    body = <SettingsScreen session={session} onSignOut={signOut} onChangeServer={changeServer} />;
+    body = <SettingsScreen session={session} onSignOut={signOut} onChangeServer={changeServer} onSwitchProfile={() => setSection("profiles")} />;
   } else if (section === "library") {
     body = <LibraryScreen key="all" session={session} libraries={libraries} selectableLibraries onOpen={openItem} onShuffle={startShuffle} />;
   }   else if (section === "calendar") body = <CalendarScreen session={session} onOpen={openItem} />;

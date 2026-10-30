@@ -4071,3 +4071,60 @@ body {
 @keyframes silo-spin {
   to { transform: rotate(360deg); }
 }
+
+.settings-split {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 48px;
+  max-width: none;
+}
+
+.settings-rail {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.settings-rail h1 {
+  margin: 0 0 12px;
+}
+
+.settings-account,
+.settings-category {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 14px 18px;
+  border: 0;
+  border-radius: 13px;
+  color: white;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+}
+
+.settings-account { margin-bottom: 14px; background: rgba(255,255,255,.07); }
+.settings-category span { font-size: 1.1rem; font-weight: 700; }
+.settings-category small,
+.settings-account small { color: rgba(255,255,255,.55); }
+.settings-category[aria-current="true"] { background: rgba(255,255,255,.12); }
+.settings-account:focus,
+.settings-category:focus { outline: none; background: #EDEDED; color: #0B0B0C; }
+.settings-account:focus small,
+.settings-category:focus small { color: rgba(11,11,12,.62); }
+.settings-account-name { font-weight: 700; }
+.settings-signout { margin-top: 24px; }
+.settings-signout span { color: #FF6B6B; }
+.settings-signout:focus span { color: #B3261E; }
+
+.settings-pane { min-width: 0; padding-bottom: 80px; }
+.settings-group { margin-bottom: 28px; }
+.settings-group h3 { margin: 0 0 8px; font-size: .95rem; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,.55); }
+.settings-row strong,
+.settings-static strong { font-weight: 600; text-align: right; max-width: 55%; overflow-wrap: anywhere; }
+.settings-row-hint { display: block; margin-top: 3px; max-width: 640px; }
+.settings-static { cursor: default; }
+.settings-error { color: #FF8A80; }
+.settings-picker { width: min(560px, 80vw); }
+.settings-picker-list { max-height: 60vh; overflow-y: auto; }
+.settings-confirm p { margin: 0 0 14px; opacity: .7; }
