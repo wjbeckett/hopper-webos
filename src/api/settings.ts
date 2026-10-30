@@ -40,6 +40,10 @@ export async function getEffectiveSettings(session: Session, keys: string[]): Pr
   return new Map((data.items ?? []).map(item => [item.key, item]));
 }
 
+export function isClientLocal(definition: SettingDefinition) {
+  return (definition.allowed_scopes ?? []).includes("client_local");
+}
+
 function scopeQuery(session: Session, definition: SettingDefinition) {
   const scopes = (definition.allowed_scopes ?? []).filter((scope): scope is string => typeof scope === "string");
   const params = new URLSearchParams();

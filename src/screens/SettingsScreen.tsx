@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { clearDeviceSubtitleAppearance, clearSetting, DEFAULT_SUBTITLE_APPEARANCE, getEffectiveSettings, getSettingsContract, putDeviceSubtitleAppearance, putSetting } from "../api/settings";
+import { clearDeviceSubtitleAppearance, clearSetting, DEFAULT_SUBTITLE_APPEARANCE, getEffectiveSettings, getSettingsContract, isClientLocal, putDeviceSubtitleAppearance, putSetting } from "../api/settings";
 import type { SettingDefinition, SettingOption, SettingsContract, SubtitleAppearance } from "../api/settings";
 import { clientIdentity } from "../platform/device";
 import { LoadingState } from "../components/LoadingState";
@@ -18,24 +18,42 @@ const categories: Array<{ id: Category; label: string; blurb: string }> = [
 
 const keysByCategory: Record<Exclude<Category, "server">, Array<{ title: string; keys: string[] }>> = {
   general: [
-    { title: "Cards & Posters", keys: ["ui.card_presentation"] },
+    { title: "Title Pages", keys: ["ui.title_art"] },
     { title: "Theme Music", keys: ["ui.theme_music_enabled", "ui.theme_music_loop"] },
-    { title: "Subtitle Appearance", keys: ["playback.subtitle_appearance"] }
+    { title: "Top Menu", keys: ["nav.show_audiobooks"] }
   ],
   playback: [
     { title: "Streaming", keys: ["playback.preferred_quality", "playback.max_bitrate_kbps", "playback.audio_language", "playback.buffering_quality_mode"] },
-    { title: "Episodes", keys: ["playback.auto_play_next", "playback.next_up_prompt_seconds", "playback.intro_skip_mode", "playback.auto_skip_credits", "playback.auto_skip_recap"] },
+    { title: "Episodes", keys: ["playback.auto_play_next", "playback.next_up_prompt_seconds", "playback.intro_skip_mode", "playback.auto_skip_credits", "playback.auto_skip_recap", "player.resume_rewind_seconds", "player.passout_threshold"] },
+    { title: "Spoilers", keys: ["catalog.hide_unwatched_episode_images", "catalog.hide_unwatched_episode_overviews"] },
     { title: "Seeking", keys: ["player.video_skip_back_seconds", "player.video_skip_forward_seconds"] }
   ],
   subtitles: [
-    { title: "Profile", keys: ["playback.subtitle_language", "playback.subtitle_mode", "playback.show_forced_subtitles"] }
+    { title: "Profile", keys: ["playback.subtitle_language", "playback.subtitle_mode", "playback.show_forced_subtitles"] },
+    { title: "Metadata", keys: ["catalog.metadata_language"] }
   ]
 };
 
 const languageSetByKey: Record<string, string> = {
   "playback.audio_language": "playback_audio_languages",
-  "playback.subtitle_language": "playback_subtitle_languages"
+  "playback.subtitle_language": "playback_subtitle_languages",
+  "catalog.metadata_language": "catalog_metadata_languages"
 };
+
+const LOCAL_SETTINGS_STORAGE = "silo-webos-local-settings";
+
+function readLocalSettings(): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(LOCAL_SETTINGS_STORAGE) ?? "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeLocalSettings(values: Record<string, unknown>) {
+  localStorage.setItem(LOCAL_SETTINGS_STORAGE, JSON.stringify(values));
+}
 
 const bitratePresets = [2000, 4000, 8000, 12000, 20000, 40000, 80000];
 
@@ -163,7 +181,7 @@ export function SettingsScreen({
   const railRef = useRef<HTMLDivElement | null>(null);
   const returnFocusRef = useRef<string | null>(null);
 
-  const allKeys = useMemo(() => Object.values(keysByCategory).flat().flatMap(group => group.keys), []);
+  const allKeys = useMemo(() => [...Object.values(keysByCategory).flat().flatMap(group => group.keys), "ui.card_presentation", "playback.subtitle_appearance"], []);
 
   useEffect(() => {
     let alive = true;
@@ -171,7 +189,13 @@ export function SettingsScreen({
       .then(([loadedContract, effective]) => {
         if (!alive) return;
         setContract(loadedContract);
-        setValues(new Map(Array.from(effective.entries()).map(([key, entry]) => [key, entry.value])));
+        const resolved = new Map(Array.from(effective.entries()).map(([key, entry]) => [key, entry.value]));
+        const local = readLocalSettings();
+        for (const definition of loadedContract.definitions) {
+          if (!isClientLocal(definition) || !allKeys.includes(definition.key)) continue;
+          resolved.set(definition.key, definition.key in local ? local[definition.key] : definition.default_value);
+        }
+        setValues(resolved);
         const appearance = effective.get("playback.subtitle_appearance")?.value;
         const parsedAppearance = typeof appearance === "string" ? (() => { try { return JSON.parse(appearance); } catch { return null; } })() : appearance;
         if (parsedAppearance && typeof parsedAppearance === "object") {
@@ -218,6 +242,13 @@ export function SettingsScreen({
     const previous = values.get(definition.key);
     setValues(current => new Map(current).set(definition.key, value));
     setError("");
+    if (isClientLocal(definition)) {
+      const local = readLocalSettings();
+      if (value == null) delete local[definition.key];
+      else local[definition.key] = value;
+      writeLocalSettings(local);
+      return;
+    }
     try {
       if (value == null) await clearSetting(session, definition);
       else await putSetting(session, definition, value);
@@ -378,7 +409,7 @@ export function SettingsScreen({
   } else if (category === "subtitles") {
     pane = <>{renderGroups(keysByCategory.subtitles)}{renderSubtitleAppearance()}</>;
   } else if (category === "general") {
-    pane = <>{renderGroups(keysByCategory.general)}{renderSubtitleAppearance()}</>;
+    pane = <>{renderCardPresentation()}{renderGroups(keysByCategory.general)}</>;
   } else {
     pane = renderGroups(keysByCategory.playback);
   }

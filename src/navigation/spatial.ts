@@ -509,6 +509,43 @@ export function installSpatialNavigation() {
     }
     if (!direction) return;
 
+    // Settings owns the arrows while it is open (Android TV: the rail and the
+    // detail pane are their own focus scopes; Back, not Up, leaves them).
+    const settings = document.querySelector<HTMLElement>(".settings-split");
+    if (settings) {
+      const rows = Array.from(settings.querySelectorAll<HTMLElement>("[data-tv-focusable='true']"))
+        .filter(item => item.offsetParent !== null);
+      const active = document.activeElement instanceof HTMLElement && settings.contains(document.activeElement)
+        ? document.activeElement
+        : null;
+      if (!rows.length) return;
+      if (!active) {
+        focusElement(rows[0]);
+        event.preventDefault();
+        return;
+      }
+      const inPane = active.closest(".settings-pane") !== null;
+      if (direction === "left" && inPane) {
+        const railTarget = settings.querySelector<HTMLElement>(".settings-rail [aria-current='true']")
+          ?? settings.querySelector<HTMLElement>(".settings-rail [data-tv-focusable='true']");
+        railTarget?.focus();
+        event.preventDefault();
+        return;
+      }
+      if (direction === "right" && !inPane && active.closest(".settings-category")) {
+        const paneRow = focusables(".settings-pane [data-tv-focusable='true']")[0];
+        if (paneRow) focusElement(paneRow);
+        event.preventDefault();
+        return;
+      }
+      if (direction === "up" || direction === "down") {
+        const column = rows.filter(row => (row.closest(".settings-pane") !== null) === inPane);
+        focusAdjacent(active, column, direction); // At either end the focus stays put.
+      }
+      event.preventDefault();
+      return;
+    }
+
     const browsePanelOpen = document.querySelector(".browse-panel-scrim") !== null;
     const allFocusables = focusables(browsePanelOpen
       ? ".browse-panel-scrim [data-tv-focusable='true']"
