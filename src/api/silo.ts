@@ -215,9 +215,7 @@ type NativeHomeLayout = {
 };
 
 type NativeHomeSectionResponse = {
-  section?: {
-    items?: NativeItem[];
-  };
+  items?: NativeItem[];
 };
 
 type NativeRecommendationRow = {
@@ -332,8 +330,8 @@ type NativeProfile = {
 };
 
 export async function getProfiles(session: Session): Promise<SiloProfile[]> {
-  const data = await request<NativeProfile[] | { profiles?: NativeProfile[] }>(session, "/profiles");
-  const profiles = Array.isArray(data) ? data : data.profiles ?? [];
+  const data = await requestV2<{ items?: NativeProfile[] }>(session, "/profiles");
+  const profiles = data.items ?? [];
   return profiles.map((profile) => ({
     id: String(profile.id),
     name: profile.name ?? "Profile",
@@ -411,12 +409,12 @@ function catalogPath(type: string, offset = 0, limit = 60, q?: string) {
 }
 
 export async function getHomeRails(session: Session): Promise<HomeRail[]> {
-  const layout = await request<NativeHomeLayout>(session, "/home/layout");
+  const layout = await requestV2<NativeHomeLayout>(session, "/home/layout");
   const sections = layout.sections ?? [];
 
   const results = await Promise.allSettled(
     sections.map((section) =>
-      request<NativeHomeSectionResponse>(
+      requestV2<NativeHomeSectionResponse>(
         session,
         `/home/sections/${encodeURIComponent(String(section.id))}/items`
       )
@@ -434,7 +432,7 @@ export async function getHomeRails(session: Session): Promise<HomeRail[]> {
   return sections.map((section, index) => {
     const result = results[index];
     const nativeItems = result.status === "fulfilled"
-      ? result.value.section?.items ?? []
+      ? result.value.items ?? []
       : [];
     return {
       id: String(section.id),
@@ -657,8 +655,8 @@ export async function setRequestFollow(session: Session, item: SiloRequestResult
 }
 
 export async function getLibraries(session: Session): Promise<SiloLibrary[]> {
-  const data = await request<NativeLibrary[] | { libraries?: NativeLibrary[] }>(session, "/user/libraries");
-  const libraries = Array.isArray(data) ? data : data.libraries ?? [];
+  const data = await requestV2<{ items?: NativeLibrary[] }>(session, "/user/libraries");
+  const libraries = data.items ?? [];
   return libraries.map((library) => ({
     id: Number(library.id),
     name: library.name ?? "Library",
@@ -667,10 +665,10 @@ export async function getLibraries(session: Session): Promise<SiloLibrary[]> {
 }
 
 export async function getLibraryRails(session: Session, library: SiloLibrary): Promise<HomeRail[]> {
-  const layout = await request<NativeHomeLayout>(session, `/library/${library.id}/layout`);
+  const layout = await requestV2<NativeHomeLayout>(session, `/library/${library.id}/layout`);
   const sections = layout.sections ?? [];
   const results = await Promise.allSettled(sections.map((section) =>
-    request<NativeHomeSectionResponse>(
+    requestV2<NativeHomeSectionResponse>(
       session,
       `/library/${library.id}/sections/${encodeURIComponent(String(section.id))}/items`
     )
@@ -678,7 +676,7 @@ export async function getLibraryRails(session: Session, library: SiloLibrary): P
 
   return sections.map((section, index) => {
     const result = results[index];
-    const items = result.status === "fulfilled" ? result.value.section?.items ?? [] : [];
+    const items = result.status === "fulfilled" ? result.value.items ?? [] : [];
     return {
       id: `${library.id}-${section.id}`,
       title: section.title ?? section.section_type ?? library.name,
@@ -885,7 +883,7 @@ function toCollection(item: NativeCollection, groupName?: string, groupKind?: st
 }
 
 export async function getLibraryCollections(session: Session, libraryId: number): Promise<SiloCollection[]> {
-  const data = await request<NativeCollectionsResponse>(session, `/library/${libraryId}/collections`);
+  const data = await requestV2<NativeCollectionsResponse>(session, `/library/${libraryId}/collections`);
   if (Array.isArray(data)) return data.map((item) => toCollection(item));
   if (data.groups?.length || data.ungrouped) {
     return [
