@@ -23,6 +23,26 @@ export type PlaybackPlan = {
 type Decision = { outcome: string; session_id?: string; playback_plan?: PlaybackPlan; terminal?: { message: string; reason: string } };
 
 const features = ["playback_plan_v3", "neutral_playback_v3_contract_v1", "playback_route_diagnostics", "seek_reanchor_v1", "direct_stream_resume_v1", "plan_source_duration_v1"];
+const installations = new Map<string, string>();
+
+async function playbackInstallationId(session: Session): Promise<string> {
+  const key = `${session.serverUrl}|${session.profileId ?? ""}`;
+  const cached = installations.get(key);
+  if (cached) return cached;
+  const capabilities = await requestV2<{ installation_id?: string }>(session, "/playback/capabilities", {
+    headers: { "X-Silo-Device-Id": getDeviceId() }
+  });
+  if (!capabilities.installation_id) throw new Error("Silo did not return a playback installation id.");
+  installations.set(key, capabilities.installation_id);
+  return capabilities.installation_id;
+}
+
+function cachedInstallationId(session: Session): string {
+  const key = `${session.serverUrl}|${session.profileId ?? ""}`;
+  const id = installations.get(key);
+  if (!id) throw new Error("Playback installation has not been negotiated.");
+  return id;
+}
 function randomUuid(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID().toLowerCase();
@@ -122,14 +142,14 @@ export function getMarkers(session: Session, itemId: string): Promise<FileMarker
 export async function startPlaybackV3(session: Session, detail: WatchDetail, version: FileVersion, quality = "auto", audioIndex?: number, subtitleIndex?: number, startPosition?: number) {
   if (!session.profileId) throw new Error("A Silo profile is required for playback.");
   const playbackAttemptId = uuid("webos");
-  const body = { installation_id: getDeviceId(), protocol_version: 3, client_features: features, file_id: version.file_id, profile_id: session.profileId, playback_attempt_id: playbackAttemptId, quality_preference: quality, subtitle_fidelity_preference: "compatible", start_position: startPosition ?? detail.user_data?.position_seconds ?? 0, ...(audioIndex == null ? {} : { audio_track_id: `file:${version.file_id}:audio:${audioIndex}`, audio_track_index: audioIndex }), ...(subtitleIndex == null ? {} : subtitleIndex < 0 ? { subtitle_track_index: -1 } : { subtitle_track_id: `file:${version.file_id}:subtitle:${subtitleIndex}`, subtitle_track_index: subtitleIndex }), metered: false, ...snapshot() };
+  const body = { installation_id: await playbackInstallationId(session), protocol_version: 3, client_features: features, file_id: version.file_id, profile_id: session.profileId, playback_attempt_id: playbackAttemptId, quality_preference: quality, subtitle_fidelity_preference: "compatible", start_position: startPosition ?? detail.user_data?.position_seconds ?? 0, ...(audioIndex == null ? {} : { audio_track_id: `file:${version.file_id}:audio:${audioIndex}`, audio_track_index: audioIndex }), ...(subtitleIndex == null ? {} : subtitleIndex < 0 ? { subtitle_track_index: -1 } : { subtitle_track_id: `file:${version.file_id}:subtitle:${subtitleIndex}`, subtitle_track_index: subtitleIndex }), metered: false, ...snapshot() };
   const decision = await requestV2<Decision>(session, "/playback/start", { method: "POST", body: JSON.stringify(body) });
   return { plan: requirePlan(decision), playbackAttemptId, planAttemptId: uuid("plan") };
 }
 
 export async function replanPlaybackV3(session: Session, state: { plan: PlaybackPlan; playbackAttemptId: string; planAttemptId: string; attemptedKeys: string[] }, operation: "track_change" | "quality_change" | "seek_reanchor", position: number, quality: string, selected: { audio?: TrackIdentity; subtitle?: TrackIdentity }) {
   const attemptedKeys = [state.plan.plan_attempt_key];
-  const body = { installation_id: getDeviceId(), protocol_version: 3, client_features: features, operation, playback_attempt_id: state.playbackAttemptId, replan_request_id: uuid("replan"), failed_plan_id: state.plan.plan_id, plan_attempt_id: state.planAttemptId, plan_attempt_key: state.plan.plan_attempt_key, attempted_plan_keys: attemptedKeys, attempt_count: attemptedKeys.length, quality_preference: quality, position_seconds: position, metered: false, selected_tracks: selected, local_mutations: [], ...snapshot() };
+  const body = { installation_id: await playbackInstallationId(session), protocol_version: 3, client_features: features, operation, playback_attempt_id: state.playbackAttemptId, replan_request_id: uuid("replan"), failed_plan_id: state.plan.plan_id, plan_attempt_id: state.planAttemptId, plan_attempt_key: state.plan.plan_attempt_key, attempted_plan_keys: attemptedKeys, attempt_count: attemptedKeys.length, quality_preference: quality, position_seconds: position, metered: false, selected_tracks: selected, local_mutations: [], ...snapshot() };
   const decision = await requestV2<Decision>(session, `/playback/${encodeURIComponent(state.plan.session_id)}/replan`, { method: "POST", body: JSON.stringify(body) });
   return { plan: requirePlan(decision), playbackAttemptId: state.playbackAttemptId, planAttemptId: uuid("plan"), attemptedKeys: [] };
 }
@@ -140,17 +160,17 @@ function nextSequence(id: string) {
   progressSequences.set(id, sequence);
   return sequence;
 }
-const stopBody = (id: string) => JSON.stringify({ installation_id: getDeviceId(), stop_id: uuid("stop"), sequence: nextSequence(id) });
+const stopBody = (session: Session) => JSON.stringify({ installation_id: cachedInstallationId(session), stop_id: randomUuid() });
 
-export const reportProgress = (session: Session, id: string, position: number, paused: boolean) => requestV2<unknown>(session, `/playback/${encodeURIComponent(id)}/progress`, { method: "POST", body: JSON.stringify({ installation_id: getDeviceId(), sequence: nextSequence(id), position, is_paused: paused }) });
-export const stopPlayback = (session: Session, id: string) => requestV2<unknown>(session, `/playback/${encodeURIComponent(id)}`, { method: "DELETE", body: stopBody(id) });
+export const reportProgress = async (session: Session, id: string, position: number, paused: boolean) => requestV2<unknown>(session, `/playback/${encodeURIComponent(id)}/progress`, { method: "POST", body: JSON.stringify({ installation_id: await playbackInstallationId(session), sequence: nextSequence(id), position, is_paused: paused }) });
+export const stopPlayback = async (session: Session, id: string) => requestV2<unknown>(session, `/playback/${encodeURIComponent(id)}`, { method: "DELETE", body: stopBody(session) });
 
 export function stopPlaybackKeepalive(session: Session, id: string): Promise<Response> {
   const root = session.serverUrl.replace(/\/+$/, "");
   return fetch(`${root}/api/v2/playback/${encodeURIComponent(id)}`, {
     method: "DELETE",
     keepalive: true,
-    body: stopBody(id),
+    body: stopBody(session),
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${session.accessToken}`,
