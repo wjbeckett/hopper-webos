@@ -180,7 +180,11 @@ export function SettingsScreen({
           setProfileSubtitleAppearance(normalized);
         }
         const cardValue = effective.get("ui.card_presentation")?.value;
-        if (cardValue && typeof cardValue === "object" && "poster_size" in cardValue) setPosterSize(String((cardValue as { poster_size: unknown }).poster_size));
+        if (cardValue && typeof cardValue === "object" && "poster_size" in cardValue) {
+          const size = String((cardValue as { poster_size: unknown }).poster_size);
+          if (["compact", "standard", "large"].includes(size)) setPosterSize(size);
+          document.documentElement.dataset.posterSize = size;
+        }
         const source = effective.get("playback.subtitle_appearance")?.source ?? "";
         setSubtitleDeviceOnly(source === "profile_device" || source === "device");
       })
@@ -305,6 +309,7 @@ export function SettingsScreen({
       if (!definition) return;
       const next = String(value);
       setPosterSize(next);
+      document.documentElement.dataset.posterSize = next;
       try { await putSetting(session, definition, { poster_size: next, caption: "title_metadata" }); }
       catch (reason) { setError(reason instanceof Error ? reason.message : "Could not save poster size."); }
       requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-setting-key='poster-size']")?.focus());

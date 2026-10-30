@@ -4139,3 +4139,8 @@ body {
   background: linear-gradient(135deg, #34383f, #101113 65%);
   text-align: center;
 }
+
+html[data-poster-size="compact"] .rail-track:not(.wide-rail) { grid-auto-columns: clamp(150px, 9.5vw, 190px); }
+html[data-poster-size="large"] .rail-track:not(.wide-rail) { grid-auto-columns: clamp(200px, 13vw, 260px); }
+html[data-poster-size="compact"] .rail-track.wide-rail { grid-auto-columns: clamp(248px, 19vw, 350px); }
+html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(330px, 25vw, 480px); }

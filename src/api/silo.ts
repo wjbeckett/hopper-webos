@@ -1047,11 +1047,11 @@ export async function getPersonFilmographyPage(session: Session, personId: strin
   };
 }
 
-export type SiloAppearance = { theme: string; variables: Record<string, string>; textScale: string; textWeight: string; highContrast: boolean };
+export type SiloAppearance = { theme: string; variables: Record<string, string>; textScale: string; textWeight: string; highContrast: boolean; posterSize: string };
 
 export async function getProfileAppearance(session: Session): Promise<SiloAppearance> {
   const params = new URLSearchParams();
-  ["ui.theme", "ui.custom_theme_vars", "ui.text_scale", "ui.text_weight", "ui.high_contrast"].forEach(key => params.append("keys", key));
+  ["ui.theme", "ui.custom_theme_vars", "ui.text_scale", "ui.text_weight", "ui.high_contrast", "ui.card_presentation"].forEach(key => params.append("keys", key));
   const data = await requestV2<{ items?: Array<{ key: string; value?: unknown }> }>(session, `/settings/values/effective?${params}`, { headers: { "X-Silo-Device-Id": getDeviceId() } });
   const values = new Map((data.items ?? []).map(entry => [entry.key, entry.value == null ? "" : typeof entry.value === "string" ? entry.value : typeof entry.value === "object" ? JSON.stringify(entry.value) : String(entry.value)]));
   let variables: Record<string, string> = {};
@@ -1064,7 +1064,8 @@ export async function getProfileAppearance(session: Session): Promise<SiloAppear
     variables,
     textScale: values.get("ui.text_scale") || "default",
     textWeight: values.get("ui.text_weight") || "default",
-    highContrast: values.get("ui.high_contrast") === "true"
+    highContrast: values.get("ui.high_contrast") === "true",
+    posterSize: (() => { try { const value = JSON.parse(values.get("ui.card_presentation") || "{}"); return ["compact", "standard", "large"].includes(value.poster_size) ? value.poster_size : "standard"; } catch { return "standard"; } })()
   };
 }
 

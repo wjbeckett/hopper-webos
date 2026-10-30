@@ -250,6 +250,7 @@ export default function App() {
       root.dataset.textScale = appearance.textScale;
       root.dataset.textWeight = appearance.textWeight;
       root.dataset.highContrast = appearance.highContrast ? "true" : "false";
+      root.dataset.posterSize = appearance.posterSize;
       const merged = { ...(THEME_TOKENS[appearance.theme] ?? THEME_TOKENS["midnight-cinema"]), ...appearance.variables };
       for (const [name, value] of Object.entries(merged)) {
         if (/^--[a-z0-9-]+$/.test(name) && typeof value === "string" && value.length <= 128) root.style.setProperty(name, value);
