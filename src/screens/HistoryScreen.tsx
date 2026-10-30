@@ -3,6 +3,7 @@ import { getHistoryPage, imageUrl } from "../api/silo";
 import { MediaCard } from "../components/MediaCard";
 import { focusFirstContentCard } from "../navigation/spatial";
 import type { Session, SiloItem } from "../types";
+import { LoadingState } from "../components/LoadingState";
 
 export function HistoryScreen({ session, onOpen }: {
   session: Session;
@@ -80,7 +81,7 @@ export function HistoryScreen({ session, onOpen }: {
   return (
     <main className="content-screen history-screen">
       {error ? <div className="error">{error}</div> : null}
-      {loading ? <div className="screen-state">Loading watch history…</div> : items.length ? (
+      {loading ? <LoadingState label="Loading watch history" /> : items.length ? (
         <div className="library-grid">
           {items.map(item => <MediaCard key={item.Id} session={session} item={item} image={imageUrl(session, item)} onOpen={() => onOpen(item)} />)}
         </div>

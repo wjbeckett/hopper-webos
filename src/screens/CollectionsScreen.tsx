@@ -3,6 +3,7 @@ import { getCollectionItemsPage, getCollections, imageUrl } from "../api/silo";
 import { MediaCard } from "../components/MediaCard";
 import { focusFirstContentCard } from "../navigation/spatial";
 import type { Session, SiloCollection, SiloItem } from "../types";
+import { LoadingState } from "../components/LoadingState";
 
 export function CollectionsScreen({ session, onOpen }: {
   session: Session;
@@ -105,7 +106,7 @@ export function CollectionsScreen({ session, onOpen }: {
         <button type="button" className="tv-button secondary" data-tv-focusable="true" onClick={() => setSelected(null)}>‹ Collections</button>
         <h1 className="collection-title">{selected.name}</h1>
         {error ? <div className="error">{error}</div> : null}
-        {loading ? <div className="screen-state">Loading collection…</div> : items.length ? (
+        {loading ? <LoadingState label="Loading collection" /> : items.length ? (
           <div className="library-grid">
             {items.map(item => <MediaCard key={item.Id} session={session} item={item} image={imageUrl(session, item)} onOpen={() => onOpen(item)} />)}
           </div>
@@ -122,7 +123,7 @@ export function CollectionsScreen({ session, onOpen }: {
   return (
     <main className="content-screen collection-screen">
       {error ? <div className="error">{error}</div> : null}
-      {loading ? <div className="screen-state">Loading collections…</div> : collections.length ? (
+      {loading ? <LoadingState label="Loading collections" /> : collections.length ? (
         <div className="collection-grid">
           {collections.map(collection => {
             const poster: SiloItem = { Id: collection.id, Name: collection.name, PosterUrl: collection.posterUrl };

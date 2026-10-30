@@ -4,6 +4,7 @@ import type { AudiobookGroup } from "../api/silo";
 import { MediaCard } from "../components/MediaCard";
 import { focusFirstContentCard, focusNavigationTarget } from "../navigation/spatial";
 import type { Session, SiloLibrary } from "../types";
+import { LoadingState } from "../components/LoadingState";
 
 export type GroupKind = "author" | "series";
 
@@ -101,7 +102,7 @@ export function AudiobookGroupsScreen({ session, library, kind, onOpen }: {
 
   return (
     <main className="content-screen collection-screen">
-      {loading ? <div className="screen-state">Loading...</div> : error && !groups.length ? (
+      {loading ? <LoadingState label="Loading" /> : error && !groups.length ? (
         <div className="screen-state browse-error-state">
           <div>{error}</div>
           <div className="browse-error-actions">

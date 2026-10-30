@@ -4,6 +4,7 @@ import { FeaturedRailsScreen } from "../components/FeaturedRailsScreen";
 import { focusFirstContentCard } from "../navigation/spatial";
 import { useWatchStateRefresh } from "../core/watchState";
 import type { HomeRail, Session, SiloItem } from "../types";
+import { LoadingState } from "../components/LoadingState";
 
 export function ForYouScreen({
   session,
@@ -41,7 +42,7 @@ export function ForYouScreen({
     return () => cancelAnimationFrame(frame);
   }, [loading]);
 
-  if (loading) return <div className="screen-state">Loading recommendations…</div>;
+  if (loading) return <LoadingState label="Loading recommendations" />;
 
   return (
     <FeaturedRailsScreen

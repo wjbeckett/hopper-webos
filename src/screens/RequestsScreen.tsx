@@ -12,6 +12,7 @@ import {
 } from "../api/silo";
 import { focusFirstContentCard } from "../navigation/spatial";
 import type { Session, SiloMediaRequest, SiloRequestResult } from "../types";
+import { LoadingState } from "../components/LoadingState";
 
 type RequestsTab = "discover" | "mine";
 
@@ -156,7 +157,7 @@ export function RequestsScreen({ session }: { session: Session }) {
             <p>{selected.overview}</p>
             <div className="request-detail-state">{selected.availability === "available" ? "Available in your library" : requestStateLabel(undefined, selected.reason)}</div>
             {actionError ? <div className="error">{actionError}</div> : null}
-            {detailLoading ? <div className="screen-state">Loading title details…</div> : null}
+            {detailLoading ? <LoadingState label="Loading title details" /> : null}
             <div className="request-detail-actions">
               {selected.requestable ? (
                 <button data-tv-focusable="true" className="tv-button" disabled={busy} onClick={() => void submitRequest(selected)}>＋ Request</button>
@@ -195,7 +196,7 @@ export function RequestsScreen({ session }: { session: Session }) {
       {notice ? <div className="success-message" role="status">{notice}</div> : null}
       {actionError ? <div className="error">{actionError}</div> : null}
       {error ? <div className="error">{error}</div> : null}
-      {loading ? <div className="screen-state">Loading requests…</div> : available === false ? (
+      {loading ? <LoadingState label="Loading requests" /> : available === false ? (
         <div className="empty-state"><h2>Requests unavailable</h2><p>Requests are disabled for this server or profile.</p></div>
       ) : tab === "mine" ? requests.length ? (
         <div className="request-list">

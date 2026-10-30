@@ -8,6 +8,7 @@ import { LibraryBrowsePanels } from "./LibraryBrowsePanels";
 import type { BrowseSortKey, BrowseSortOption } from "./LibraryBrowsePanels";
 import { attemptFirstContentFocus, focusFirstContentCard, focusNavigationTarget } from "../navigation/spatial";
 import type { Session, SiloItem, SiloLibrary } from "../types";
+import { LoadingState } from "../components/LoadingState";
 
 type BrowseSort = BrowseSortKey;
 type SortOrder = "asc" | "desc";
@@ -653,7 +654,7 @@ export function LibraryScreen({
             ) : null}
           </div>
           {error && browseItems.length ? <div className="error">{error}</div> : null}
-          {loading ? <div className="screen-state">Loading…</div> : !browseItems.length && error ? (
+          {loading ? <LoadingState label="Loading" /> : !browseItems.length && error ? (
             <div className="screen-state browse-error-state">
               <div>{error}</div>
               <div className="browse-error-actions">

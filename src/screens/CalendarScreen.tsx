@@ -3,6 +3,7 @@ import { getCalendar, imageUrl } from "../api/silo";
 import { MediaCard } from "../components/MediaCard";
 import { focusFirstContentCard } from "../navigation/spatial";
 import type { Session, SiloCalendarItem, SiloItem } from "../types";
+import { LoadingState } from "../components/LoadingState";
 
 type CalendarFilter = "all" | "following" | "trending";
 
@@ -126,7 +127,7 @@ export function CalendarScreen({ session, onOpen }: {
         })}
       </div>
       {error ? <div className="error">{error}</div> : null}
-      {loading ? <div className="screen-state">Loading release calendar…</div> : selectedItems.length ? (
+      {loading ? <LoadingState label="Loading release calendar" /> : selectedItems.length ? (
         <section className="calendar-releases" aria-label={`Releases for ${selectedDate}`}>
           <h2>{new Date(`${selectedDate}T12:00:00`).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</h2>
           <div className="library-grid">

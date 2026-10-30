@@ -4,6 +4,7 @@ import { FeaturedRailsScreen } from "../components/FeaturedRailsScreen";
 import { focusFirstContentCard } from "../navigation/spatial";
 import { useWatchStateRefresh } from "../core/watchState";
 import type { HomeRail, Session, SiloItem } from "../types";
+import { LoadingState } from "../components/LoadingState";
 
 export function HomeScreen({
   session,
@@ -37,7 +38,7 @@ export function HomeScreen({
     return () => cancelAnimationFrame(frame);
   }, [loading]);
 
-  if (loading) return <div className="screen-state">Loading your Silo…</div>;
+  if (loading) return <LoadingState label="Loading your Silo" />;
 
   return (
     <FeaturedRailsScreen

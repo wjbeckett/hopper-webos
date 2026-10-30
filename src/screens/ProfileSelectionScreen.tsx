@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { getHouseholdProfiles, verifyProfilePin } from "../api/silo";
 import { focusFirstContentCard } from "../navigation/spatial";
 import type { Session, SiloProfile } from "../types";
+import { LoadingState } from "../components/LoadingState";
 
 export function ProfileSelectionScreen({ session, onSelect }: {
   session: Session;
@@ -81,7 +82,7 @@ export function ProfileSelectionScreen({ session, onSelect }: {
   return (
     <main className="content-screen profile-selection-screen">
       {error ? <div className="error">{error}</div> : null}
-      {loading ? <div className="screen-state">Loading profiles…</div> : profiles.length ? (
+      {loading ? <LoadingState label="Loading profiles" /> : profiles.length ? (
         <div className="profile-selection-grid">
           {profiles.map(profile => (
             <button key={profile.id} data-tv-focusable="true" className="profile-selection-card" onClick={() => chooseProfile(profile)}>

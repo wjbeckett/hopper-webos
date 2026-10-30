@@ -8,6 +8,7 @@ import type { PlaybackChoices, WatchDetail } from "../api/playback";
 import type { DetailPerson, DetailTrailer } from "../api/silo";
 import type { Session, SiloItem } from "../types";
 import { applyWatchedState, publishWatchState } from "../core/watchState";
+import { LoadingState } from "../components/LoadingState";
 
 type Props = {
   session: Session;
@@ -358,7 +359,7 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
           })}
         </div>
         <div className="episode-rail" ref={railRef}>
-          {loading ? <div className="screen-state">Loading episodes...</div> : railEpisodes.length ? railEpisodes.map(episode => (
+          {loading ? <LoadingState label="Loading episodes" /> : railEpisodes.length ? railEpisodes.map(episode => (
             <EpisodeCard key={episode.Id} session={session} episode={episode} current={highlightedId === episode.Id}
               onFocus={() => { setActiveButton(null); setMode(String(episode.ParentIndexNumber ?? 0)); setFocusedEpisodeId(episode.Id); setRememberedEpisodeId(episode.Id); }}
               onOpen={() => onPlayEpisode(episode, resumePosition(episode))}

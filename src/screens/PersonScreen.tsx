@@ -4,6 +4,7 @@ import type { PersonDetail } from "../api/silo";
 import { MediaCard } from "../components/MediaCard";
 import { focusFirstContentCard } from "../navigation/spatial";
 import type { Session, SiloItem } from "../types";
+import { LoadingState } from "../components/LoadingState";
 
 export function PersonScreen({ session, personId, name, onOpen, onBack }: {
   session: Session;
@@ -74,7 +75,7 @@ export function PersonScreen({ session, personId, name, onOpen, onBack }: {
 
   return (
     <main className="content-screen person-screen">
-      {loading ? <div className="screen-state">Loading...</div> : error ? <div className="screen-state">{error}</div> : person ? (
+      {loading ? <LoadingState label="Loading" /> : error ? <div className="screen-state">{error}</div> : person ? (
         <>
           <header className="person-header">
             <div className="person-photo">

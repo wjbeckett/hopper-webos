@@ -3,6 +3,7 @@ import { saveAudioChoice, saveSubtitleChoice } from "../api/playback";
 import type { AudioTrack, FileVersion, PlaybackChoices, SubtitleTrack, WatchDetail } from "../api/playback";
 import { getWatchDetail } from "../api/playback";
 import type { Session, SiloItem } from "../types";
+import { LoadingState } from "./LoadingState";
 
 const languageNames: Record<string, string> = {
   en: "English", eng: "English", nl: "Dutch", nld: "Dutch", dut: "Dutch",
@@ -317,7 +318,7 @@ export function PlaybackOptionsDialog({ session, detail, choices, onChange, onCl
     <div className="details-more-scrim" data-modal="true" onClick={onClose}>
       <div className="details-more playback-options" role="dialog" aria-label="Playback Options" onClick={event => event.stopPropagation()}>
         <h2>Playback Options</h2>
-        {!detail ? <div className="screen-state">Loading...</div> : (
+        {!detail ? <LoadingState label="Loading" /> : (
           <>
             {versions.length > 1 ? (
               <>

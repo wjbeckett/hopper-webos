@@ -4,6 +4,7 @@ import type { CollectionSection } from "../api/silo";
 import { MediaCard } from "../components/MediaCard";
 import { focusFirstContentCard, focusNavigationTarget } from "../navigation/spatial";
 import type { Session, SiloCollection, SiloLibrary } from "../types";
+import { LoadingState } from "../components/LoadingState";
 
 type LibrarySection = CollectionSection & { library: SiloLibrary };
 
@@ -60,7 +61,7 @@ export function LibraryCollectionsScreen({ session, libraries, scopeKey, onOpen 
 
   return (
     <main className="content-screen collection-screen library-collections-screen">
-      {loading ? <div className="screen-state">Loading...</div> : error ? (
+      {loading ? <LoadingState label="Loading" /> : error ? (
         <div className="screen-state browse-error-state">
           <div>{error}</div>
           <div className="browse-error-actions">

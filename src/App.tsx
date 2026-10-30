@@ -31,6 +31,7 @@ import { applyResumeState, applyWatchedState, publishWatchState } from "./core/w
 import { publishRailsChanged } from "./core/watchState";
 import { connectEventsSocket } from "./api/events";
 import type { Session, SiloCollection, SiloItem, SiloLibrary, SiloProfile } from "./types";
+import { LoadingState } from "./components/LoadingState";
 
 type AuthRoute = "server-setup" | "device-login" | "password-login";
 type DetailRoute =
@@ -585,7 +586,7 @@ export default function App() {
       ? sectionLibraries.filter(library => library.id === defaultSeriesLibraryId)
       : sectionLibraries;
     if (!matchingLibraries.length) {
-      body = <div className="screen-state">Loading library…</div>;
+      body = <LoadingState label="Loading library" />;
     } else if (libraryLanding === "collections") {
       const mixedTypes = section === "movies" ? ["Movie"] : section === "series" ? ["Series"] : undefined;
       body = browseDetail?.kind === "collection" ? (
