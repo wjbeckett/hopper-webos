@@ -294,7 +294,7 @@ function navigateLibrary(current: HTMLElement, direction: Direction) {
     ?? current.closest<HTMLElement>(".content-screen")?.querySelector<HTMLElement>(".library-grid, .collection-grid")
     ?? null;
   const gridItems = currentGrid
-    ? Array.from(currentGrid.querySelectorAll<HTMLElement>(":scope > [data-tv-focusable='true']"))
+    ? Array.from(currentGrid.querySelectorAll<HTMLElement>(":scope > [data-tv-focusable='true'], :scope > .media-card-wrap > [data-tv-focusable='true']"))
     : [];
   const jumpItems = focusables(".library-alpha-nav [data-tv-focusable='true']");
 
@@ -396,7 +396,7 @@ function navigateLibrary(current: HTMLElement, direction: Direction) {
     if (direction === "left") {
       const jumpGrid = document.querySelector<HTMLElement>(".library-results .library-grid");
       const jumpGridItems = jumpGrid
-        ? Array.from(jumpGrid.querySelectorAll<HTMLElement>(":scope > [data-tv-focusable='true']"))
+        ? Array.from(jumpGrid.querySelectorAll<HTMLElement>(":scope > [data-tv-focusable='true'], :scope > .media-card-wrap > [data-tv-focusable='true']"))
         : [];
       const currentY = center(current.getBoundingClientRect()).y;
       const target = jumpGridItems
