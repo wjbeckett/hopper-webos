@@ -299,11 +299,7 @@ export default function App() {
           event.preventDefault();
           return;
         }
-        if (
-          section !== "home"
-          && activeElement instanceof HTMLElement
-          && activeElement.closest(".tv-nav")
-        ) {
+        if (section !== "home") {
           setSection("home");
           focusTopNavigation(nav.querySelector<HTMLElement>("[data-nav-primary='home']"));
           event.preventDefault();

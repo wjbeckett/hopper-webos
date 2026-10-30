@@ -369,15 +369,23 @@ function navigateLibrary(current: HTMLElement, direction: Direction) {
       focusAdjacent(current, filters, direction);
       return true;
     }
-    if (direction === "up" && toolbarItems.length) {
-      focusElement(toolbarItems[toolbarItems.length - 1]);
-      return true;
+    if (direction === "up") {
+      const above = toolbarItems.length
+        ? toolbarItems[toolbarItems.length - 1]
+        : navItems.find(item => item.getAttribute("aria-current") === "page") ?? navItems[0];
+      if (above) {
+        focusElement(above);
+        return true;
+      }
     }
-    if (direction === "down" && gridItems[0]) {
-      focusElement(gridItems[0]);
-      return true;
+    if (direction === "down") {
+      const below = gridItems[0] ?? focusables(".library-results .media-card, .library-results .library-grid [data-tv-focusable='true']")[0];
+      if (below) {
+        focusElement(below);
+        return true;
+      }
     }
-    return true;
+    return false;
   }
 
   if (current.matches(".library-alpha-nav [data-tv-focusable='true']")) {
