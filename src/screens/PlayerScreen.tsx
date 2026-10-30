@@ -138,6 +138,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   // Focused-bar scrub state: preview target while a scrub is in flight, plus
   // the signed auto-seek rate a held Left/Right climbs to (tap to step).
   const [scrubPreview, setScrubPreview] = useState<number | null>(null);
+  const [tapPreview, setTapPreview] = useState<number | null>(null);
+  const tapPreviewTimer = useRef<number | undefined>(undefined);
   const [autoSeekRate, setAutoSeekRate] = useState(0);
   const [scrubberFocused, setScrubberFocused] = useState(false);
   // Hidden-controls hold-to-seek session: rate + preview while the viewer
@@ -531,7 +533,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const [, bumpSheets] = useState(0);
   const sheetImages = useRef(new Map<number, HTMLImageElement>());
   const sheetLoads = useRef(new Map<number, "loading" | "ready" | "failed">());
-  const wantedTile = trickplay && scrubPreview != null ? trickplayTileAt(trickplay, scrubPreview) : null;
+  const previewSeconds = scrubPreview ?? tapPreview;
+  const wantedTile = trickplay && previewSeconds != null ? trickplayTileAt(trickplay, previewSeconds) : null;
   if (wantedTile) {
     for (const index of [wantedTile.sheet, wantedTile.sheet + 1]) {
       if (index >= trickplay!.sheets.length || sheetLoads.current.has(index)) continue;
@@ -873,7 +876,12 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
               const step = direction < 0 ? -SKIP_BACK_SECONDS : SKIP_FORWARD_SECONDS;
               setScrubPreview(current => clampSeek((current ?? 0) + step, ui.current.duration));
             } else {
-              performRelativeSeek(direction < 0 ? -SKIP_BACK_SECONDS : SKIP_FORWARD_SECONDS, false);
+              const delta = direction < 0 ? -SKIP_BACK_SECONDS : SKIP_FORWARD_SECONDS;
+              const target = clampSeek(ui.current.position + delta, ui.current.duration);
+              setTapPreview(target);
+              if (tapPreviewTimer.current) window.clearTimeout(tapPreviewTimer.current);
+              tapPreviewTimer.current = window.setTimeout(() => setTapPreview(null), 1500);
+              performRelativeSeek(delta, false);
             }
           }
           return;
@@ -959,10 +967,10 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
 
         <div ref={scrubberRef} className="player-scrubber" tabIndex={-1} data-active={scrubberFocused || scrubPreview != null}
           onFocus={() => setScrubberFocused(true)} onBlur={() => setScrubberFocused(false)}>
-          {scrubPreview != null && (previewCard || autoSeekRate !== 0) ? <div className="scrub-preview-stack" data-fast={autoSeekRate !== 0} style={{ left: `clamp(84px, ${playedFraction * 100}%, calc(100% - 84px))` }}>
+          {previewSeconds != null && (previewCard || autoSeekRate !== 0) ? <div className="scrub-preview-stack" data-fast={autoSeekRate !== 0} style={{ left: `clamp(84px, ${playedFraction * 100}%, calc(100% - 84px))` }}>
             {previewCard ? <div className="scrub-preview-card">
               <div className="trickplay-frame" style={previewCard} />
-              <span className="scrub-preview-time">{formatClock(scrubPreview)}</span>
+              <span className="scrub-preview-time">{formatClock(previewSeconds)}</span>
             </div> : null}
             {autoSeekRate !== 0 ? <div className="auto-seek-chip"><svg viewBox="0 0 24 24" aria-hidden="true"><path d={autoSeekRate < 0 ? "M20.8 6.4 19.1 9.2 16.2 7.9" : "M3.2 6.4 4.9 9.2 7.8 7.9"} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" /><path d={autoSeekRate < 0 ? "M12 4a8 8 0 1 0 7.4 4.9" : "M12 4a8 8 0 1 1-7.4 4.9"} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" /></svg>{Math.abs(autoSeekRate)}x</div> : null}
           </div> : null}

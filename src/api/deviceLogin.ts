@@ -67,7 +67,7 @@ export async function startDeviceLogin(
 ): Promise<DeviceLoginStart> {
   return jsonRequest<DeviceLoginStart>(
     serverUrl,
-    "/api/v1/auth/device/start",
+    "/api/v2/auth/device/start",
     {
       method: "POST",
       body: JSON.stringify({
@@ -136,7 +136,7 @@ export async function pollDeviceLogin(
 ): Promise<DeviceLoginPoll> {
   return jsonRequest<DeviceLoginPoll>(
     serverUrl,
-    "/api/v1/auth/device/poll",
+    "/api/v2/auth/device/poll",
     {
       method: "POST",
       body: JSON.stringify({ device_code: deviceCode })

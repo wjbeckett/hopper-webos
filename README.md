@@ -173,13 +173,13 @@ WEBOS_DEVICE=livingroom npm run webos:inspect
 Device sign-in is the primary TV experience and uses Silo's native API:
 
 ```text
-POST /api/v1/auth/device/start
+POST /api/v2/auth/device/start
               │
               ├─ TV displays the QR code and pairing code
               │
               ├─ user approves the request in Silo
               │
-              └─ POST /api/v1/auth/device/poll
+              └─ POST /api/v2/auth/device/poll
                          │
                          └─ access token, refresh token, and profile context
 ```

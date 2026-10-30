@@ -137,7 +137,7 @@ export const stopPlayback = (session: Session, id: string) => siloRequest<void>(
 
 export function stopPlaybackKeepalive(session: Session, id: string): Promise<Response> {
   const root = session.serverUrl.replace(/\/+$/, "");
-  return fetch(`${root}/api/v1/playback/${encodeURIComponent(id)}`, {
+  return fetch(`${root}/api/v2/playback/${encodeURIComponent(id)}`, {
     method: "DELETE",
     keepalive: true,
     headers: {
@@ -152,7 +152,7 @@ export function playbackUrl(session: Session, url: string) {
   if (/^https?:\/\//i.test(url)) return url;
   const root = session.serverUrl.replace(/\/+$/, "");
   const path = url.startsWith("/") ? url : `/${url}`;
-  return `${root}/api/v1${path}`;
+  return `${root}/api/v2${path}`;
 }
 
 function serverLanguageTag(language?: string) {
