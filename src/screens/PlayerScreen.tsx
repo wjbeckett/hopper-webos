@@ -927,8 +927,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const segments: Array<[number, number]> = denseGaps ? [[0, 1]] : edges.slice(0, -1).map((edge, index) => [edge, edges[index + 1]] as [number, number]);
   const bandRanges = (["intro", "recap", "credits", "preview"] as const)
     .map(kind => ({ kind, segment: (markers?.[kind] ?? null) as MarkerSegment | null }))
-    .map(entry => ({ kind: entry.kind, segment: entry.segment as MarkerSegment }))
-    .filter(entry => entry.segment.end_seconds > entry.segment.start_seconds);
+    .filter((entry): entry is { kind: typeof entry.kind; segment: MarkerSegment } => entry.segment != null && entry.segment.end_seconds > entry.segment.start_seconds);
 
   return <main className="player-shell" onMouseMove={() => revealHud()}>
     <video ref={videoRef} className="player" playsInline
