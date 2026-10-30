@@ -210,7 +210,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     };
     const isHls = next.plan.stream.protocol.toLowerCase() === "hls" || /mpegurl/i.test(next.plan.stream.mime_type ?? "") || /\.m3u8(?:\?|$)/i.test(streamUrl);
     const nativeHls = video.canPlayType("application/vnd.apple.mpegurl") !== "";
-    if (isHls && !nativeHls) {
+    if (isHls) {
       const headers: Record<string, string> = {
         Authorization: `Bearer ${session.accessToken}`,
         ...(session.profileId ? { "X-Profile-Id": session.profileId } : {}),
@@ -218,8 +218,12 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         ...(next.plan.stream.headers ?? {})
       };
       void import("hls.js").then(({ default: HlsPlayer }) => {
-        if (!HlsPlayer.isSupported() || stateRef.current?.plan.plan_id !== next.plan.plan_id) {
-          if (!HlsPlayer.isSupported()) setError("This browser cannot play the negotiated HLS stream.");
+        if (stateRef.current?.plan.plan_id !== next.plan.plan_id) return;
+        if (!HlsPlayer.isSupported()) {
+          if (!nativeHls) { setError("This browser cannot play the negotiated HLS stream."); return; }
+          video.src = streamUrl;
+          video.load();
+          video.onloadedmetadata = begin;
           return;
         }
         const hls = new HlsPlayer({
