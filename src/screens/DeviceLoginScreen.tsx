@@ -99,7 +99,7 @@ export function DeviceLoginScreen({
               return;
             }
 
-            if (result.status === "expired" || result.status === "consumed") {
+            if (result.status === "expired" || result.status === "consumed" || result.status === "canceled") {
               clearPendingDeviceLogin(serverUrl);
               setStatus("Code expired");
               setError("This sign-in code is no longer valid. Create a new one.");

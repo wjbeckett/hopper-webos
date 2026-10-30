@@ -1,11 +1,12 @@
 import type { HomeRail, ItemsResponse, Session, SiloCalendarDay, SiloCalendarItem, SiloCollection, SiloItem, SiloLibrary, SiloMediaRequest, SiloProfile, SiloRequestResult } from "../types";
 import { serverRegistry } from "../core/serverRegistry";
+import { getDeviceId } from "../platform/device";
 
 function normalizeServerUrl(input: string): string {
   return input.trim().replace(/\/+$/, "");
 }
 
-function apiUrl(serverUrl: string, path: string, version = "v1"): string {
+function apiUrl(serverUrl: string, path: string, version = "v2"): string {
   return `${normalizeServerUrl(serverUrl)}/api/${version}${path}`;
 }
 
@@ -48,15 +49,9 @@ async function requestApi<T>(
   return response.json() as Promise<T>;
 }
 
-export function siloRequest<T>(session: Session, path: string, init: RequestInit = {}) {
-  return requestApi<T>(session, path, init, "v1");
-}
-
 export function requestV2<T>(session: Session, path: string, init: RequestInit = {}) {
   return requestApi<T>(session, path, init, "v2");
 }
-
-const request = siloRequest;
 
 type RefreshResponse = { access_token: string; refresh_token: string; expires_in?: number };
 const refreshes = new Map<string, Promise<void>>();
@@ -67,7 +62,7 @@ async function refreshSession(session: Session): Promise<void> {
   if (existing) return existing;
 
   const refresh = (async () => {
-    const response = await fetch(apiUrl(session.serverUrl, "/auth/refresh"), {
+    const response = await fetch(apiUrl(session.serverUrl, "/auth/refresh", "v2"), {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
       body: JSON.stringify({ refresh_token: session.refreshToken })
@@ -383,7 +378,7 @@ export async function restoreDefaultProfile(session: Session): Promise<Session> 
 }
 
 export async function authenticate(serverUrl: string, username: string, password: string): Promise<Session> {
-  const response = await fetch(apiUrl(serverUrl, "/auth/login"), {
+  const response = await fetch(apiUrl(serverUrl, "/auth/login", "v2"), {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json" },
     body: JSON.stringify({ username, password })
@@ -402,8 +397,8 @@ export async function authenticate(serverUrl: string, username: string, password
   };
 }
 
-function catalogPath(type: string, offset = 0, limit = 60, q?: string) {
-  const params = new URLSearchParams({ source: "query", type, offset: String(offset), limit: String(limit) });
+function catalogPath(type: string, limit = 60, q?: string) {
+  const params = new URLSearchParams({ source: "query", type, limit: String(limit) });
   if (q) params.set("q", q);
   return `/catalog?${params}`;
 }
@@ -900,32 +895,28 @@ export async function getCollectionItems(session: Session, collection: SiloColle
   const params = new URLSearchParams({
     source: collection.kind === "user_collection" ? "user_collection" : "library_collection",
     collection_id: collection.id,
-    offset: "0",
     limit: "100",
-    include_total: "false"
+    skip_total: "true"
   });
-  return unpack(await request<NativeList>(session, `/catalog?${params}`)).Items;
+  return unpack(await requestV2<NativeList>(session, `/catalog?${params}`)).Items;
 }
 
 export async function getFavorites(session: Session): Promise<SiloItem[]> {
-  return unpack(await request<NativeList>(session, "/favorites?offset=0&limit=100")).Items;
+  return unpack(await requestV2<NativeList>(session, "/favorites?limit=100")).Items;
 }
 
 export async function getWatchlist(session: Session): Promise<SiloItem[]> {
-  return unpack(await request<NativeList>(session, "/watchlist?offset=0&limit=100")).Items;
+  return unpack(await requestV2<NativeList>(session, "/watchlist?limit=100")).Items;
 }
 
 async function personalItemExists(session: Session, kind: "favorites" | "watchlist", contentId: string) {
-  const response = await fetch(apiUrl(session.serverUrl, `/${kind}/${encodeURIComponent(contentId)}`), {
-    headers: {
-      Authorization: `Bearer ${session.accessToken}`,
-      ...(session.profileId ? { "X-Profile-Id": session.profileId } : {}),
-      ...(session.profileToken ? { "X-Profile-Token": session.profileToken } : {})
-    }
-  });
-  if (response.status === 404) return false;
-  if (response.ok) return true;
-  throw new Error(`${kind}: ${response.status} ${response.statusText}`);
+  try {
+    await requestV2<unknown>(session, `/${kind}/${encodeURIComponent(contentId)}`);
+    return true;
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith(`/${kind}/${encodeURIComponent(contentId)}: 404 `)) return false;
+    throw error;
+  }
 }
 
 export function isFavorite(session: Session, contentId: string) {
@@ -937,20 +928,20 @@ export function isInWatchlist(session: Session, contentId: string) {
 }
 
 export async function setFavorite(session: Session, contentId: string, enabled: boolean) {
-  await request<void>(session, `/favorites/${encodeURIComponent(contentId)}`, { method: enabled ? "PUT" : "DELETE" });
+  await requestV2<void>(session, `/favorites/${encodeURIComponent(contentId)}`, { method: enabled ? "PUT" : "DELETE" });
 }
 
 export async function setWatchlist(session: Session, contentId: string, enabled: boolean) {
-  await request<void>(session, `/watchlist/${encodeURIComponent(contentId)}`, { method: enabled ? "PUT" : "DELETE" });
+  await requestV2<void>(session, `/watchlist/${encodeURIComponent(contentId)}`, { method: enabled ? "PUT" : "DELETE" });
 }
 
 export async function searchItems(session: Session, query: string): Promise<SiloItem[]> {
   if (!query.trim()) return [];
-  return unpack(await request<NativeList>(session, catalogPath("all", 0, 60, query.trim()))).Items;
+  return unpack(await requestV2<NativeList>(session, catalogPath("all", 60, query.trim()))).Items;
 }
 
 export async function getCatalogItem(session: Session, contentId: string): Promise<SiloItem> {
-  const data = await request<NativeItem>(session, `/catalog/items/${encodeURIComponent(contentId)}`);
+  const data = await requestV2<NativeItem>(session, `/catalog/items/${encodeURIComponent(contentId)}`);
   return toItem(data);
 }
 
@@ -1060,8 +1051,8 @@ export type SiloAppearance = { theme: string; variables: Record<string, string>;
 
 export async function getProfileAppearance(session: Session): Promise<SiloAppearance> {
   const keys = "ui.theme,ui.custom_theme_vars,ui.text_scale,ui.text_weight,ui.high_contrast";
-  const data = await request<{ settings?: Array<{ key: string; effective_value?: string }> }>(session, `/settings/effective?keys=${encodeURIComponent(keys)}`);
-  const values = new Map((data.settings ?? []).map(entry => [entry.key, entry.effective_value ?? ""]));
+  const data = await requestV2<{ items?: Array<{ key: string; value?: unknown }> }>(session, `/settings/values/effective?keys=${encodeURIComponent(keys)}`, { headers: { "X-Silo-Device-Id": getDeviceId() } });
+  const values = new Map((data.items ?? []).map(entry => [entry.key, entry.value == null ? "" : typeof entry.value === "string" ? entry.value : typeof entry.value === "object" ? JSON.stringify(entry.value) : String(entry.value)]));
   let variables: Record<string, string> = {};
   try {
     const parsed = JSON.parse(values.get("ui.custom_theme_vars") || "{}");
@@ -1077,19 +1068,19 @@ export async function getProfileAppearance(session: Session): Promise<SiloAppear
 }
 
 export async function getSeasons(session: Session, seriesId: string): Promise<SiloItem[]> {
-  const data = await request<{ seasons?: NativeItem[] }>(
+  const data = await requestV2<{ items?: NativeItem[] }>(
     session,
     `/catalog/series/${encodeURIComponent(seriesId)}/seasons`
   );
-  return (data.seasons ?? []).map((season) => toItem({ ...season, type: "season" }));
+  return (data.items ?? []).map((season) => toItem({ ...season, type: "season" }));
 }
 
 export async function getEpisodes(session: Session, seriesId: string, seasonNumber: number): Promise<SiloItem[]> {
-  const data = await request<{ episodes?: NativeItem[] }>(
+  const data = await requestV2<{ items?: NativeItem[] }>(
     session,
     `/catalog/series/${encodeURIComponent(seriesId)}/seasons/${seasonNumber}/episodes`
   );
-  return (data.episodes ?? []).map((episode) => toItem({ ...episode, type: "episode", series_id: seriesId }));
+  return (data.items ?? []).map((episode) => toItem({ ...episode, type: "episode", series_id: seriesId }));
 }
 
 function assetUrl(session: Session, value?: string) {
