@@ -83,6 +83,18 @@ export function TopNav({
     return () => window.removeEventListener("silo:close-nav-callout", closeMenu);
   }, []);
 
+  useEffect(() => {
+    if (!profileOpen) return;
+    const menu = document.querySelector<HTMLElement>(".profile-menu");
+    menu?.querySelector<HTMLElement>("button")?.focus();
+    const closeProfile = () => {
+      setProfileOpen(false);
+      document.querySelector<HTMLElement>(".profile-pill")?.focus();
+    };
+    window.addEventListener("silo:close-profile-menu", closeProfile);
+    return () => window.removeEventListener("silo:close-profile-menu", closeProfile);
+  }, [profileOpen]);
+
   function showMenu(id: PrimaryNavId) {
     setOpenMenu(["movies", "series", "music", "audiobooks", "forYou"].includes(id) ? id : null);
     if (id !== "series") setOpenSeriesLibrary(null);
@@ -227,7 +239,7 @@ export function TopNav({
           <ProfileAvatar session={session} />
         </button>
         {profileOpen ? (
-          <div className="profile-menu">
+          <div className="profile-menu" data-modal="true" role="menu">
             <div className="profile-menu-name">{username}</div>
             <button data-tv-focusable="true" onClick={() => { setProfileOpen(false); onWatchlist(); }}>▣ Watchlist</button>
             <button data-tv-focusable="true" onClick={() => { setProfileOpen(false); onFavorites(); }}>♥ Favorites</button>

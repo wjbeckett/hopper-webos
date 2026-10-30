@@ -263,6 +263,11 @@ export default function App() {
       if (!["Escape", "Backspace", "Back", "GoBack", "BrowserBack"].includes(event.key) && event.keyCode !== 461 && event.keyCode !== 10009) return;
       if (!session) return;
       if (document.querySelector(".player-shell")) return;
+      if (document.querySelector(".profile-menu")) {
+        window.dispatchEvent(new Event("silo:close-profile-menu"));
+        event.preventDefault();
+        return;
+      }
       if (document.querySelector(".browse-panel-scrim")) {
         window.dispatchEvent(new Event("silo:browse-panel-back"));
         event.preventDefault();
