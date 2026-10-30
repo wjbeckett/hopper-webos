@@ -1047,9 +1047,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
 
 /** Sheet URLs resolve against the manifest path they were read from, like TrickplayManifest.from. */
 function sheetUrl(session: Session, itemId: string, url: string) {
-  try {
-    return new URL(url, `${session.serverUrl.replace(/\/+$/, "")}/api/v2/watch/${encodeURIComponent(itemId)}/trickplay`).toString();
-  } catch {
-    return url;
-  }
+  if (/^https?:\/\//i.test(url)) return url;
+  const root = session.serverUrl.replace(/\/+$/, "");
+  if (url.startsWith("/")) return `${root}${url}`;
+  return `${root}/api/v2/watch/${encodeURIComponent(itemId)}/trickplay/${url}`;
 }
