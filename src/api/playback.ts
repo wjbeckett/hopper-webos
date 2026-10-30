@@ -126,10 +126,10 @@ export async function startPlaybackV3(session: Session, detail: WatchDetail, ver
 }
 
 export async function replanPlaybackV3(session: Session, state: { plan: PlaybackPlan; playbackAttemptId: string; planAttemptId: string; attemptedKeys: string[] }, operation: "track_change" | "quality_change" | "seek_reanchor", position: number, quality: string, selected: { audio?: TrackIdentity; subtitle?: TrackIdentity }) {
-  const attemptedKeys = [...state.attemptedKeys, state.plan.plan_attempt_key];
+  const attemptedKeys = [state.plan.plan_attempt_key];
   const body = { protocol_version: 3, client_features: features, operation, playback_attempt_id: state.playbackAttemptId, replan_request_id: uuid("replan"), failed_plan_id: state.plan.plan_id, plan_attempt_id: state.planAttemptId, plan_attempt_key: state.plan.plan_attempt_key, attempted_plan_keys: attemptedKeys, attempt_count: attemptedKeys.length, quality_preference: quality, position_seconds: position, metered: false, selected_tracks: selected, local_mutations: [], ...snapshot() };
   const decision = await siloRequest<Decision>(session, `/playback/${encodeURIComponent(state.plan.session_id)}/replan`, { method: "POST", body: JSON.stringify(body) });
-  return { plan: requirePlan(decision), playbackAttemptId: state.playbackAttemptId, planAttemptId: uuid("plan"), attemptedKeys };
+  return { plan: requirePlan(decision), playbackAttemptId: state.playbackAttemptId, planAttemptId: uuid("plan"), attemptedKeys: [] };
 }
 
 export const reportProgress = (session: Session, id: string, position: number, paused: boolean) => siloRequest<void>(session, `/playback/${encodeURIComponent(id)}/progress`, { method: "POST", body: JSON.stringify({ position, is_paused: paused }) });
