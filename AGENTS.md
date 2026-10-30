@@ -23,7 +23,7 @@ Build a first-class LG webOS TV client for Silo with feature parity directionall
 - Treat the current `directVideoUrl()` implementation as temporary scaffolding.
 
 ## Immediate next milestones
-1. Device/QR login implemented from Silo's native `/api/v2/auth/device/start` + `/poll` contract; keep it primary and password as fallback.
+1. Device/QR login implemented from Silo's native `/api/v1/auth/device/start` + `/poll` contract; keep it primary and password as fallback.
 2. Implement exact device profile + playback-v3 negotiation.
 3. Add TV series -> seasons -> episodes navigation.
 4. Add Continue Watching / Next Up sections.

@@ -5,7 +5,7 @@ function normalizeServerUrl(input: string): string {
   return input.trim().replace(/\/+$/, "");
 }
 
-function apiUrl(serverUrl: string, path: string, version = "v2"): string {
+function apiUrl(serverUrl: string, path: string, version = "v1"): string {
   return `${normalizeServerUrl(serverUrl)}/api/${version}${path}`;
 }
 
@@ -49,7 +49,7 @@ async function requestApi<T>(
 }
 
 export function siloRequest<T>(session: Session, path: string, init: RequestInit = {}) {
-  return requestApi<T>(session, path, init, "v2");
+  return requestApi<T>(session, path, init, "v1");
 }
 
 export function requestV2<T>(session: Session, path: string, init: RequestInit = {}) {
@@ -1062,7 +1062,7 @@ export type SiloAppearance = { theme: string; variables: Record<string, string>;
 
 export async function getProfileAppearance(session: Session): Promise<SiloAppearance> {
   const keys = "ui.theme,ui.custom_theme_vars,ui.text_scale,ui.text_weight,ui.high_contrast";
-  const data = await request<{ settings?: Array<{ key: string; effective_value?: string }> }>(session, `/settings/values/effective?keys=${encodeURIComponent(keys)}`);
+  const data = await request<{ settings?: Array<{ key: string; effective_value?: string }> }>(session, `/settings/effective?keys=${encodeURIComponent(keys)}`);
   const values = new Map((data.settings ?? []).map(entry => [entry.key, entry.effective_value ?? ""]));
   let variables: Record<string, string> = {};
   try {
