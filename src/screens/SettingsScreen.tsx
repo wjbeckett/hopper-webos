@@ -1,21 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { clearSetting, getEffectiveSettings, getSettingsContract, putSetting } from "../api/settings";
-import type { SettingDefinition, SettingOption, SettingsContract } from "../api/settings";
+import { clearDeviceSubtitleAppearance, clearSetting, DEFAULT_SUBTITLE_APPEARANCE, getEffectiveSettings, getSettingsContract, putDeviceSubtitleAppearance, putSetting } from "../api/settings";
+import type { SettingDefinition, SettingOption, SettingsContract, SubtitleAppearance } from "../api/settings";
 import { clientIdentity } from "../platform/device";
 import { LoadingState } from "../components/LoadingState";
 import { TvButton } from "../components/TvButton";
 import type { Session } from "../types";
 
-type Category = "playback" | "subtitles" | "server";
+type Category = "general" | "playback" | "subtitles" | "server";
 type Choice = { label: string; value: unknown; detail?: string };
 
 const categories: Array<{ id: Category; label: string; blurb: string }> = [
+  { id: "general", label: "General", blurb: "App and navigation" },
   { id: "playback", label: "Playback", blurb: "Quality and episodes" },
   { id: "subtitles", label: "Subtitles", blurb: "Language and behavior" },
   { id: "server", label: "Server", blurb: "Connection and account" }
 ];
 
 const keysByCategory: Record<Exclude<Category, "server">, Array<{ title: string; keys: string[] }>> = {
+  general: [
+    { title: "Cards & Posters", keys: ["ui.card_presentation"] },
+    { title: "Theme Music", keys: ["ui.theme_music_enabled", "ui.theme_music_loop"] },
+    { title: "Subtitle Appearance", keys: ["playback.subtitle_appearance"] }
+  ],
   playback: [
     { title: "Streaming", keys: ["playback.preferred_quality", "playback.max_bitrate_kbps", "playback.audio_language", "playback.buffering_quality_mode"] },
     { title: "Episodes", keys: ["playback.auto_play_next", "playback.next_up_prompt_seconds", "playback.intro_skip_mode", "playback.auto_skip_credits", "playback.auto_skip_recap"] },
@@ -150,6 +156,10 @@ export function SettingsScreen({
   const [error, setError] = useState("");
   const [picker, setPicker] = useState<SettingDefinition | null>(null);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
+  const [subtitleAppearance, setSubtitleAppearance] = useState<SubtitleAppearance>(DEFAULT_SUBTITLE_APPEARANCE);
+  const [subtitleDeviceOnly, setSubtitleDeviceOnly] = useState(false);
+  const [posterSize, setPosterSize] = useState("standard");
+  const [profileSubtitleAppearance, setProfileSubtitleAppearance] = useState<SubtitleAppearance>(DEFAULT_SUBTITLE_APPEARANCE);
   const railRef = useRef<HTMLDivElement | null>(null);
   const returnFocusRef = useRef<string | null>(null);
 
@@ -162,6 +172,17 @@ export function SettingsScreen({
         if (!alive) return;
         setContract(loadedContract);
         setValues(new Map(Array.from(effective.entries()).map(([key, entry]) => [key, entry.value])));
+        const appearance = effective.get("playback.subtitle_appearance")?.value;
+        const parsedAppearance = typeof appearance === "string" ? (() => { try { return JSON.parse(appearance); } catch { return null; } })() : appearance;
+        if (parsedAppearance && typeof parsedAppearance === "object") {
+          const normalized = { ...DEFAULT_SUBTITLE_APPEARANCE, ...(parsedAppearance as Partial<SubtitleAppearance>) };
+          setSubtitleAppearance(normalized);
+          setProfileSubtitleAppearance(normalized);
+        }
+        const cardValue = effective.get("ui.card_presentation")?.value;
+        if (cardValue && typeof cardValue === "object" && "poster_size" in cardValue) setPosterSize(String((cardValue as { poster_size: unknown }).poster_size));
+        const source = effective.get("playback.subtitle_appearance")?.source ?? "";
+        setSubtitleDeviceOnly(source === "profile_device" || source === "device");
       })
       .catch(reason => { if (alive) setError(reason instanceof Error ? reason.message : "Could not load settings."); });
     return () => { alive = false; };
@@ -212,9 +233,12 @@ export function SettingsScreen({
   }
 
   function closePicker() {
-    setPicker(null);
     const key = returnFocusRef.current;
-    requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-setting-key='${key}']`)?.focus());
+    setPicker(null);
+    requestAnimationFrame(() => {
+      const settingKey = key === "appearance:posterSize" ? "poster-size" : key?.startsWith("appearance:") ? `subtitle-appearance-${key.slice("appearance:".length)}` : key;
+      document.querySelector<HTMLElement>(`[data-setting-key='${settingKey}']`)?.focus();
+    });
   }
 
   function pick(definition: SettingDefinition, value: unknown) {
@@ -223,7 +247,7 @@ export function SettingsScreen({
   }
 
   const renderGroups = (groups: Array<{ title: string; keys: string[] }>) => groups.map(group => {
-    const rows = group.keys.map(key => definitions.get(key)).filter((definition): definition is SettingDefinition => Boolean(definition));
+    const rows = group.keys.map(key => definitions.get(key)).filter((definition): definition is SettingDefinition => Boolean(definition)).filter(definition => definition.value_schema.type !== "object");
     if (!rows.length) return null;
     return (
       <section className="settings-group" key={group.title}>
@@ -247,6 +271,87 @@ export function SettingsScreen({
     );
   });
 
+  const appearanceDefinition = definitions.get("playback.subtitle_appearance");
+  const appearanceOptions: Record<string, Choice[]> = {
+    posterSize: [{ label: "Compact", value: "compact" }, { label: "Standard", value: "standard" }, { label: "Large", value: "large" }],
+    fontSize: ["small", "medium", "large", "xlarge", "xxlarge"].map(value => ({ label: value, value })),
+    fontFamily: ["sans-serif", "serif", "monospace"].map(value => ({ label: value, value })),
+    fontColor: ["#ffffff", "#ffff00", "#00ffff", "#00ff00"].map(value => ({ label: value, value, detail: value })),
+    textOpacity: [25, 50, 75, 100].map(value => ({ label: `${value}%`, value })),
+    backgroundColor: ["#000000", "#202020", "#000033", "#ffffff"].map(value => ({ label: value, value, detail: value })),
+    backgroundStyle: ["box", "shadow", "outline", "none"].map(value => ({ label: value, value })),
+    backgroundOpacity: [0, 25, 50, 75, 100].map(value => ({ label: `${value}%`, value })),
+    textOutline: [{ label: "On", value: true }, { label: "Off", value: false }],
+    textOutlineColor: ["#000000", "#ffffff", "#ffff00"].map(value => ({ label: value, value })),
+    position: [{ label: "Bottom", value: "bottom" }, { label: "Lower third", value: "lower-third" }, { label: "Top", value: "top" }]
+  };
+  function changeAppearance(key: keyof SubtitleAppearance) {
+    if (!appearanceDefinition) return;
+    returnFocusRef.current = `subtitle-appearance-${key}`;
+    setPicker({ ...appearanceDefinition, key: `appearance:${key}`, label: key === "fontSize" ? "Font size" : key === "fontFamily" ? "Font family" : key === "fontColor" ? "Font color" : key === "textOpacity" ? "Text opacity" : key === "backgroundColor" ? "Background color" : key === "backgroundStyle" ? "Background style" : key === "backgroundOpacity" ? "Background opacity" : key === "textOutline" ? "Text outline" : key === "textOutlineColor" ? "Outline color" : "Position", value_schema: { type: "enum", values: appearanceOptions[key].map(option => ({ label: option.label, value: option.value as string | number | boolean })) } });
+  }
+  function renderCardPresentation() {
+    const definition = definitions.get("ui.card_presentation");
+    if (!definition) return null;
+    return <section className="settings-group"><h3>Cards & Posters</h3><button data-tv-focusable="true" data-setting-key="poster-size" className="option-row settings-row" onClick={() => { returnFocusRef.current = "poster-size"; setPicker({ ...definition, key: "appearance:posterSize", label: "Poster size" }); }}><span>Poster size</span><strong>{posterSize[0].toUpperCase() + posterSize.slice(1)}</strong></button><p className="settings-row-hint">Changes poster size across browse and home rails.</p></section>;
+  }
+
+  async function chooseAppearance(value: unknown) {
+    if (!picker?.key.startsWith("appearance:")) return;
+    const field = picker.key.slice("appearance:".length);
+    setPicker(null);
+    if (field === "posterSize") {
+      const definition = definitions.get("ui.card_presentation");
+      if (!definition) return;
+      const next = String(value);
+      setPosterSize(next);
+      try { await putSetting(session, definition, { poster_size: next, caption: "title_metadata" }); }
+      catch (reason) { setError(reason instanceof Error ? reason.message : "Could not save poster size."); }
+      requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-setting-key='poster-size']")?.focus());
+      return;
+    }
+    const key = field as keyof SubtitleAppearance;
+    const next = { ...subtitleAppearance, [key]: value };
+    setSubtitleAppearance(next);
+    try {
+      if (subtitleDeviceOnly) await putDeviceSubtitleAppearance(session, next);
+      else if (appearanceDefinition) await putSetting(session, appearanceDefinition, next);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not save subtitle appearance.");
+    }
+    requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-setting-key='subtitle-appearance-${key}']`)?.focus());
+  }
+  function renderSubtitleAppearance() {
+    if (!appearanceDefinition) return null;
+    const fields: Array<[keyof SubtitleAppearance, string]> = [["fontSize", "Font size"], ["fontFamily", "Font family"], ["fontColor", "Font color"], ["textOpacity", "Text opacity"], ["backgroundStyle", "Background style"], ["backgroundColor", "Background color"], ["backgroundOpacity", "Background opacity"], ["textOutline", "Text outline"], ["textOutlineColor", "Outline color"], ["position", "Position"]];
+    const values = (appearance: SubtitleAppearance) => fields.map(([key, label]) => <button key={key} data-tv-focusable="true" data-setting-key={`subtitle-appearance-${key}`} className="option-row settings-row" onClick={() => changeAppearance(key)}><span>{label}</span><strong>{String(appearance[key])}</strong></button>);
+    return <section className="settings-group"><h3>Appearance</h3>
+      <button data-tv-focusable="true" className="option-row settings-row" onClick={async () => {
+        const next = !subtitleDeviceOnly; setSubtitleDeviceOnly(next);
+        try {
+          if (next) await putDeviceSubtitleAppearance(session, subtitleAppearance);
+          else {
+            await clearDeviceSubtitleAppearance(session);
+            const effective = await getEffectiveSettings(session, ["playback.subtitle_appearance"]);
+            const value = effective.get("playback.subtitle_appearance")?.value;
+            const restored = value && typeof value === "object" ? { ...DEFAULT_SUBTITLE_APPEARANCE, ...(value as Partial<SubtitleAppearance>) } : DEFAULT_SUBTITLE_APPEARANCE;
+            setSubtitleAppearance(restored);
+            setProfileSubtitleAppearance(restored);
+          }
+        } catch (reason) { setSubtitleDeviceOnly(!next); setError(reason instanceof Error ? reason.message : "Could not change subtitle scope."); }
+      }}><span>Only on this device</span><strong>{subtitleDeviceOnly ? "On" : "Off"}</strong></button>
+      {values(subtitleAppearance)}
+      <button data-tv-focusable="true" className="option-row settings-row" onClick={async () => {
+        setSubtitleAppearance(DEFAULT_SUBTITLE_APPEARANCE);
+        try {
+          if (subtitleDeviceOnly) await putDeviceSubtitleAppearance(session, DEFAULT_SUBTITLE_APPEARANCE);
+          else if (appearanceDefinition) await putSetting(session, appearanceDefinition, DEFAULT_SUBTITLE_APPEARANCE);
+        } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not reset subtitle appearance."); }
+      }}><span>Reset appearance</span></button>
+      <div className="subtitle-settings-preview" style={{ color: subtitleAppearance.fontColor, opacity: subtitleAppearance.textOpacity / 100, fontFamily: subtitleAppearance.fontFamily, fontSize: subtitleAppearance.fontSize === "small" ? "1rem" : subtitleAppearance.fontSize === "medium" ? "1.2rem" : subtitleAppearance.fontSize === "xlarge" ? "1.8rem" : subtitleAppearance.fontSize === "xxlarge" ? "2rem" : "1.5rem", background: subtitleAppearance.backgroundStyle === "none" ? "transparent" : subtitleAppearance.backgroundColor, textShadow: subtitleAppearance.backgroundStyle === "shadow" ? "0 2px 5px #000" : undefined, WebkitTextStroke: subtitleAppearance.textOutline ? `1px ${subtitleAppearance.textOutlineColor}` : undefined }}>A live subtitle preview</div>
+    </section>;
+  }
+
   let pane;
   if (category === "server") {
     pane = (
@@ -265,8 +370,12 @@ export function SettingsScreen({
     );
   } else if (!contract) {
     pane = error ? <p className="settings-error">{error}</p> : <LoadingState />;
+  } else if (category === "subtitles") {
+    pane = <>{renderGroups(keysByCategory.subtitles)}{renderSubtitleAppearance()}</>;
+  } else if (category === "general") {
+    pane = <>{renderGroups(keysByCategory.general)}{renderSubtitleAppearance()}</>;
   } else {
-    pane = renderGroups(keysByCategory[category]);
+    pane = renderGroups(keysByCategory.playback);
   }
 
   const current = picker ? values.get(picker.key) : undefined;
@@ -306,9 +415,9 @@ export function SettingsScreen({
       {picker && contract ? (
         <ChoicePicker
           title={picker.label}
-          choices={choicesFor(picker, contract)}
-          current={current}
-          onPick={value => pick(picker, value)}
+          choices={picker.key.startsWith("appearance:") ? appearanceOptions[picker.key.slice("appearance:".length)] : choicesFor(picker, contract)}
+          current={picker.key === "appearance:posterSize" ? posterSize : picker.key.startsWith("appearance:") ? subtitleAppearance[picker.key.slice("appearance:".length) as keyof SubtitleAppearance] : current}
+          onPick={value => picker.key.startsWith("appearance:") ? void chooseAppearance(value) : pick(picker, value)}
           onClose={closePicker}
         />
       ) : null}

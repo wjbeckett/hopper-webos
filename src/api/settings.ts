@@ -68,3 +68,34 @@ export function clearSetting(session: Session, definition: SettingDefinition) {
     headers: deviceHeaders()
   });
 }
+
+export type SubtitleAppearance = {
+  fontSize: "small" | "medium" | "large" | "xlarge" | "xxlarge";
+  fontFamily: string;
+  fontColor: string;
+  textOpacity: number;
+  backgroundColor: string;
+  backgroundStyle: "box" | "shadow" | "outline" | "none";
+  backgroundOpacity: number;
+  textOutline: boolean;
+  textOutlineColor: string;
+  position: "bottom" | "lower-third" | "top";
+};
+
+export const DEFAULT_SUBTITLE_APPEARANCE: SubtitleAppearance = {
+  fontSize: "large", fontFamily: "sans-serif", fontColor: "#ffffff", textOpacity: 100,
+  backgroundColor: "#000000", backgroundStyle: "shadow", backgroundOpacity: 75,
+  textOutline: false, textOutlineColor: "#000000", position: "bottom"
+};
+
+export function putDeviceSubtitleAppearance(session: Session, appearance: SubtitleAppearance) {
+  return requestV2<unknown>(session, "/settings/device/subtitle-appearance", {
+    method: "PUT", headers: deviceHeaders(), body: JSON.stringify({ value: JSON.stringify(appearance) })
+  });
+}
+
+export function clearDeviceSubtitleAppearance(session: Session) {
+  return requestV2<unknown>(session, "/settings/device/subtitle-appearance", {
+    method: "DELETE", headers: deviceHeaders()
+  });
+}

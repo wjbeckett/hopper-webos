@@ -4128,3 +4128,14 @@ body {
 .settings-picker { width: min(560px, 80vw); }
 .settings-picker-list { max-height: 60vh; overflow-y: auto; }
 .settings-confirm p { margin: 0 0 14px; opacity: .7; }
+
+.subtitle-settings-preview {
+  margin-top: 14px;
+  min-height: 120px;
+  display: grid;
+  place-items: end center;
+  padding: 22px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #34383f, #101113 65%);
+  text-align: center;
+}

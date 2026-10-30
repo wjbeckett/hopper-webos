@@ -57,7 +57,7 @@ Follow the official Silo TV clients:
 - media-type tabs
 - Calendar
 - Search
-- profile/settings
+- Profile menu with focus trapping and Back-to-profile-button restoration. Settings now has an Android-style rail/detail pane for General, Playback, Subtitles, and Server; server-manifest-driven playback and subtitle preferences; card poster size; theme music; and editable subtitle appearance with a live preview. Settings writes use the native v2 values API (and the dedicated device subtitle-appearance endpoint). Remaining parity: Home Sections editor, device/client-local playback controls, subtitle match-device mode, diagnostics, server management and privacy policy, per-setting “Use Profile Default”, and live/physical-TV D-pad verification.
 - Continue Watching
 - Recently Added/Released
 - curated recommendations
