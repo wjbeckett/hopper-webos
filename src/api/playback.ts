@@ -1,6 +1,6 @@
 import { probePlaybackCapabilities } from "../platform/capabilities";
 import type { Session, SiloItem } from "../types";
-import { siloRequest } from "./silo";
+import { requestV2, siloRequest } from "./silo";
 
 export type AudioTrack = { index?: number; codec?: string; channels?: number; layout?: string; language?: string; title?: string; embedded_title?: string; default?: boolean };
 export type SubtitleTrack = { index?: number; codec?: string; language?: string; title?: string; embedded_title?: string; forced?: boolean; hearing_impaired?: boolean; default?: boolean; external?: boolean; source?: string; file_name?: string };
@@ -102,7 +102,7 @@ export type FileMarkers = { file_id: string; intro: MarkerSegment | null; credit
 
 async function optionalSiloJson<T>(session: Session, path: string): Promise<T | null> {
   try {
-    return await siloRequest<T>(session, path);
+    return await requestV2<T>(session, path);
   } catch (reason) {
     if (reason instanceof Error && /: 404[ :]/.test(reason.message)) return null;
     throw reason;

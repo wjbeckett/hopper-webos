@@ -52,7 +52,7 @@ export function siloRequest<T>(session: Session, path: string, init: RequestInit
   return requestApi<T>(session, path, init, "v1");
 }
 
-function requestV2<T>(session: Session, path: string, init: RequestInit = {}) {
+export function requestV2<T>(session: Session, path: string, init: RequestInit = {}) {
   return requestApi<T>(session, path, init, "v2");
 }
 
