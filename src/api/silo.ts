@@ -53,10 +53,15 @@ export function requestV2<T>(session: Session, path: string, init: RequestInit =
   return requestApi<T>(session, path, init, "v2");
 }
 
+/** Absolute v2 URL for a raw (non-JSON) request such as the bandwidth probe. */
+export function v2Url(session: Session, path: string): string {
+  return apiUrl(session.serverUrl, path, "v2");
+}
+
 type RefreshResponse = { access_token: string; refresh_token: string; expires_in?: number };
 const refreshes = new Map<string, Promise<void>>();
 
-async function refreshSession(session: Session): Promise<void> {
+export async function refreshSession(session: Session): Promise<void> {
   const key = `${session.serverUrl}|${session.userId}`;
   const existing = refreshes.get(key);
   if (existing) return existing;
