@@ -13,6 +13,7 @@ import { HomeSectionsEditor } from "../components/HomeSectionsEditor";
 import { clientIdentity } from "../platform/device";
 import { SettingsGlyph } from "../components/icons";
 import { isChildProfile } from "../api/diagnostics";
+import { clearClientLogs, exportClientLogs, getClientLogCount, getClientLogEntries, isDebugLoggingEnabled, setDebugLoggingEnabled } from "../core/clientLogs";
 import { LoadingState } from "../components/LoadingState";
 import { TvButton } from "../components/TvButton";
 import type { Session } from "../types";
@@ -25,7 +26,7 @@ const categories: Array<{ id: Category; label: string; blurb: string; pane: stri
   { id: "general", label: "General", blurb: "App and navigation", pane: "App-level options for this TV." },
   { id: "playback", label: "Playback", blurb: "Quality and episodes", pane: "Streaming quality and episode behavior for this TV." },
   { id: "subtitles", label: "Subtitles", blurb: "Language and appearance", pane: "Language, behavior, and on-screen appearance." },
-  { id: "diagnostics", label: "Diagnostics", blurb: "About diagnostics on this TV", pane: "Diagnostics collection and upload are unavailable in the webOS client." },
+  { id: "diagnostics", label: "Diagnostics", blurb: "Local debug log export", pane: "Review and export debug logs from this TV. Nothing is sent to Silo." },
   { id: "server", label: "Server", blurb: "Connection and version", pane: "The Silo server this TV is connected to." }
 ];
 
@@ -290,6 +291,10 @@ export function SettingsScreen({
   const [picker, setPicker] = useState<PickerRequest | null>(null);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [diagEligible, setDiagEligible] = useState<boolean | null>(null);
+  const [debugLogging, setDebugLogging] = useState(isDebugLoggingEnabled);
+  const [debugLogCount, setDebugLogCount] = useState(getClientLogCount);
+  const [debugLogs, setDebugLogs] = useState(getClientLogEntries);
+  const [showDebugLogs, setShowDebugLogs] = useState(false);
   const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
   const [privacyQr, setPrivacyQr] = useState("");
   const [subtitleAppearance, setSubtitleAppearance] = useState<SubtitleAppearance>(DEFAULT_SUBTITLE_APPEARANCE);
@@ -872,12 +877,23 @@ export function SettingsScreen({
     return (
       <>
         <section className="settings-group">
-          <h3>Feature State</h3>
-          <div className="option-row settings-static"><span>Status</span><strong>Unavailable for this client</strong></div>
+          <h3>Local Debug Logs</h3>
+          {toggleRow("diag-debug-logging", "Debug Logging", debugLogging, () => {
+            const next = !debugLogging;
+            setDebugLoggingEnabled(next);
+            setDebugLogging(next);
+            setDebugLogCount(getClientLogCount());
+          })}
+          <button data-tv-focusable={debugLogCount ? "true" : undefined} data-setting-key="diag-view-logs" disabled={!debugLogCount} className={`option-row settings-row${debugLogCount ? "" : " is-dim"}`} onClick={() => setShowDebugLogs(true)}><span>View Debug Logs</span><strong>{debugLogCount ? `${debugLogCount} entries` : "No logs yet"}</strong></button>
+          <button data-tv-focusable={debugLogCount ? "true" : undefined} data-setting-key="diag-export-logs" disabled={!debugLogCount} className={`option-row settings-row${debugLogCount ? "" : " is-dim"}`} onClick={() => {
+            if (!exportClientLogs()) return;
+            setError("");
+          }}><span>Export Logs (.zip)</span></button>
+          <p className="settings-footer">When enabled, new app logs and errors are recorded on this TV until cleared. Export creates a ZIP on-device and never sends it to Silo. Review it before sharing; URLs and sensitive fields are redacted. Exports require a browser or webOS version that supports file downloads.</p>
         </section>
         <section className="settings-group">
-          <h3>Diagnostics</h3>
-          <p className="settings-footer">This community-built webOS client does not collect or send diagnostics to Silo. The Silo maintainer does not accept diagnostic reports from third-party clients.</p>
+          <h3>Privacy</h3>
+          <p className="settings-footer">The Silo maintainer does not accept diagnostic reports from third-party clients. This webOS app does not upload logs.</p>
         </section>
       </>
     );
@@ -911,6 +927,12 @@ export function SettingsScreen({
   } else {
     pane = renderPlaybackPane();
   }
+
+  useEffect(() => {
+    const refresh = () => { setDebugLogCount(getClientLogCount()); setDebugLogs(getClientLogEntries()); };
+    window.addEventListener("silo-debug-log-updated", refresh);
+    return () => window.removeEventListener("silo-debug-log-updated", refresh);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1021,6 +1043,20 @@ export function SettingsScreen({
             requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-setting-key='home-sections']")?.focus());
           }}
         />
+      ) : null}
+
+      {showDebugLogs ? (
+        <div className="details-more-scrim" data-modal="true" onClick={() => { setShowDebugLogs(false); refocus("diag-view-logs"); }}>
+          <div className="details-more settings-log-view" role="dialog" aria-label="Debug logs" onClick={event => event.stopPropagation()}>
+            <h2>Debug Logs</h2>
+            <pre>{debugLogs.map(entry => `${entry.at} ${entry.level.toUpperCase()} ${entry.message}`).join("\n") || "No logs recorded."}</pre>
+            <div className="settings-confirm-actions">
+              <TvButton autoFocus className="secondary" onClick={() => { setShowDebugLogs(false); requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-setting-key='diag-view-logs']")?.focus()); }}>Close</TvButton>
+              <TvButton className="secondary" data-tv-focusable={debugLogCount ? "true" : "false"} disabled={!debugLogCount} onClick={() => clearClientLogs()}>Clear Logs</TvButton>
+              <TvButton data-tv-focusable={debugLogCount ? "true" : "false"} disabled={!debugLogCount} onClick={() => { exportClientLogs(); }}>Export ZIP</TvButton>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {confirmReset ? (

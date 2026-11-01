@@ -4250,3 +4250,6 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 .settings-footer { margin: 4px 0 0; padding: 0 24px; font-size: 28px; line-height: 36px; color: rgba(255,255,255,.6); }
 
 .settings-row.is-dim { opacity: 0.45; }
+
+.settings-log-view { width: min(1200px, 88vw); max-height: 84vh; display: flex; flex-direction: column; }
+.settings-log-view pre { max-height: 58vh; overflow: auto; margin: 12px 0 24px; padding: 18px; border-radius: 12px; background: rgba(255,255,255,.06); color: rgba(255,255,255,.8); font: 17px/1.45 ui-monospace, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }

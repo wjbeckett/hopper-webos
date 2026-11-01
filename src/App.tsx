@@ -33,6 +33,9 @@ import { publishRailsChanged } from "./core/watchState";
 import { connectEventsSocket } from "./api/events";
 import type { Session, SiloCollection, SiloItem, SiloLibrary, SiloProfile } from "./types";
 import { LoadingState } from "./components/LoadingState";
+import { installClientLogCapture } from "./core/clientLogs";
+
+installClientLogCapture();
 
 type AuthRoute = "server-setup" | "device-login" | "password-login";
 type DetailRoute =
