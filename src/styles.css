@@ -4248,3 +4248,5 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 .home-sections-footer { margin: 0; font-size: 28px; line-height: 36px; color: rgba(255,255,255,.6); }
 
 .settings-footer { margin: 4px 0 0; padding: 0 24px; font-size: 28px; line-height: 36px; color: rgba(255,255,255,.6); }
+
+.settings-row.is-dim { opacity: 0.45; }

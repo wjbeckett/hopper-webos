@@ -12,11 +12,15 @@ import type { ProfileLaunchBehavior } from "../core/profileLaunch";
 import { HomeSectionsEditor } from "../components/HomeSectionsEditor";
 import { clientIdentity } from "../platform/device";
 import { SettingsGlyph } from "../components/icons";
+import { getDiagnosticsCapabilities, isChildProfile } from "../api/diagnostics";
+import type { DiagnosticsCapabilities } from "../api/diagnostics";
+import { availabilityFor, consentTitle, formatShortDateTime, readDiagnosticsSettings, statusTitle, writeConsent, writeDebugLogging } from "../core/diagnostics";
+import type { DiagnosticsConsent } from "../core/diagnostics";
 import { LoadingState } from "../components/LoadingState";
 import { TvButton } from "../components/TvButton";
 import type { Session } from "../types";
 
-type Category = "general" | "playback" | "subtitles" | "server";
+type Category = "general" | "playback" | "subtitles" | "diagnostics" | "server";
 type Choice = { label: string; value: unknown; detail?: string };
 type PickerRequest = { title: string; choices: Choice[]; current: unknown; returnKey: string; onPick: (value: unknown) => void };
 
@@ -24,6 +28,7 @@ const categories: Array<{ id: Category; label: string; blurb: string; pane: stri
   { id: "general", label: "General", blurb: "App and navigation", pane: "App-level options for this TV." },
   { id: "playback", label: "Playback", blurb: "Quality and episodes", pane: "Streaming quality and episode behavior for this TV." },
   { id: "subtitles", label: "Subtitles", blurb: "Language and appearance", pane: "Language, behavior, and on-screen appearance." },
+  { id: "diagnostics", label: "Diagnostics", blurb: "Review and send diagnostics to this Silo server.", pane: "Crash reports, debug logging, and diagnostics for this TV." },
   { id: "server", label: "Server", blurb: "Connection and version", pane: "The Silo server this TV is connected to." }
 ];
 
@@ -287,6 +292,10 @@ export function SettingsScreen({
   const [error, setError] = useState("");
   const [picker, setPicker] = useState<PickerRequest | null>(null);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
+  const [diagCaps, setDiagCaps] = useState<DiagnosticsCapabilities | null>(null);
+  const [diagEligible, setDiagEligible] = useState<boolean | null>(null);
+  const [diagSettings, setDiagSettings] = useState(readDiagnosticsSettings);
+  const [confirmAlways, setConfirmAlways] = useState(false);
   const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
   const [privacyQr, setPrivacyQr] = useState("");
   const [subtitleAppearance, setSubtitleAppearance] = useState<SubtitleAppearance>(DEFAULT_SUBTITLE_APPEARANCE);
@@ -865,8 +874,64 @@ export function SettingsScreen({
     </section>;
   }
 
+  function renderDiagnosticsPane() {
+    const availability = availabilityFor(diagCaps, diagEligible === true);
+    const serverName = activeServer?.name || "This Silo server";
+    const consent = diagSettings.consent;
+    const retention = diagCaps?.retention_days ?? 30;
+    const change = (next: () => void) => { next(); setDiagSettings(readDiagnosticsSettings()); };
+    return (
+      <>
+        <section className="settings-group">
+          <h3>Feature State</h3>
+          <div className="option-row settings-static"><span>Status</span><strong>{statusTitle[availability]}</strong></div>
+          <div className="option-row settings-static"><span>Destination</span><strong>{serverName}</strong></div>
+        </section>
+        <section className="settings-group">
+          <h3>Pending Reports (0)</h3>
+          <div className="option-row settings-static"><span>Reports</span><strong>None</strong></div>
+        </section>
+        <section className="settings-group">
+          <h3>Capture</h3>
+          {valueRow("diag-destination", "Send Reports To", "This Silo server", () => setPicker({ title: "Send Reports To", choices: [{ label: "This Silo server", value: "self" }], current: "self", returnKey: "diag-destination", onPick: () => closePicker() }))}
+          {consent === "never" ? null : toggleRow("diag-debug", "Debug Logging", diagSettings.debugLogging, () => change(() => writeDebugLogging(!diagSettings.debugLogging)))}
+          {valueRow("diag-consent", "Crash Reports", consentTitle[consent], () => setPicker({
+            title: "Crash Reports",
+            choices: (["ask", "always", "never"] as DiagnosticsConsent[]).map(value => ({ label: consentTitle[value], value })),
+            current: consent,
+            returnKey: "diag-consent",
+            onPick: value => {
+              setPicker(null);
+              if (value === "always" && consent !== "always") setConfirmAlways(true);
+              else { change(() => writeConsent(value as DiagnosticsConsent)); refocus("diag-consent"); }
+            }
+          }))}
+          <p className="settings-footer">Crash report consent is tied to this server account. Debug logging is a setting for this TV. Reports are kept for up to {retention} days.</p>
+        </section>
+        <section className="settings-group">
+          <h3>Manual Report</h3>
+          <button data-tv-focusable="true" data-setting-key="diag-send" aria-disabled="true" className="option-row settings-row is-dim"><span>Send Diagnostics Now</span></button>
+          <p className="settings-footer">This server does not accept diagnostics from LG webOS TVs yet, so reports can't be created here.</p>
+        </section>
+        <section className="settings-group">
+          <h3>Timed Capture</h3>
+          <button data-tv-focusable="true" data-setting-key="diag-timed" aria-disabled="true" className="option-row settings-row is-dim"><span>Start Diagnostic Capture</span></button>
+          <p className="settings-footer">Records logs until you stop it, then opens the report for review.</p>
+        </section>
+        <section className="settings-group">
+          <h3>Sent History</h3>
+          {diagSettings.sent.length === 0
+            ? <div className="option-row settings-static"><span>Reports</span><strong>None</strong></div>
+            : diagSettings.sent.slice(0, 4).map(sent => <div key={sent.shortId} className="option-row settings-static"><span>{sent.shortId}</span><strong>{formatShortDateTime(sent.sentAt)}</strong></div>)}
+        </section>
+      </>
+    );
+  }
+
   let pane;
-  if (category === "server") {
+  if (category === "diagnostics") {
+    pane = renderDiagnosticsPane();
+  } else if (category === "server") {
     pane = (
       <>
         <section className="settings-group">
@@ -892,6 +957,17 @@ export function SettingsScreen({
     pane = renderPlaybackPane();
   }
 
+  useEffect(() => {
+    let cancelled = false;
+    void isChildProfile(session).then(child => { if (!cancelled) setDiagEligible(child === false); }).catch(() => { if (!cancelled) setDiagEligible(false); });
+    void getDiagnosticsCapabilities(session).then(caps => { if (!cancelled) setDiagCaps(caps); }).catch(() => { if (!cancelled) setDiagCaps(null); });
+    return () => { cancelled = true; };
+  }, [session]);
+
+  useEffect(() => {
+    if (category === "diagnostics" && diagEligible !== true) setCategory("general");
+  }, [category, diagEligible]);
+
   function closePicker() {
     const key = picker?.returnKey ?? null;
     setPicker(null);
@@ -910,7 +986,7 @@ export function SettingsScreen({
           </span>
           <SettingsGlyph name="chevron" className="settings-chevron" />
         </button>
-        {categories.map(entry => (
+        {categories.filter(entry => entry.id !== "diagnostics" || diagEligible === true).map(entry => (
           <button
             key={entry.id}
             data-tv-focusable="true"
@@ -1001,6 +1077,19 @@ export function SettingsScreen({
             <div className="settings-confirm-actions">
               <TvButton className="secondary" onClick={() => { setConfirmReset(false); refocus("reset-playback"); }}>Cancel</TvButton>
               <TvButton className="destructive" autoFocus onClick={() => { setConfirmReset(false); void resetPlaybackOverrides(); refocus("reset-playback"); }}>Use Profile Settings</TvButton>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {confirmAlways ? (
+        <div className="details-more-scrim" data-modal="true" onClick={() => { setConfirmAlways(false); refocus("diag-consent"); }}>
+          <div className="details-more settings-confirm" role="alertdialog" aria-label="Always send crash reports" onClick={event => event.stopPropagation()}>
+            <h2>Always send crash reports?</h2>
+            <p>Future eligible reports may upload automatically until you change this setting.</p>
+            <div className="settings-confirm-actions">
+              <TvButton className="secondary" onClick={() => { setConfirmAlways(false); refocus("diag-consent"); }}>Cancel</TvButton>
+              <TvButton autoFocus onClick={() => { setConfirmAlways(false); writeConsent("always"); setDiagSettings(readDiagnosticsSettings()); refocus("diag-consent"); }}>Always send</TvButton>
             </div>
           </div>
         </div>
