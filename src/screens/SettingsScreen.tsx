@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import QRCode from "qrcode";
+import { serverRegistry } from "../core/serverRegistry";
 import { clearDeviceSubtitleAppearance, clearScopedSetting, clearSetting, DEFAULT_SUBTITLE_APPEARANCE, getEffectiveSettings, getSettingsContract, isClientLocal, putDeviceSubtitleAppearance, putScopedSetting, putSetting } from "../api/settings";
 import type { SettingDefinition, SettingOption, SettingsContract, SubtitleAppearance } from "../api/settings";
 import { getPlaybackConnection, resetLearnedLimit, runSpeedTest } from "../api/playbackConnection";
@@ -285,6 +287,8 @@ export function SettingsScreen({
   const [error, setError] = useState("");
   const [picker, setPicker] = useState<PickerRequest | null>(null);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
+  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
+  const [privacyQr, setPrivacyQr] = useState("");
   const [subtitleAppearance, setSubtitleAppearance] = useState<SubtitleAppearance>(DEFAULT_SUBTITLE_APPEARANCE);
   const [subtitleDeviceOnly, setSubtitleDeviceOnly] = useState(false);
   const [posterSize, setPosterSize] = useState("standard");
@@ -304,9 +308,19 @@ export function SettingsScreen({
   const [homeEditor, setHomeEditor] = useState(false);
   const [profileSubtitleAppearance, setProfileSubtitleAppearance] = useState<SubtitleAppearance>(DEFAULT_SUBTITLE_APPEARANCE);
   const railRef = useRef<HTMLDivElement | null>(null);
+  const activeServer = serverRegistry.active();
   const returnFocusRef = useRef<string | null>(null);
 
   const allKeys = useMemo(() => [...Object.values(keysByCategory).flat().flatMap(group => group.keys), "ui.card_presentation", "playback.subtitle_appearance", "playback.preferred_quality", "playback.max_bitrate_kbps", "playback.audio_language", "playback.buffering_quality_mode", "playback.next_up_prompt_seconds", "playback.intro_skip_mode", "playback.auto_play_next", "playback.auto_skip_credits", "playback.auto_skip_recap", "player.dolby_vision_enabled", "player.dv_profile7_hdr10_fallback", "player.match_frame_rate", "player.resume_rewind_seconds", "player.passout_threshold", "player.video_skip_back_seconds", "player.video_skip_forward_seconds", "player.audiobook_skip_back_seconds", "player.audiobook_skip_forward_seconds"], []);
+
+  useEffect(() => {
+    if (!showPrivacyPolicy) return;
+    let alive = true;
+    QRCode.toDataURL("https://siloserver.org/privacy", { width: 320, margin: 2, errorCorrectionLevel: "M" })
+      .then(value => { if (alive) setPrivacyQr(value); })
+      .catch(() => { if (alive) setPrivacyQr(""); });
+    return () => { alive = false; };
+  }, [showPrivacyPolicy]);
 
   useEffect(() => {
     let alive = true;
@@ -856,14 +870,15 @@ export function SettingsScreen({
     pane = (
       <>
         <section className="settings-group">
-          <h3>Active server</h3>
-          <div className="option-row settings-static"><span>Address</span><strong>{session.serverUrl}</strong></div>
-          <div className="option-row settings-static"><span>Signed in as</span><strong>{session.username}</strong></div>
-          <button data-tv-focusable="true" className="option-row settings-row" onClick={onChangeServer}><span>Switch or add server</span></button>
+          <h3>Active Server</h3>
+          <div className="option-row settings-static"><span>Server</span><strong>{activeServer?.name || "Not configured"}</strong></div>
+          {session.serverUrl && activeServer?.name !== session.serverUrl ? <div className="option-row settings-static"><span>Address</span><strong>{session.serverUrl}</strong></div> : null}
+          <button data-tv-focusable="true" className="option-row settings-row" onClick={onChangeServer}><span>Manage Servers</span></button>
         </section>
         <section className="settings-group">
           <h3>About</h3>
-          <div className="option-row settings-static"><span>App</span><strong>{clientIdentity.client} {clientIdentity.version}</strong></div>
+          <div className="option-row settings-static"><span>App Version</span><strong>{clientIdentity.version}</strong></div>
+          <button data-tv-focusable="true" data-setting-key="privacy-policy" className="option-row settings-row" onClick={() => setShowPrivacyPolicy(true)}><span>Privacy Policy</span></button>
         </section>
       </>
     );
@@ -930,6 +945,22 @@ export function SettingsScreen({
         {error && contract ? <p className="settings-error">{error}</p> : null}
         {pane}
       </section>
+
+      {showPrivacyPolicy ? (
+        <div className="details-more-scrim" data-modal="true" onClick={() => setShowPrivacyPolicy(false)} onKeyDown={event => {
+          if (["Escape", "Backspace", "Back", "GoBack", "BrowserBack"].includes(event.key) || event.keyCode === 461 || event.keyCode === 10009) {
+            event.preventDefault(); event.stopPropagation(); setShowPrivacyPolicy(false); refocus("privacy-policy");
+          }
+        }}>
+          <div className="details-more settings-privacy-dialog" role="dialog" aria-label="Privacy Policy" onClick={event => event.stopPropagation()}>
+            <h2>Privacy Policy</h2>
+            <p>Scan this code with your phone, or type the address below, to read the full policy.</p>
+            {privacyQr ? <img className="settings-privacy-qr" src={privacyQr} alt="QR code for the Silo privacy policy" /> : <LoadingState />}
+            <strong>https://siloserver.org/privacy</strong>
+            <TvButton autoFocus onClick={() => { setShowPrivacyPolicy(false); refocus("privacy-policy"); }}>Done</TvButton>
+          </div>
+        </div>
+      ) : null}
 
       {picker ? <ChoicePicker picker={picker} onClose={closePicker} /> : null}
 
