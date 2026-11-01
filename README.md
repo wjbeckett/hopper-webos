@@ -26,6 +26,7 @@ An early, community-built LG webOS TV client for the [Silo](https://silo.tv/) se
 - Resume, seek, chapter markers, and playback progress reporting
 - Audio track, subtitle track, file version, and quality selection
 - Profile appearance themes and text preferences
+- Android TV-style Settings for General, Playback, Subtitles, Diagnostics policy notice, and Server; the community webOS client does not collect or upload diagnostics to Silo
 - Build, package, install, launch, and inspect helpers for LG TVs
 
 ## Project status

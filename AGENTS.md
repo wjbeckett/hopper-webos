@@ -46,7 +46,7 @@ This is a 10-foot UI. Every interactive element must be reachable with Up/Down/L
 
 ## Android TV parity
 - Treat the current Silo Android TV app as the behavioral and visual reference for screens, menus, focus/back flows, and server-backed actions.
-- Before claiming parity, compare every exposed destination and meaningful workflow against Android TV; call out unimplemented or server-unverified areas explicitly.
+- Before claiming parity, compare every exposed destination and meaningful workflow against Android TV; call out unimplemented or server-unverified areas explicitly. Diagnostics is an explicit policy exception: the Silo maintainer will not accept reports from third-party clients, so the webOS app must not integrate with the hosted diagnostics collector or imply that it collects/uploads reports.
 - Keep Silo endpoint and payload handling in `src/api`; mirror Android's documented native Silo contracts rather than inventing routes or substituting Jellyfin-compatible APIs.
 - Recreate Android transitions with webOS-safe CSS and DOM behavior; avoid platform-specific Compose assumptions.
 
