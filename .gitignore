@@ -7,4 +7,4 @@ release/
 .env.local
 .env.*.local
 .DS_Store
-silo-android/
+silo-android
