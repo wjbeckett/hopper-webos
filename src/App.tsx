@@ -677,7 +677,7 @@ export default function App() {
 
   return (
     <div className={`app-shell ${section === "library" || (["movies", "series", "music", "audiobooks"].includes(section) && (libraryLanding === "browse" || libraryLanding === "alphabet" || browseDetail !== null)) ? "app-shell-library" : ""} ${section === "home" && route.name === "main" ? "app-shell-home" : ""}`}>
-      <TopNav
+      {section !== "settings" && <TopNav
         active={section}
         libraries={libraries}
         requestsAvailable={requestsAvailable}
@@ -699,7 +699,7 @@ export default function App() {
         onLibraries={() => { setSection("library"); setRoute({ name: "main" }); }}
         onHistory={() => { setSection("history"); setRoute({ name: "main" }); }}
         onProfiles={() => { setSection("profiles"); setRoute({ name: "main" }); }}
-      />
+      />}
       {body}
     </div>
   );

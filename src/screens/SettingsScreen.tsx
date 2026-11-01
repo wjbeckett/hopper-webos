@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { clearDeviceSubtitleAppearance, clearSetting, DEFAULT_SUBTITLE_APPEARANCE, getEffectiveSettings, getSettingsContract, isClientLocal, putDeviceSubtitleAppearance, putSetting } from "../api/settings";
 import type { SettingDefinition, SettingOption, SettingsContract, SubtitleAppearance } from "../api/settings";
 import { clientIdentity } from "../platform/device";
+import { SettingsGlyph } from "../components/icons";
 import { LoadingState } from "../components/LoadingState";
 import { TvButton } from "../components/TvButton";
 import type { Session } from "../types";
@@ -9,11 +10,11 @@ import type { Session } from "../types";
 type Category = "general" | "playback" | "subtitles" | "server";
 type Choice = { label: string; value: unknown; detail?: string };
 
-const categories: Array<{ id: Category; label: string; blurb: string }> = [
-  { id: "general", label: "General", blurb: "App and navigation" },
-  { id: "playback", label: "Playback", blurb: "Quality and episodes" },
-  { id: "subtitles", label: "Subtitles", blurb: "Language and behavior" },
-  { id: "server", label: "Server", blurb: "Connection and account" }
+const categories: Array<{ id: Category; label: string; blurb: string; pane: string }> = [
+  { id: "general", label: "General", blurb: "App and navigation", pane: "App-level options for this TV." },
+  { id: "playback", label: "Playback", blurb: "Quality and episodes", pane: "Streaming quality and episode behavior for this TV." },
+  { id: "subtitles", label: "Subtitles", blurb: "Language and appearance", pane: "Language, behavior, and on-screen appearance." },
+  { id: "server", label: "Server", blurb: "Connection and version", pane: "The Silo server this TV is connected to." }
 ];
 
 const keysByCategory: Record<Exclude<Category, "server">, Array<{ title: string; keys: string[] }>> = {
@@ -134,7 +135,13 @@ function ChoicePicker({ title, choices, current, onPick, onClose }: { title: str
   return (
     <div className="details-more-scrim" data-modal="true" onClick={onClose}>
       <div className="details-more settings-picker" role="dialog" aria-label={title} onClick={event => event.stopPropagation()}>
-        <h2>{title}</h2>
+        <div className="settings-picker-head">
+          <span>
+            <h2>{title}</h2>
+            <small>Choose an option</small>
+          </span>
+          <span className="settings-picker-hint"><SettingsGlyph name="undo" className="settings-chevron" /> Back to close</span>
+        </div>
         <div className="settings-picker-list">
           {choices.map(choice => {
             const selected = choice.value === current || (choice.value == null && current == null);
@@ -143,11 +150,11 @@ function ChoicePicker({ title, choices, current, onPick, onClose }: { title: str
                 key={String(choice.value)}
                 ref={selected ? selectedRef : undefined}
                 data-tv-focusable="true"
-                className="option-row"
+                className={`option-row${selected ? " is-selected" : ""}`}
                 onClick={() => onPick(choice.value)}
               >
-                <span>{choice.label}</span>
-                <small>{selected ? "Selected" : choice.detail ?? ""}</small>
+                <span>{choice.label}{choice.detail && !selected ? <small className="settings-picker-detail">{choice.detail}</small> : null}</span>
+                {selected ? <SettingsGlyph name="check" className="settings-check" /> : null}
               </button>
             );
           })}
@@ -292,13 +299,10 @@ export function SettingsScreen({
             key={definition.key}
             data-tv-focusable="true"
             data-setting-key={definition.key}
-            className="option-row settings-row"
+            className={`option-row settings-row${definition.value_schema.type === "boolean" ? " settings-toggle" : ""}${definition.value_schema.type === "boolean" && values.get(definition.key) ? " is-on" : ""}`}
             onClick={() => activate(definition)}
           >
-            <span>
-              {definition.label}
-              {definition.description ? <small className="settings-row-hint">{definition.description}</small> : null}
-            </span>
+            <span>{definition.label}</span>
             <strong>{describe(definition, values.get(definition.key), contract!)}</strong>
           </button>
         ))}
@@ -328,7 +332,7 @@ export function SettingsScreen({
   function renderCardPresentation() {
     const definition = definitions.get("ui.card_presentation");
     if (!definition) return null;
-    return <section className="settings-group"><h3>Cards & Posters</h3><button data-tv-focusable="true" data-setting-key="poster-size" className="option-row settings-row" onClick={() => { returnFocusRef.current = "poster-size"; setPicker({ ...definition, key: "appearance:posterSize", label: "Poster size" }); }}><span>Poster size</span><strong>{posterSize[0].toUpperCase() + posterSize.slice(1)}</strong></button><p className="settings-row-hint">Changes poster size across browse and home rails.</p></section>;
+    return <section className="settings-group"><h3>Cards & Posters</h3><button data-tv-focusable="true" data-setting-key="poster-size" className="option-row settings-row" onClick={() => { returnFocusRef.current = "poster-size"; setPicker({ ...definition, key: "appearance:posterSize", label: "Poster size" }); }}><span>Poster size</span><strong>{posterSize[0].toUpperCase() + posterSize.slice(1)}</strong></button></section>;
   }
 
   async function chooseAppearance(value: unknown) {
@@ -421,8 +425,12 @@ export function SettingsScreen({
       <nav className="settings-rail" ref={railRef} aria-label="Settings">
         <h1>Settings</h1>
         <button data-tv-focusable="true" className="settings-account" onClick={onSwitchProfile}>
-          <span className="settings-account-name">{session.username}</span>
-          <small>Switch profile</small>
+          <span className="settings-avatar" aria-hidden="true">{(session.username || "S").slice(0, 1).toUpperCase()}</span>
+          <span className="settings-account-text">
+            <span className="settings-account-name">{session.username}</span>
+            <small>Switch profile</small>
+          </span>
+          <SettingsGlyph name="chevron" className="settings-chevron" />
         </button>
         {categories.map(entry => (
           <button
@@ -434,16 +442,28 @@ export function SettingsScreen({
             onFocus={() => setCategory(entry.id)}
             onClick={() => document.querySelector<HTMLElement>(".settings-pane [data-tv-focusable='true']")?.focus()}
           >
-            <span>{entry.label}</span>
-            <small>{entry.blurb}</small>
+            <SettingsGlyph name={entry.id} />
+            <span className="settings-category-text">
+              <span>{entry.label}</span>
+              <small>{entry.blurb}</small>
+            </span>
           </button>
         ))}
         <button data-tv-focusable="true" data-settings-signout className="settings-category settings-signout" onClick={() => setConfirmSignOut(true)}>
-          <span>Sign Out</span>
+          <SettingsGlyph name="signout" />
+          <span className="settings-category-text"><span>Sign Out</span></span>
         </button>
+        <small className="settings-version">Silo {clientIdentity.version}</small>
       </nav>
 
       <section className="settings-pane" aria-label={categories.find(entry => entry.id === category)?.label}>
+        <header className="settings-pane-header">
+          <span className="settings-pane-tile"><SettingsGlyph name={category} /></span>
+          <span>
+            <h2>{categories.find(entry => entry.id === category)?.label}</h2>
+            <p>{categories.find(entry => entry.id === category)?.pane}</p>
+          </span>
+        </header>
         {error && contract ? <p className="settings-error">{error}</p> : null}
         {pane}
       </section>
@@ -463,8 +483,10 @@ export function SettingsScreen({
           <div className="details-more settings-confirm" role="alertdialog" aria-label="Sign out" onClick={event => event.stopPropagation()}>
             <h2>Sign out?</h2>
             <p>This TV goes back to the sign-in screen. Your profiles and watch history stay on the server.</p>
-            <TvButton onClick={onSignOut}>Sign out</TvButton>
-            <TvButton className="secondary" onClick={() => setConfirmSignOut(false)}>Cancel</TvButton>
+            <div className="settings-confirm-actions">
+              <TvButton className="secondary" onClick={() => setConfirmSignOut(false)}>Cancel</TvButton>
+              <TvButton className="destructive" onClick={onSignOut}>Sign out</TvButton>
+            </div>
           </div>
         </div>
       ) : null}

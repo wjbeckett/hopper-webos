@@ -4073,61 +4073,139 @@ body {
 }
 
 .settings-split {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
   display: grid;
-  grid-template-columns: 340px minmax(0, 1fr);
-  gap: 48px;
+  grid-template-columns: 490px minmax(0, 1fr);
+  column-gap: 52px;
+  align-items: start;
   max-width: none;
+  margin: 0;
+  padding: 64px 88px 56px;
+  overflow: hidden;
+  background: #000;
 }
 
 .settings-rail {
-  display: grid;
-  align-content: start;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  height: 100%;
 }
 
 .settings-rail h1 {
-  margin: 0 0 12px;
+  margin: 0 0 10px;
+  padding-left: 24px;
+  font-size: 48px;
+  line-height: 58px;
+  font-weight: 700;
 }
 
 .settings-account,
 .settings-category {
-  display: grid;
-  gap: 2px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
   width: 100%;
-  padding: 14px 18px;
-  border: 0;
-  border-radius: 13px;
-  color: white;
+  height: 100px;
+  padding: 0 24px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  color: #fff;
   background: transparent;
   text-align: left;
   font: inherit;
 }
 
-.settings-account { margin-bottom: 14px; background: rgba(255,255,255,.07); }
-.settings-category span { font-size: 1.1rem; font-weight: 700; }
+.settings-account { margin-bottom: 12px; background: rgba(255,255,255,.07); border-color: rgba(255,255,255,.09); }
+.settings-glyph { flex: none; width: 34px; height: 34px; }
+.settings-chevron { flex: none; width: 28px; height: 28px; opacity: .55; }
+.settings-check { flex: none; width: 32px; height: 32px; }
+.settings-category-text,
+.settings-account-text { display: grid; flex: 1; min-width: 0; gap: 0; }
+.settings-category-text span,
+.settings-account-name { font-size: 30px; line-height: 36px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .settings-category small,
-.settings-account small { color: rgba(255,255,255,.55); }
-.settings-category[aria-current="true"] { background: rgba(255,255,255,.12); }
+.settings-account small { font-size: 28px; line-height: 34px; color: inherit; opacity: .62; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.settings-avatar { flex: none; display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; background: #3A3A3C; font-size: 28px; font-weight: 700; }
+.settings-category[aria-current="true"] { background: rgba(255,255,255,.14); border-color: rgba(255,255,255,.10); }
 .settings-account:focus,
-.settings-category:focus { outline: none; background: #EDEDED; color: #0B0B0C; }
-.settings-account:focus small,
-.settings-category:focus small { color: rgba(11,11,12,.62); }
-.settings-account-name { font-weight: 700; }
-.settings-signout { margin-top: 24px; }
-.settings-signout span { color: #FF6B6B; }
-.settings-signout:focus span { color: #B3261E; }
+.settings-category:focus { outline: none; box-shadow: none; background: #EDEDED; border-color: transparent; color: #000; }
+.settings-signout { height: 80px; margin-top: auto; color: #D22F3F; }
+.settings-signout .settings-category-text span { font-size: 28px; }
+.settings-signout:focus { color: #B00020; }
+.settings-version { padding: 8px 0 0 24px; font-size: 28px; line-height: 36px; opacity: .7; }
+.settings-rail .settings-version { color: rgba(255,255,255,.7); }
 
-.settings-pane { min-width: 0; padding-bottom: 80px; }
-.settings-group { margin-bottom: 28px; }
-.settings-group h3 { margin: 0 0 8px; font-size: .95rem; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,.55); }
+.settings-pane { min-width: 0; height: 100%; overflow-y: auto; padding-bottom: 80px; scrollbar-width: none; }
+.settings-pane::-webkit-scrollbar { display: none; }
+.settings-pane-header { display: flex; align-items: center; gap: 24px; margin-bottom: 28px; }
+.settings-pane-header h2 { margin: 0; font-size: 42px; line-height: 50px; font-weight: 700; }
+.settings-pane-header p { margin: 4px 0 0; font-size: 28px; line-height: 36px; color: rgba(255,255,255,.62); }
+.settings-pane-tile { display: grid; place-items: center; flex: none; width: 72px; height: 72px; border-radius: 18px; background: #3A3A3C; }
+.settings-pane-tile .settings-glyph { width: 36px; height: 36px; }
+.settings-group { display: grid; gap: 8px; max-width: 1080px; margin-bottom: 28px; }
+.settings-group h3 { margin: 16px 0 4px; padding-left: 24px; font-size: 28px; line-height: 36px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: rgba(255,255,255,.62); }
+
+.settings-pane .option-row,
+.settings-picker .option-row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  width: 100%;
+  min-height: 76px;
+  margin: 0;
+  padding: 0 24px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 14px;
+  color: #fff;
+  background: rgba(255,255,255,.07);
+  font-size: 30px;
+  line-height: 38px;
+  text-align: left;
+}
+.settings-pane .option-row > span:first-child,
+.settings-picker .option-row > span:first-child { flex: 1; min-width: 0; }
 .settings-row strong,
-.settings-static strong { font-weight: 600; text-align: right; max-width: 55%; overflow-wrap: anywhere; }
-.settings-row-hint { display: block; margin-top: 3px; max-width: 640px; }
+.settings-static strong { max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; text-align: right; opacity: .68; }
+.settings-row:not(.settings-toggle)::after {
+  content: "";
+  flex: none;
+  width: 28px;
+  height: 28px;
+  background: currentColor;
+  opacity: .55;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.settings-toggle strong { opacity: .55; }
+.settings-toggle.is-on strong { font-weight: 600; opacity: .9; }
+.settings-pane .option-row:focus,
+.settings-picker .option-row:focus { outline: none; box-shadow: none; border-color: transparent; background: #EDEDED; color: #000; }
+.settings-pane .option-row:focus strong,
+.settings-pane .option-row:focus::after { opacity: .68; }
 .settings-static { cursor: default; }
-.settings-error { color: #FF8A80; }
-.settings-picker { width: min(560px, 80vw); }
-.settings-picker-list { max-height: 60vh; overflow-y: auto; }
-.settings-confirm p { margin: 0 0 14px; opacity: .7; }
+.settings-error { color: #FF8A80; font-size: 28px; }
+
+.settings-split .details-more-scrim { background: rgba(0,0,0,.88); }
+.settings-split .details-more { background: #1C1C1E; border: 1px solid rgba(255,255,255,.08); border-radius: 30px; padding: 0; overflow: hidden; }
+.settings-picker { width: 760px; max-width: 80vw; max-height: 920px; display: flex; flex-direction: column; }
+.settings-picker-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding: 32px 28px 24px 36px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.settings-picker-head h2 { margin: 0; font-size: 42px; line-height: 50px; font-weight: 700; }
+.settings-picker-head small { font-size: 28px; line-height: 36px; color: rgba(255,255,255,.6); }
+.settings-picker-hint { display: inline-flex; align-items: center; gap: 8px; padding: 8px 18px; border-radius: 999px; background: rgba(255,255,255,.055); font-size: 28px; line-height: 36px; color: rgba(255,255,255,.6); white-space: nowrap; }
+.settings-picker-list { display: grid; gap: 8px; padding: 20px 24px; max-height: 720px; overflow-y: auto; scrollbar-width: none; }
+.settings-picker-list::-webkit-scrollbar { display: none; }
+.settings-picker .option-row.is-selected { background: rgba(255,255,255,.14); font-weight: 600; }
+.settings-picker .option-row.is-selected:focus { background: #EDEDED; }
+.settings-picker-detail { display: block; font-size: 28px; line-height: 34px; opacity: .72; font-weight: 400; }
+.settings-confirm { width: 760px; max-width: 80vw; padding: 36px !important; display: grid; gap: 16px; }
+.settings-confirm h2 { margin: 0; font-size: 42px; line-height: 50px; }
+.settings-confirm p { margin: 0 0 12px; font-size: 28px; line-height: 38px; color: rgba(255,255,255,.7); }
+.settings-confirm-actions { display: flex; gap: 16px; }
+.tv-button.destructive { color: #D22F3F; }
+.tv-button.destructive:focus { background: #D22F3F; color: #fff; }
 
 .subtitle-settings-preview {
   margin-top: 14px;
