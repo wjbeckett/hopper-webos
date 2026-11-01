@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { clearDeviceSubtitleAppearance, clearSetting, DEFAULT_SUBTITLE_APPEARANCE, getEffectiveSettings, getSettingsContract, isClientLocal, putDeviceSubtitleAppearance, putSetting } from "../api/settings";
+import { clearDeviceSubtitleAppearance, clearScopedSetting, clearSetting, DEFAULT_SUBTITLE_APPEARANCE, getEffectiveSettings, getSettingsContract, isClientLocal, putDeviceSubtitleAppearance, putScopedSetting, putSetting } from "../api/settings";
 import type { SettingDefinition, SettingOption, SettingsContract, SubtitleAppearance } from "../api/settings";
+import { profileLaunchChoices, readProfileLaunchBehavior, writeProfileLaunchBehavior } from "../core/profileLaunch";
+import type { ProfileLaunchBehavior } from "../core/profileLaunch";
+import { HomeSectionsEditor } from "../components/HomeSectionsEditor";
 import { clientIdentity } from "../platform/device";
 import { SettingsGlyph } from "../components/icons";
 import { LoadingState } from "../components/LoadingState";
@@ -17,11 +20,13 @@ const categories: Array<{ id: Category; label: string; blurb: string; pane: stri
   { id: "server", label: "Server", blurb: "Connection and version", pane: "The Silo server this TV is connected to." }
 ];
 
-const keysByCategory: Record<Exclude<Category, "server">, Array<{ title: string; keys: string[] }>> = {
+type KeyGroup = { title: string; keys: string[]; footer?: string };
+
+const keysByCategory: Record<Exclude<Category, "server">, KeyGroup[]> = {
   general: [
-    { title: "Title Pages", keys: ["ui.title_art"] },
-    { title: "Theme Music", keys: ["ui.theme_music_enabled", "ui.theme_music_loop"] },
-    { title: "Top Menu", keys: ["nav.show_audiobooks"] }
+    { title: "Title Pages", keys: ["ui.title_art"], footer: "Use logo artwork as the title when available." },
+    { title: "Theme Music", keys: ["ui.theme_music_enabled", "ui.theme_music_loop"], footer: "Play a title's theme music while its page is open, when the server has one. Loop repeats it until you leave the page." },
+    { title: "Top Menu", keys: ["nav.show_audiobooks"], footer: "Adds an Audiobooks tab to the top menu when your server has an audiobook library. Hidden by default." }
   ],
   playback: [
     { title: "Streaming", keys: ["playback.preferred_quality", "playback.max_bitrate_kbps", "playback.audio_language", "playback.buffering_quality_mode"] },
@@ -184,6 +189,10 @@ export function SettingsScreen({
   const [subtitleAppearance, setSubtitleAppearance] = useState<SubtitleAppearance>(DEFAULT_SUBTITLE_APPEARANCE);
   const [subtitleDeviceOnly, setSubtitleDeviceOnly] = useState(false);
   const [posterSize, setPosterSize] = useState("standard");
+  const [posterSource, setPosterSource] = useState("");
+  const [launchBehavior, setLaunchBehavior] = useState<ProfileLaunchBehavior>(readProfileLaunchBehavior);
+  const [launchPicker, setLaunchPicker] = useState(false);
+  const [homeEditor, setHomeEditor] = useState(false);
   const [profileSubtitleAppearance, setProfileSubtitleAppearance] = useState<SubtitleAppearance>(DEFAULT_SUBTITLE_APPEARANCE);
   const railRef = useRef<HTMLDivElement | null>(null);
   const returnFocusRef = useRef<string | null>(null);
@@ -216,6 +225,7 @@ export function SettingsScreen({
           if (["compact", "standard", "large"].includes(size)) setPosterSize(size);
           document.documentElement.dataset.posterSize = size;
         }
+        setPosterSource(effective.get("ui.card_presentation")?.source ?? "");
         const source = effective.get("playback.subtitle_appearance")?.source ?? "";
         setSubtitleDeviceOnly(source === "profile_device" || source === "device");
       })
@@ -288,7 +298,7 @@ export function SettingsScreen({
     closePicker();
   }
 
-  const renderGroups = (groups: Array<{ title: string; keys: string[] }>) => groups.map(group => {
+  const renderGroups = (groups: KeyGroup[]) => groups.map(group => {
     const rows = group.keys.map(key => definitions.get(key)).filter((definition): definition is SettingDefinition => Boolean(definition)).filter(definition => definition.value_schema.type !== "object");
     if (!rows.length) return null;
     return (
@@ -306,6 +316,7 @@ export function SettingsScreen({
             <strong>{describe(definition, values.get(definition.key), contract!)}</strong>
           </button>
         ))}
+        {group.footer ? <p className="settings-footer">{group.footer}</p> : null}
       </section>
     );
   });
@@ -329,10 +340,91 @@ export function SettingsScreen({
     returnFocusRef.current = `subtitle-appearance-${key}`;
     setPicker({ ...appearanceDefinition, key: `appearance:${key}`, label: key === "fontSize" ? "Font size" : key === "fontFamily" ? "Font family" : key === "fontColor" ? "Font color" : key === "textOpacity" ? "Text opacity" : key === "backgroundColor" ? "Background color" : key === "backgroundStyle" ? "Background style" : key === "backgroundOpacity" ? "Background opacity" : key === "textOutline" ? "Text outline" : key === "textOutlineColor" ? "Outline color" : "Position", value_schema: { type: "enum", values: appearanceOptions[key].map(option => ({ label: option.label, value: option.value as string | number | boolean })) } });
   }
+  async function writePoster(next: string, scope: "profile_device" | "profile_client") {
+    const definition = definitions.get("ui.card_presentation");
+    if (!definition) return;
+    const previousSize = posterSize;
+    const previousSource = posterSource;
+    setPosterSize(next);
+    setPosterSource(scope);
+    document.documentElement.dataset.posterSize = next;
+    try { await putScopedSetting(session, definition.key, scope, { poster_size: next, caption: "title_metadata" }); }
+    catch (reason) {
+      setPosterSize(previousSize);
+      setPosterSource(previousSource);
+      document.documentElement.dataset.posterSize = previousSize;
+      setError(reason instanceof Error ? reason.message : "Could not save poster size.");
+    }
+  }
+
+  async function setPosterDeviceOnly(on: boolean) {
+    const definition = definitions.get("ui.card_presentation");
+    if (!definition) return;
+    try {
+      if (on) await putScopedSetting(session, definition.key, "profile_device", { poster_size: posterSize, caption: "title_metadata" });
+      else await clearScopedSetting(session, definition.key, "profile_device");
+      const effective = await getEffectiveSettings(session, ["ui.card_presentation"]);
+      const entry = effective.get("ui.card_presentation");
+      const size = entry?.value && typeof entry.value === "object" ? String((entry.value as { poster_size?: unknown }).poster_size) : posterSize;
+      if (["compact", "standard", "large"].includes(size)) { setPosterSize(size); document.documentElement.dataset.posterSize = size; }
+      setPosterSource(entry?.source ?? "");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not change poster size scope.");
+    }
+  }
+
+  async function useProfilePosterDefault() {
+    const definition = definitions.get("ui.card_presentation");
+    if (!definition) return;
+    try {
+      await clearScopedSetting(session, definition.key, "profile_client");
+      const effective = await getEffectiveSettings(session, ["ui.card_presentation"]);
+      const entry = effective.get("ui.card_presentation");
+      const size = entry?.value && typeof entry.value === "object" ? String((entry.value as { poster_size?: unknown }).poster_size) : "standard";
+      if (["compact", "standard", "large"].includes(size)) { setPosterSize(size); document.documentElement.dataset.posterSize = size; }
+      setPosterSource(entry?.source ?? "");
+      requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-setting-key='poster-size']")?.focus());
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not reset poster size.");
+    }
+  }
+
   function renderCardPresentation() {
     const definition = definitions.get("ui.card_presentation");
-    if (!definition) return null;
-    return <section className="settings-group"><h3>Cards & Posters</h3><button data-tv-focusable="true" data-setting-key="poster-size" className="option-row settings-row" onClick={() => { returnFocusRef.current = "poster-size"; setPicker({ ...definition, key: "appearance:posterSize", label: "Poster size" }); }}><span>Poster size</span><strong>{posterSize[0].toUpperCase() + posterSize.slice(1)}</strong></button></section>;
+    return (
+      <section className="settings-group">
+        <h3>Cards & Posters</h3>
+        {!definition ? <p className="settings-footer">Update your Silo server to customize media cards.</p> : (
+          <>
+            <button data-tv-focusable="true" data-setting-key="poster-size" className="option-row settings-row" onClick={() => { returnFocusRef.current = "poster-size"; setPicker({ ...definition, key: "appearance:posterSize", label: "Poster Size" }); }}><span>Poster Size</span><strong>{posterSize[0].toUpperCase() + posterSize.slice(1)}</strong></button>
+            <button data-tv-focusable="true" data-setting-key="poster-device-only" className={`option-row settings-row settings-toggle${posterSource === "profile_device" ? " is-on" : ""}`} onClick={() => void setPosterDeviceOnly(posterSource !== "profile_device")}><span>Only This Device</span><strong>{posterSource === "profile_device" ? "On" : "Off"}</strong></button>
+            {posterSource === "profile_client" ? <button data-tv-focusable="true" className="option-row settings-row" onClick={() => void useProfilePosterDefault()}><span>Use Profile Default</span></button> : null}
+            <p className="settings-footer">Poster size syncs with other TVs on this profile unless Only This Device is on.</p>
+          </>
+        )}
+      </section>
+    );
+  }
+
+  function renderProfileLaunch() {
+    const active = profileLaunchChoices.find(choice => choice.value === launchBehavior) ?? profileLaunchChoices[0];
+    return (
+      <section className="settings-group">
+        <h3>Profile at Launch</h3>
+        <button data-tv-focusable="true" data-setting-key="profile-launch" className="option-row settings-row" onClick={() => setLaunchPicker(true)}><span>Profile Selection</span><strong>{active.label}</strong></button>
+        <p className="settings-footer">{active.detail}</p>
+      </section>
+    );
+  }
+
+  function renderHomeSections() {
+    return (
+      <section className="settings-group">
+        <h3>Home Sections</h3>
+        <button data-tv-focusable="true" data-setting-key="home-sections" className="option-row settings-row" onClick={() => setHomeEditor(true)}><span>Home Sections</span></button>
+        <p className="settings-footer">Choose which Home rows are visible and edit the order in which they appear on this TV.</p>
+      </section>
+    );
   }
 
   async function chooseAppearance(value: unknown) {
@@ -340,13 +432,7 @@ export function SettingsScreen({
     const field = picker.key.slice("appearance:".length);
     setPicker(null);
     if (field === "posterSize") {
-      const definition = definitions.get("ui.card_presentation");
-      if (!definition) return;
-      const next = String(value);
-      setPosterSize(next);
-      document.documentElement.dataset.posterSize = next;
-      try { await putSetting(session, definition, { poster_size: next, caption: "title_metadata" }); }
-      catch (reason) { setError(reason instanceof Error ? reason.message : "Could not save poster size."); }
+      await writePoster(String(value), posterSource === "profile_device" ? "profile_device" : "profile_client");
       requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-setting-key='poster-size']")?.focus());
       return;
     }
@@ -413,7 +499,7 @@ export function SettingsScreen({
   } else if (category === "subtitles") {
     pane = <>{renderGroups(keysByCategory.subtitles)}{renderSubtitleAppearance()}</>;
   } else if (category === "general") {
-    pane = <>{renderCardPresentation()}{renderGroups(keysByCategory.general)}</>;
+    pane = <>{renderProfileLaunch()}{renderHomeSections()}{renderCardPresentation()}{renderGroups(keysByCategory.general)}</>;
   } else {
     pane = renderGroups(keysByCategory.playback);
   }
@@ -475,6 +561,35 @@ export function SettingsScreen({
           current={picker.key === "appearance:posterSize" ? posterSize : picker.key.startsWith("appearance:") ? subtitleAppearance[picker.key.slice("appearance:".length) as keyof SubtitleAppearance] : current}
           onPick={value => picker.key.startsWith("appearance:") ? void chooseAppearance(value) : pick(picker, value)}
           onClose={closePicker}
+        />
+      ) : null}
+
+      {launchPicker ? (
+        <ChoicePicker
+          title="Profile Selection"
+          choices={profileLaunchChoices.map(choice => ({ label: choice.label, value: choice.value, detail: choice.detail }))}
+          current={launchBehavior}
+          onPick={value => {
+            const next = value as ProfileLaunchBehavior;
+            writeProfileLaunchBehavior(next);
+            setLaunchBehavior(next);
+            setLaunchPicker(false);
+            requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-setting-key='profile-launch']")?.focus());
+          }}
+          onClose={() => {
+            setLaunchPicker(false);
+            requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-setting-key='profile-launch']")?.focus());
+          }}
+        />
+      ) : null}
+
+      {homeEditor ? (
+        <HomeSectionsEditor
+          session={session}
+          onClose={() => {
+            setHomeEditor(false);
+            requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-setting-key='home-sections']")?.focus());
+          }}
         />
       ) : null}
 

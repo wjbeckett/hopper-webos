@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getHomeRails } from "../api/silo";
 import { FeaturedRailsScreen } from "../components/FeaturedRailsScreen";
 import { focusFirstContentCard } from "../navigation/spatial";
+import { arrangeHomeRails, readHomeSectionLayout } from "../core/homeSections";
 import { useWatchStateRefresh } from "../core/watchState";
 import type { HomeRail, Session, SiloItem } from "../types";
 import { LoadingState } from "../components/LoadingState";
@@ -38,11 +39,13 @@ export function HomeScreen({
     return () => cancelAnimationFrame(frame);
   }, [loading]);
 
+  const arranged = useMemo(() => arrangeHomeRails(rails, readHomeSectionLayout(session)), [rails, session]);
+
   if (loading) return <LoadingState label="Loading your Silo" />;
 
   return (
     <FeaturedRailsScreen
-      rails={rails}
+      rails={arranged}
       session={session}
       onOpen={onOpen}
       error={error}

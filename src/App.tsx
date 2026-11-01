@@ -19,6 +19,7 @@ import { LoginScreen } from "./screens/LoginScreen";
 import { PersonScreen } from "./screens/PersonScreen";
 import { PlayerScreen } from "./screens/PlayerScreen";
 import { PersonalScreen } from "./screens/PersonalScreen";
+import { clearBackgrounded, markBackgrounded, requiresSelectionAfterBackground, requiresSelectionAtLaunch } from "./core/profileLaunch";
 import { ProfileSelectionScreen } from "./screens/ProfileSelectionScreen";
 import { RequestsScreen } from "./screens/RequestsScreen";
 import { SearchScreen } from "./screens/SearchScreen";
@@ -110,6 +111,8 @@ function initialState() {
   return { session: null, serverUrl: "", auth: "server-setup" as AuthRoute };
 }
 
+let launchSelectionRequired = requiresSelectionAtLaunch();
+
 export default function App() {
   const initial = initialState();
   const [session, setSession] = useState<Session | null>(initial.session);
@@ -137,6 +140,10 @@ export default function App() {
   useEffect(() => {
     if (!session || profileHydrated) return;
     let alive = true;
+    if (launchSelectionRequired) {
+      setProfileError("Choose who is watching.");
+      return;
+    }
     setProfileError("");
     restoreDefaultProfile(session)
       .then((profileSession) => {
@@ -340,7 +347,25 @@ export default function App() {
     return () => window.removeEventListener("keydown", onBack);
   }, [session, route.name, section, browseDetail]);
 
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.hidden) {
+        markBackgrounded();
+        return;
+      }
+      if (requiresSelectionAfterBackground()) {
+        clearBackgrounded();
+        setProfileError("Choose who is watching.");
+        setSection("home");
+        setRoute({ name: "main" });
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
+
   const login = useCallback((next: Session) => {
+    launchSelectionRequired = false;
     serverRegistry.saveSession(next);
     setServerUrl(next.serverUrl);
     setSession(next);
@@ -444,6 +469,8 @@ export default function App() {
     };
     serverRegistry.saveSession(nextSession);
     setSession(nextSession);
+    launchSelectionRequired = false;
+    clearBackgrounded();
     setProfileError("");
     setProfileHydrated(true);
     setLibrariesLoaded(false);

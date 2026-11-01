@@ -469,6 +469,30 @@ export function installSpatialNavigation() {
     if (document.querySelector(".player-shell")) return;
     const modal = document.querySelector<HTMLElement>('[data-modal="true"]');
     const modalDirection = directionKeys[event.key];
+    if (modal && modalDirection && modal.classList.contains("home-sections-editor")) {
+      const items = Array.from(modal.querySelectorAll<HTMLElement>("[data-tv-focusable='true']:not([disabled])")).filter(item => item.offsetParent !== null);
+      const active = document.activeElement instanceof HTMLElement && items.includes(document.activeElement) ? document.activeElement : null;
+      if (!active) {
+        if (items[0]) focusElement(items[0]);
+      } else {
+        const card = active.closest(".home-sections-card");
+        const sameCard = items.filter(item => item.closest(".home-sections-card") === card);
+        let next: HTMLElement | undefined;
+        if (modalDirection === "left" || modalDirection === "right") {
+          const at = sameCard.indexOf(active);
+          next = sameCard[at + (modalDirection === "right" ? 1 : -1)];
+        } else {
+          const cards = Array.from(modal.querySelectorAll<HTMLElement>(".home-sections-card"));
+          const target = cards[cards.indexOf(card as HTMLElement) + (modalDirection === "down" ? 1 : -1)];
+          const candidates = items.filter(item => item.closest(".home-sections-card") === target);
+          const x = active.getBoundingClientRect().left;
+          next = candidates.sort((l, r) => Math.abs(l.getBoundingClientRect().left - x) - Math.abs(r.getBoundingClientRect().left - x))[0];
+        }
+        if (next) focusElement(next);
+      }
+      event.preventDefault();
+      return;
+    }
     if (modal && modalDirection) {
       const rows = Array.from(modal.querySelectorAll<HTMLElement>("[data-tv-focusable='true']"))
         .filter(item => item.offsetParent !== null);

@@ -27,7 +27,7 @@ export type SettingsContract = {
 };
 export type SettingValue = { key: string; value: unknown; source?: string };
 
-const deviceHeaders = () => ({ "X-Silo-Device-Id": getDeviceId() });
+const deviceHeaders = () => ({ "X-Silo-Device-Id": getDeviceId(), "X-Silo-Client-Family": "tv" });
 
 export function getSettingsContract(session: Session) {
   return requestV2<SettingsContract>(session, "/settings/contract");
@@ -100,6 +100,27 @@ export function putDeviceSubtitleAppearance(session: Session, appearance: Subtit
 
 export function clearDeviceSubtitleAppearance(session: Session) {
   return requestV2<unknown>(session, "/settings/device/subtitle-appearance", {
+    method: "DELETE", headers: deviceHeaders()
+  });
+}
+
+export type CardScope = "profile_device" | "profile_client";
+
+function cardScopeQuery(session: Session, scope: CardScope) {
+  const params = new URLSearchParams({ scope });
+  if (session.profileId) params.set("profile_id", session.profileId);
+  if (scope === "profile_device") params.set("device_id", getDeviceId());
+  return params;
+}
+
+export function putScopedSetting(session: Session, key: string, scope: CardScope, value: unknown) {
+  return requestV2<unknown>(session, `/settings/values/${encodeURIComponent(key)}?${cardScopeQuery(session, scope)}`, {
+    method: "PUT", headers: deviceHeaders(), body: JSON.stringify({ value })
+  });
+}
+
+export function clearScopedSetting(session: Session, key: string, scope: CardScope) {
+  return requestV2<unknown>(session, `/settings/values/${encodeURIComponent(key)}?${cardScopeQuery(session, scope)}`, {
     method: "DELETE", headers: deviceHeaders()
   });
 }
