@@ -144,6 +144,11 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const [plan, setPlan] = useState<PlaybackPlan>();
   const [hud, setHud] = useState(true);
   const [panel, setPanel] = useState<"audio" | "subtitles" | "quality" | null>(null);
+  const [hudPicker, setHudPicker] = useState<{ title: string; choices: Array<{ label: string; value: string }>; selected: string; returnKey: string; onSelect: (value: string) => void } | null>(null);
+  const hudPickerRef = useRef(hudPicker);
+  hudPickerRef.current = hudPicker;
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [aspectMode, setAspectMode] = useState<"Fit" | "Zoom" | "Stretch">("Fit");
   const [hudTab, setHudTab] = useState<HudTab>("Video");
   const hudTabsRef = useRef<HudTab[]>(["Info", "Video", "Subtitles"]);
   const [busy, setBusy] = useState(true);
@@ -152,6 +157,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const [bufferedAhead, setBufferedAhead] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playing, setPlaying] = useState(false);
+  useEffect(() => { if (videoRef.current) videoRef.current.playbackRate = playbackSpeed; }, [playbackSpeed]);
 
   // Focused-bar scrub state: preview target while a scrub is in flight, plus
   // the signed auto-seek rate a held Left/Right climbs to (tap to step).
@@ -912,6 +918,22 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     focusHudEntry(tab);
   }
 
+  function presentHudPicker(title: string, choices: Array<{ label: string; value: string }>, selected: string, returnKey: string, onSelect: (value: string) => void) {
+    setHudPicker({ title, choices, selected, returnKey, onSelect });
+    requestAnimationFrame(() => {
+      const selectedRow = document.querySelector<HTMLElement>(`.player-hud-picker [data-picker-value="${selected}"]`);
+      (selectedRow ?? document.querySelector<HTMLElement>(".player-hud-picker [data-tv-focusable='true']"))?.focus();
+    });
+  }
+
+  function chooseHudPicker(value: string) {
+    const picker = hudPickerRef.current;
+    if (!picker) return;
+    picker.onSelect(value);
+    setHudPicker(null);
+    requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-hud-row="${picker.returnKey}"]`)?.focus());
+  }
+
   function changeAppearance(key: keyof SubtitleAppearance, value: unknown) {
     if (!appearance) return;
     const next = { ...appearance, [key]: value } as SubtitleAppearance;
@@ -1004,6 +1026,13 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       // Playback panels own the keys while open: Up/Down walk the rows, OK
       // presses, Back closes, Left/Right are consumed.
       if (snapshot.panel) {
+        if (isBackKey(event) && hudPickerRef.current) {
+          event.preventDefault(); event.stopPropagation();
+          const returnKey = hudPickerRef.current.returnKey;
+          setHudPicker(null);
+          requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-hud-row="${returnKey}"]`)?.focus());
+          return;
+        }
         if (isBackKey(event) && styleViewRef.current) {
           event.preventDefault(); event.stopPropagation();
           const field = styleViewRef.current;
@@ -1017,6 +1046,14 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
           setPanel(null);
           revealHud();
           focusTransport();
+          return;
+        }
+        if (hudPickerRef.current && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+          event.preventDefault(); event.stopPropagation();
+          if (event.repeat) return;
+          const rows = Array.from(document.querySelectorAll<HTMLElement>(".player-hud-picker [data-tv-focusable='true']"));
+          const index = rows.indexOf(document.activeElement as HTMLElement);
+          rows[event.key === "ArrowDown" ? index + 1 : index - 1]?.focus();
           return;
         }
         const activeTab = document.activeElement instanceof HTMLElement ? document.activeElement.closest<HTMLElement>("[data-hud-tab]") : null;
@@ -1305,7 +1342,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
 
   return <main className="player-shell" onMouseMove={() => revealHud()}>
     {subtitleCss ? <style>{subtitleCss}</style> : null}
-    <video ref={videoRef} className={upNextRect ? "player player-in-next-up" : "player"} style={upNextRect ? { left: upNextRect.left, top: upNextRect.top, width: upNextRect.width, height: upNextRect.height } : undefined} playsInline
+    <video ref={videoRef} className={upNextRect ? "player player-in-next-up" : "player"} style={{ objectFit: aspectMode === "Stretch" ? "fill" : aspectMode === "Zoom" ? "cover" : "contain", ...(upNextRect ? { left: upNextRect.left, top: upNextRect.top, width: upNextRect.width, height: upNextRect.height } : {}) }} playsInline
       onPlay={() => { setPlaying(true); revealHud(); }}
       onPause={() => { setPlaying(false); revealHud(); }}
       onEnded={handleMediaEnded}
@@ -1447,14 +1484,22 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
           <div><div className="player-hud-eyebrow">Title</div>{item.Type === "Episode" ? <small className="player-hud-episode">{detail?.season_number != null && detail.episode_number != null ? `S${detail.season_number} · E${detail.episode_number}` : "Episode"}</small> : null}<h2>{detail?.title ?? item.Name}</h2>{duration > 0 ? <p>{formatClock(duration)}</p> : null}{version?.resolution ? <span className="player-hud-chip">{version.resolution}</span> : null}</div>
           <div><div className="player-hud-eyebrow">Stream</div><div className="player-hud-readonly"><span>Video</span><strong>{version?.codec_video?.toUpperCase() || "—"}</strong></div><div className="player-hud-readonly"><span>Audio</span><strong>{version?.codec_audio?.toUpperCase() || "—"}</strong></div><div className="player-hud-readonly"><span>Subtitles</span><strong>{subtitleValue || "Off"}</strong></div>{version?.container ? <div className="player-hud-readonly"><span>Container</span><strong>{version.container.toUpperCase()}</strong></div> : null}</div>
         </div> : null}
-        {hudTab === "Video" ? <div className="player-hud-list">
-          <div className="player-hud-eyebrow">Quality</div>
-          {qualities.length ? qualities.map((quality, i) => <button data-tv-focusable="true" className="option-row" key={quality.label} onClick={() => selectQuality(quality)}><span>{quality.preserves_source ? `Original${quality.height ? ` · ${quality.height}p` : version?.resolution ? ` · ${version.resolution}` : ""}` : quality.label}</span><small>{quality.bitrate_kbps ? `${Math.round(quality.bitrate_kbps / 100) / 10} Mbps` : ""}</small></button>) : <p className="player-hud-empty">No alternate video qualities are available.</p>}
+        {hudTab === "Video" ? <div className="player-hud-video-grid">
+          <div><div className="player-hud-eyebrow">Playback</div>
+            {qualities.length ? <button data-tv-focusable="true" data-hud-row="quality" className="option-row" onClick={() => presentHudPicker("Quality", qualities.map(quality => ({ label: quality.preserves_source ? `Original${quality.height ? ` · ${quality.height}p` : version?.resolution ? ` · ${version.resolution}` : ""}` : quality.label, value: quality.label })), qualityRef.current, "quality", value => selectQuality({ label: value }))}><span>Quality</span><small>{qualityRef.current === "auto" ? "Auto" : qualityRef.current}</small></button> : null}
+            <button data-tv-focusable="true" data-hud-row="speed" className="option-row" onClick={() => presentHudPicker("Playback speed", [0.75, 1, 1.25, 1.5, 2].map(value => ({ label: value === 1 ? "Normal" : `${value}×`, value: String(value) })), String(playbackSpeed), "speed", value => setPlaybackSpeed(Number(value)))}><span>Speed</span><small>{playbackSpeed === 1 ? "Normal" : `${playbackSpeed}×`}</small></button>
+            <button data-tv-focusable="true" data-hud-row="aspect" className="option-row" onClick={() => presentHudPicker("Aspect", ["Fit", "Zoom", "Stretch"].map(value => ({ label: value, value })), aspectMode, "aspect", value => setAspectMode(value as typeof aspectMode))}><span>Aspect</span><small>{aspectMode}</small></button>
+          </div>
+          <div><div className="player-hud-eyebrow">Automation</div>
+            <button data-tv-focusable="true" data-hud-row="intro-skip" className="option-row" onClick={() => presentHudPicker("Skip Intros", [{ label: "Never", value: "never" }, { label: "Ask to skip", value: "ask" }, { label: "Skip automatically", value: "always" }], introSkipMode, "intro-skip", value => { setIntroSkipMode(value as typeof introSkipMode); void putScopedSetting(session, "playback.intro_skip_mode", "profile_device", value).catch(() => undefined); })}><span>Skip intros</span><small>{{ never: "Never", ask: "Ask to skip", always: "Skip automatically" }[introSkipMode]}</small></button>
+            <button data-tv-focusable="true" data-hud-row="auto-play" className="option-row" onClick={toggleAutoPlayNext}><span>Auto-play next</span><small>{autoPlayNext ? "On" : "Off"}</small></button>
+          </div>
         </div> : null}
         {hudTab === "Audio" ? <div className="player-hud-list"><div className="player-hud-eyebrow">Audio tracks</div>{audioTracks.map((track, i) => <button data-tv-focusable="true" className="option-row" key={track.index ?? i} onClick={() => selectAudio(track)}><span>{track.title || track.language || `Track ${i + 1}`}</span><small>{[track.codec?.toUpperCase(), track.channels ? `${track.channels} ch` : ""].filter(Boolean).join(" · ")}</small></button>)}</div> : null}
         {hudTab === "Subtitles" ? <div className="player-hud-list"><div className="player-hud-eyebrow">Subtitles</div>{!styleView ? <><button data-tv-focusable="true" className="option-row" onClick={() => selectSubtitle()}><span>Off</span></button>{subtitles.map(track => <button data-tv-focusable="true" className="option-row" key={track.track_id} onClick={() => selectSubtitle(track)}><span>{subtitleName(track)}</span><small>{subtitleDetail(track)}</small></button>)}{appearance ? <button data-tv-focusable="true" data-style-entry className="option-row" onClick={() => setStyleView("list")}><span>Appearance</span><small>{subtitleChoiceLabel("fontSize", appearance.fontSize)} · {subtitleChoiceLabel("position", appearance.position)}</small></button> : null}</> : appearance && styleView === "list" ? <>{SUBTITLE_APPEARANCE_FIELDS.map(([key, label], i) => <button key={key} data-tv-focusable="true" data-style-key={key} className="option-row" onClick={() => setStyleView(key)}><span>{label}</span><small>{subtitleChoiceLabel(key, appearance[key])}</small></button>)}<div className="subtitle-settings-preview" style={{ color: appearance.fontColor, opacity: appearance.textOpacity / 100, fontFamily: appearance.fontFamily }}>Subtitle preview</div></> : appearance && styleView && styleView !== "list" ? SUBTITLE_APPEARANCE_CHOICES[styleView].map(choice => <button key={String(choice.value)} data-tv-focusable="true" className="option-row" onClick={() => changeAppearance(styleView, choice.value)}><span>{choice.label}</span>{choice.value === appearance[styleView] ? <small>Current</small> : null}</button>) : null}</div> : null}
         {hudTab === "Chapters" ? <div className="player-hud-list"><div className="player-hud-eyebrow">Chapters</div>{chapters.map((chapter, i) => <button data-tv-focusable="true" className="option-row" key={`${chapter.index}-${chapter.start_seconds}`} onClick={() => { seekToPosition(chapter.start_seconds); setPanel(null); revealHud(); }}><span>{chapter.title || `Chapter ${i + 1}`}</span><small>{formatClock(chapter.start_seconds)}</small></button>)}</div> : null}
       </div>
+      {hudPicker ? <div className="player-hud-picker-scrim" onClick={event => { if (event.target === event.currentTarget) { setHudPicker(null); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-hud-row="${hudPicker.returnKey}"]`)?.focus()); } }}><section className="player-hud-picker" role="dialog" aria-label={hudPicker.title}><h2>{hudPicker.title}</h2><div className="player-hud-picker-hint">Choose an option</div>{hudPicker.choices.map(choice => <button key={choice.value} data-tv-focusable="true" data-picker-value={choice.value} className={`option-row ${choice.value === hudPicker.selected ? "selected" : ""}`} onClick={() => chooseHudPicker(choice.value)}><span>{choice.label}</span>{choice.value === hudPicker.selected ? <small>✓</small> : null}</button>)}</section></div> : null}
     </section> : null}
   </main>;
 }

@@ -1747,6 +1747,11 @@ input:focus {
   box-shadow: 0 24px 80px rgba(0,0,0,.6);
 }
 .player-hud-list { max-height: 296px; overflow-y: auto; }
+.player-hud-video-grid { display: grid; grid-template-columns: minmax(0, 33fr) minmax(0, 38fr); gap: 26px; }
+.player-hud-video-grid > div { min-width: 0; }
+.player-hud-video-grid .option-row { min-height: 34px; margin: 0 0 6px; padding: 7px 10px; border-radius: 10px; }
+.player-hud-video-grid .option-row span { font-size: 15px; font-weight: 500; }
+.player-hud-video-grid .option-row small { font-size: 14px; font-weight: 500; }
 .player-hud-list .option-row { min-height: 34px; margin: 0 0 6px; padding: 7px 10px; border-radius: 10px; }
 .player-hud-list .option-row span { font-size: 15px; font-weight: 500; }
 .player-hud-list .option-row small { font-size: 14px; font-weight: 500; }
@@ -1764,6 +1769,12 @@ input:focus {
 .option-row small { color: rgba(255,255,255,.55); }
 .option-row:focus { outline: none; background: #EDEDED; color: #0B0B0C; }
 .option-row:focus small { color: rgba(11,11,12,.62); }
+.player-hud-picker-scrim { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 24px; background: rgba(0,0,0,.42); }
+.player-hud-picker { width: min(360px, calc(100vw - 48px)); max-height: min(470px, calc(100vh - 48px)); overflow-y: auto; padding: 22px; border: 1px solid rgba(255,255,255,.10); border-radius: 22px; background: #17181B; box-shadow: 0 24px 80px rgba(0,0,0,.6); }
+.player-hud-picker h2 { margin: 0 0 6px; font-size: 21px; }
+.player-hud-picker-hint { margin: 0 0 14px; color: rgba(237,237,237,.60); font-size: 14px; }
+.player-hud-picker .option-row { min-height: 34px; margin: 0 0 6px; padding: 7px 10px; border-radius: 10px; }
+.player-hud-picker .option-row.selected:not(:focus) { background: rgba(255,255,255,.075); }
 
 .settings-screen {
   max-width: 1100px;
