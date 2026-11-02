@@ -1,3 +1,4 @@
+import { deviceCaptioningAppearance, getSubtitleMatchesDevice } from "../platform/captions";
 import { interruptThemeMusic } from "../core/themeMusic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type Hls from "hls.js";
@@ -531,6 +532,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       setAppearance(loadedAppearance);
       setAppearanceDeviceOnly(appearanceSource === "profile_device" || appearanceSource === "device");
       setSubtitleCss(subtitleCueCss(loadedAppearance));
+      if (getSubtitleMatchesDevice(session.profileId)) void deviceCaptioningAppearance(loadedAppearance).then(value => { if (alive) setSubtitleCss(subtitleCueCss(value)); });
       setHideUnwatchedOverview(settings.get("catalog.hide_unwatched_episode_overviews")?.value === true);
       setHideUnwatchedImages(settings.get("catalog.hide_unwatched_episode_images")?.value === true);
       setPlayerSettingsLoaded(true);
@@ -885,7 +887,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     if (!appearance) return;
     const next = { ...appearance, [key]: value } as SubtitleAppearance;
     setAppearance(next);
-    setSubtitleCss(subtitleCueCss(next));
+    if (getSubtitleMatchesDevice(session.profileId)) void deviceCaptioningAppearance(next).then(value => setSubtitleCss(subtitleCueCss(value)));
+    else setSubtitleCss(subtitleCueCss(next));
     setStyleView("list");
     const save = appearanceDeviceOnly ? putDeviceSubtitleAppearance(session, next) : putProfileSubtitleAppearance(session, next);
     void save.catch(() => setError("Could not save subtitle appearance."));

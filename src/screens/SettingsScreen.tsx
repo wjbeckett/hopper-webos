@@ -1,3 +1,4 @@
+import { deviceCaptioningAppearance, getSubtitleMatchesDevice, setSubtitleMatchesDevice } from "../platform/captions";
 import { setTitleArtEnabled } from "../core/titleArt";
 import { setThemeMusicPreferences } from "../core/themeMusic";
 import { ProfileAvatar } from "../components/TopNav";
@@ -109,6 +110,8 @@ function languageLabel(code: string) {
   }
 }
 
+const languageSuggestions = new Map<string, string[]>();
+
 function choicesFor(definition: SettingDefinition, contract: SettingsContract, current?: unknown): Choice[] {
   const schema = definition.value_schema;
   if (schema.type === "enum") {
@@ -117,6 +120,7 @@ function choicesFor(definition: SettingDefinition, contract: SettingsContract, c
   if (schema.type === "language_tag") {
     const set = contract.option_sets[languageSetByKey[definition.key] ?? ""]?.options ?? [];
     const codes = set.map(option => option.value);
+    for (const code of languageSuggestions.get(definition.key) ?? []) if (code.trim() && !codes.some(known => known.toLowerCase() === code.toLowerCase())) codes.push(code.trim());
     if (typeof current === "string" && current && !codes.some(code => code.toLowerCase() === current.toLowerCase())) codes.push(current);
     return [{ label: unsetLanguageLabel(definition.key), value: null }, ...codes.map(code => ({ label: languageLabel(code), value: code }))];
   }
@@ -321,6 +325,14 @@ export function SettingsScreen({
   const [privacyQr, setPrivacyQr] = useState("");
   const [subtitleAppearance, setSubtitleAppearance] = useState<SubtitleAppearance>(DEFAULT_SUBTITLE_APPEARANCE);
   const [subtitleDeviceOnly, setSubtitleDeviceOnly] = useState(false);
+  const [subtitleMatchesDevice, setSubtitleMatchesDeviceState] = useState(() => getSubtitleMatchesDevice(session.profileId));
+  const [previewAppearance, setPreviewAppearance] = useState<SubtitleAppearance | null>(null);
+  useEffect(() => {
+    if (!subtitleMatchesDevice) { setPreviewAppearance(null); return; }
+    let alive = true;
+    void deviceCaptioningAppearance(subtitleAppearance).then(value => { if (alive) setPreviewAppearance(value); });
+    return () => { alive = false; };
+  }, [subtitleMatchesDevice, subtitleAppearance]);
   const [posterSize, setPosterSize] = useState("standard");
   const [sources, setSources] = useState<Map<string, string>>(new Map());
   const [connection, setConnection] = useState<PlaybackConnection | null>(null);
@@ -371,6 +383,7 @@ export function SettingsScreen({
           if (!resolved.has(key) || resolved.get(key) == null) resolved.set(key, key in local && !loadedContract.definitions.some(definition => definition.key === key && !isClientLocal(definition)) ? local[key] : fallback);
         }
         setValues(resolved);
+        for (const [key, item] of effective) if (item.suggested_values?.length) languageSuggestions.set(key, item.suggested_values);
         const appearance = effective.get("playback.subtitle_appearance")?.value;
         const parsedAppearance = typeof appearance === "string" ? (() => { try { return JSON.parse(appearance); } catch { return null; } })() : appearance;
         if (parsedAppearance && typeof parsedAppearance === "object") {
@@ -926,10 +939,12 @@ export function SettingsScreen({
   function renderSubtitleAppearance() {
     if (!appearanceDefinition) return null;
     const a = subtitleAppearance;
+    const pv = previewAppearance ?? subtitleAppearance;
     const row = (key: keyof SubtitleAppearance, label: string) => <button key={key} data-tv-focusable="true" data-setting-key={`subtitle-appearance-${key}`} className="option-row settings-row" onClick={() => changeAppearance(key)}><span>{label}</span><strong>{subtitleChoiceLabel(key, a[key])}</strong></button>;
     const sizePx: Record<string, string> = { small: "1rem", medium: "1.2rem", large: "1.5rem", xlarge: "1.8rem", xxlarge: "2rem" };
     return <><section className="settings-group"><h3>Appearance</h3>
-      <div className="subtitle-settings-preview" style={{ color: a.fontColor, opacity: a.textOpacity / 100, fontFamily: a.fontFamily, fontSize: sizePx[a.fontSize] ?? "1.5rem", background: a.backgroundStyle === "box" ? a.backgroundColor : "transparent", textShadow: a.backgroundStyle === "shadow" ? "0 2px 5px #000" : undefined, WebkitTextStroke: a.textOutline || a.backgroundStyle === "outline" ? `1px ${a.backgroundStyle === "outline" && !a.textOutline ? "#000" : a.textOutlineColor}` : undefined }}>Subtitles will look like this</div>
+      <div className="subtitle-settings-preview" style={{ color: pv.fontColor, opacity: pv.textOpacity / 100, fontFamily: pv.fontFamily, fontSize: sizePx[pv.fontSize] ?? "1.5rem", background: pv.backgroundStyle === "box" ? pv.backgroundColor : "transparent", textShadow: pv.backgroundStyle === "shadow" ? "0 2px 5px #000" : undefined, WebkitTextStroke: pv.textOutline || pv.backgroundStyle === "outline" ? `1px ${pv.backgroundStyle === "outline" && !pv.textOutline ? "#000" : pv.textOutlineColor}` : undefined }}>Subtitles will look like this</div>
+      {toggleRow("subtitle-match-device", "Use Device Settings", subtitleMatchesDevice, () => { const next = !subtitleMatchesDevice; setSubtitleMatchesDeviceState(next); setSubtitleMatchesDevice(session.profileId, next); })}
       <button data-tv-focusable="true" data-setting-key="subtitle-device-only" className={`option-row settings-row settings-toggle${subtitleDeviceOnly ? " is-on" : ""}`} onClick={async () => {
         const next = !subtitleDeviceOnly; setSubtitleDeviceOnly(next);
         try {

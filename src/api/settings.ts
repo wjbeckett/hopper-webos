@@ -25,7 +25,7 @@ export type SettingsContract = {
   definitions: SettingDefinition[];
   option_sets: Record<string, { options: Array<{ value: string }> }>;
 };
-export type SettingValue = { key: string; value: unknown; source?: string };
+export type SettingValue = { key: string; value: unknown; source?: string; suggested_values?: string[] };
 
 const deviceHeaders = () => ({ "X-Silo-Device-Id": getDeviceId(), "X-Silo-Client-Family": "tv" });
 
