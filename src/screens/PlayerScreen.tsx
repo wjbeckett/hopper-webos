@@ -106,7 +106,7 @@ function formatClock(seconds: number) {
   return hours ? `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}` : `${minutes}:${String(secs).padStart(2, "0")}`;
 }
 
-type HudTab = "Info" | "Video" | "Audio" | "Subtitles" | "Chapters";
+type HudTab = "Info" | "Stats" | "Video" | "Audio" | "Subtitles" | "Chapters";
 type PillKind = "intro" | "credits" | "recap";
 type Pill = { kind: PillKind; key: string; label: string; secondsRemaining: number | null; undo?: boolean };
 type UiSnapshot = { upNextOpen: boolean; hud: boolean; panel: "audio" | "subtitles" | "quality" | null; hudTab: HudTab; audioAvailable: boolean; scrubPreview: number | null; autoSeekRate: number; cleanSeek: { rate: number; preview: number } | null; pill: Pill | null; position: number; duration: number; playing: boolean };
@@ -149,6 +149,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   hudPickerRef.current = hudPicker;
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [aspectMode, setAspectMode] = useState<"Fit" | "Zoom" | "Stretch">("Fit");
+  const [playerStats, setPlayerStats] = useState<{ totalFrames?: number; droppedFrames?: number; resolution?: string }>({});
   const [hudTab, setHudTab] = useState<HudTab>("Video");
   const hudTabsRef = useRef<HudTab[]>(["Info", "Video", "Subtitles"]);
   const [busy, setBusy] = useState(true);
@@ -158,6 +159,23 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const [duration, setDuration] = useState(0);
   const [playing, setPlaying] = useState(false);
   useEffect(() => { if (videoRef.current) videoRef.current.playbackRate = playbackSpeed; }, [playbackSpeed]);
+  useEffect(() => {
+    const read = () => {
+      const video = videoRef.current as (HTMLVideoElement & { webkitDecodedFrameCount?: number; webkitDroppedFrameCount?: number }) | null;
+      if (!video) return;
+      const quality = video.getVideoPlaybackQuality?.();
+      const totalFrames = quality?.totalVideoFrames ?? video.webkitDecodedFrameCount;
+      const droppedFrames = quality?.droppedVideoFrames ?? video.webkitDroppedFrameCount;
+      setPlayerStats({
+        totalFrames: typeof totalFrames === "number" ? totalFrames : undefined,
+        droppedFrames: typeof droppedFrames === "number" ? droppedFrames : undefined,
+        resolution: video.videoWidth && video.videoHeight ? `${video.videoWidth} × ${video.videoHeight}` : undefined
+      });
+    };
+    read();
+    const timer = window.setInterval(read, 1500);
+    return () => window.clearInterval(timer);
+  }, [plan?.plan_id]);
 
   // Focused-bar scrub state: preview target while a scrub is in flight, plus
   // the signed auto-seek rate a held Left/Right climbs to (tap to step).
@@ -899,7 +917,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   }
 
   /** Panels hold the chrome steady: opening one disarms the auto-hide. */
-  const hudTabs: HudTab[] = ["Info", "Video", ...(version?.audio_tracks?.length ? ["Audio" as HudTab] : []), "Subtitles", ...(version?.chapters?.length ? ["Chapters" as HudTab] : [])];
+  const hudTabs: HudTab[] = ["Info", ...(plan ? ["Stats" as HudTab] : []), "Video", ...(version?.audio_tracks?.length ? ["Audio" as HudTab] : []), "Subtitles", ...(version?.chapters?.length ? ["Chapters" as HudTab] : [])];
   hudTabsRef.current = hudTabs;
 
   function focusHudEntry(tab = hudTab) {
@@ -1492,6 +1510,19 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         {hudTab === "Info" ? <div className="player-hud-columns">
           <div><div className="player-hud-eyebrow">Title</div>{item.Type === "Episode" ? <small className="player-hud-episode">{detail?.season_number != null && detail.episode_number != null ? `S${detail.season_number} · E${detail.episode_number}` : "Episode"}</small> : null}<h2>{detail?.title ?? item.Name}</h2>{duration > 0 ? <p>{formatClock(duration)}</p> : null}{version?.resolution ? <span className="player-hud-chip">{version.resolution}</span> : null}</div>
           <div><div className="player-hud-eyebrow">Stream</div><div className="player-hud-readonly"><span>Video</span><strong>{version?.codec_video?.toUpperCase() || "—"}</strong></div><div className="player-hud-readonly"><span>Audio</span><strong>{version?.codec_audio?.toUpperCase() || "—"}</strong></div><div className="player-hud-readonly"><span>Subtitles</span><strong>{subtitleValue || "Off"}</strong></div>{version?.container ? <div className="player-hud-readonly"><span>Container</span><strong>{version.container.toUpperCase()}</strong></div> : null}</div>
+        </div> : null}
+        {hudTab === "Stats" ? <div className="player-hud-columns">
+          <div><div className="player-hud-eyebrow">Delivery</div>
+            <div className="player-hud-readonly"><span>Route</span><strong>{plan?.delivery || "—"}</strong></div>
+            <div className="player-hud-readonly"><span>Protocol</span><strong>{plan?.stream.protocol?.toUpperCase() || "—"}</strong></div>
+            {plan?.stream.container ? <div className="player-hud-readonly"><span>Container</span><strong>{plan.stream.container.toUpperCase()}</strong></div> : null}
+          </div>
+          <div><div className="player-hud-eyebrow">Playback</div>
+            {playerStats.resolution ? <div className="player-hud-readonly"><span>Resolution</span><strong>{playerStats.resolution}</strong></div> : null}
+            {typeof playerStats.totalFrames === "number" ? <div className="player-hud-readonly"><span>Decoded frames</span><strong>{playerStats.totalFrames.toLocaleString()}</strong></div> : null}
+            {(playerStats.droppedFrames ?? 0) > 0 ? <div className="player-hud-readonly"><span>Dropped frames</span><strong>{playerStats.droppedFrames!.toLocaleString()}</strong></div> : null}
+            <div className="player-hud-readonly"><span>Playback speed</span><strong>{playbackSpeed === 1 ? "Normal" : `${playbackSpeed}×`}</strong></div>
+          </div>
         </div> : null}
         {hudTab === "Video" ? <div className="player-hud-video-grid">
           <div><div className="player-hud-eyebrow">Playback</div>
