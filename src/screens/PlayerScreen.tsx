@@ -1283,7 +1283,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         {eyebrowText ? <div className="player-eyebrow">{eyebrowText}</div> : null}
         <h2 className="player-title-text">{detail?.title ?? item.Name}</h2>
 
-        <div ref={scrubberRef} className="player-scrubber" tabIndex={-1} data-active={scrubberFocused || scrubPreview != null}
+        <div ref={scrubberRef} className="player-scrubber" tabIndex={-1} data-active={scrubberFocused || scrubPreview != null} data-focused={scrubberFocused}
           onFocus={() => setScrubberFocused(true)} onBlur={() => setScrubberFocused(false)}>
           {previewSeconds != null && (previewCard || autoSeekRate !== 0) ? <div className="scrub-preview-stack" data-fast={autoSeekRate !== 0} style={{ left: `clamp(84px, ${playedFraction * 100}%, calc(100% - 84px))` }}>
             {previewCard ? <div className="scrub-preview-card">
