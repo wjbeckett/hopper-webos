@@ -3,6 +3,7 @@ import type Hls from "hls.js";
 import { bestVersionForDevice, getMarkers, getTrickplay, getWatchDetail, playbackUrl, replanPlaybackV3, reportProgress, saveAudioPreference, saveSubtitlePreference, startPlaybackV3, stopPlayback, stopPlaybackKeepalive, type AudioTrack, type FileMarkers, type MarkerSegment, type PlaybackChoices, type PlaybackPlan, type Quality, type SubtitleInventory, type Trickplay, type WatchDetail } from "../api/playback";
 import type { Session, SiloItem } from "../types";
 import { getEffectiveSettings, putScopedSetting } from "../api/settings";
+import { getHomeRails } from "../api/silo";
 import { parseSubtitleAppearance, subtitleCueCss } from "../core/subtitleStyle";
 import { attachSidecarSubtitle } from "../core/subtitleSidecar";
 import { localPassOutThreshold, localResumeRewindSeconds, markerAction, resumePositionWithRewind } from "../core/playerSettings";
@@ -180,6 +181,9 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const upNextPane = useRef<HTMLDivElement>(null);
   const [upNextRect, setUpNextRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const [subtitleCss, setSubtitleCss] = useState("");
+  const [onDeckItems, setOnDeckItems] = useState<SiloItem[]>([]);
+  const [hideUnwatchedOverview, setHideUnwatchedOverview] = useState(false);
+  const [hideUnwatchedImages, setHideUnwatchedImages] = useState(false);
   const upNextHandled = useRef(false);
   const upNextPendingEnd = useRef<boolean | null>(null);
   const upNextStartedAtEnd = useRef(false);
@@ -374,6 +378,22 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   }, [autoPlayNext, session]);
 
   useEffect(() => {
+    if (item.Type !== "Episode") { setOnDeckItems([]); return; }
+    let alive = true;
+    void getHomeRails(session).then(rails => {
+      if (!alive) return;
+      const currentSeries = item.SeriesId;
+      const items = rails.filter(rail => /continue|in.progress|next.up/i.test(rail.id + " " + rail.title))
+        .flatMap(rail => rail.items)
+        .filter(candidate => candidate.Id !== item.Id && (!currentSeries || candidate.SeriesId !== currentSeries) && Boolean(candidate.BackdropUrl))
+        .filter((candidate, index, all) => all.findIndex(other => other.Id === candidate.Id) === index)
+        .slice(0, 12);
+      setOnDeckItems(items);
+    }).catch(() => { if (alive) setOnDeckItems([]); });
+    return () => { alive = false; };
+  }, [item.Id, session]);
+
+  useEffect(() => {
     if (!resolveNextEpisode || item.Type !== "Episode") return;
     let alive = true;
     setUpNext(null);
@@ -444,7 +464,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     setAutoPlayNext(true);
     Promise.all([
       getWatchDetail(session, item),
-      getEffectiveSettings(session, ["playback.intro_skip_mode", "playback.auto_skip_credits", "playback.auto_play_next", "playback.subtitle_appearance"]).catch(() => new Map()),
+      getEffectiveSettings(session, ["playback.intro_skip_mode", "playback.auto_skip_credits", "playback.auto_play_next", "playback.subtitle_appearance", "catalog.hide_unwatched_episode_overviews", "catalog.hide_unwatched_episode_images"]).catch(() => new Map()),
     ]).then(async ([watch, settings]) => {
       if (!alive) return;
       const configuredMode = settings.get("playback.intro_skip_mode")?.value;
@@ -452,6 +472,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       setAutoSkipCredits(settings.get("playback.auto_skip_credits")?.value === true);
       setAutoPlayNext(settings.get("playback.auto_play_next")?.value !== false);
       setSubtitleCss(subtitleCueCss(parseSubtitleAppearance(settings.get("playback.subtitle_appearance")?.value)));
+      setHideUnwatchedOverview(settings.get("catalog.hide_unwatched_episode_overviews")?.value === true);
+      setHideUnwatchedImages(settings.get("catalog.hide_unwatched_episode_images")?.value === true);
       setPlayerSettingsLoaded(true);
       const selectedVersion = watch.versions.find(entry => entry.file_id === choices?.fileId)
         ?? bestVersionForDevice(watch.versions, watch.user_data?.last_file_id);
@@ -851,12 +873,18 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
           if (!event.repeat) document.querySelector<HTMLElement>(".player-next-up [data-setting='keep']")?.click() ?? document.querySelector<HTMLElement>(".player-next-up [data-setting='back']")?.click();
           return;
         }
-        if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+        if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
           event.preventDefault(); event.stopPropagation();
-          const rows = Array.from(document.querySelectorAll<HTMLElement>(".player-next-up [data-tv-focusable='true']"));
-          const index = rows.indexOf(document.activeElement as HTMLElement);
-          const next = rows[index + (event.key === "ArrowDown" ? 1 : -1)];
-          if (next) next.focus();
+          if (event.repeat) return;
+          const modal = document.querySelector<HTMLElement>(".player-next-up");
+          const rows = Array.from(modal?.querySelectorAll<HTMLElement>("[data-tv-focusable='true']:not([disabled])") ?? []);
+          const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          if (!active || !modal?.contains(active)) { rows[0]?.focus(); return; }
+          const center = (el: HTMLElement) => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
+          const p = center(active);
+          const dir = event.key.slice(5).toLowerCase();
+          const next = rows.filter(el => el !== active).map(el => ({ el, p: center(el) })).filter(x => dir === "left" || dir === "right" ? Math.abs(x.p.y-p.y) < Math.max(active.offsetHeight,x.el.offsetHeight) : dir === "down" ? x.p.y > p.y : x.p.y < p.y).filter(x => dir === "left" ? x.p.x < p.x : dir === "right" ? x.p.x > p.x : true).sort((a,b) => dir === "left" || dir === "right" ? Math.abs(a.p.x-p.x)-Math.abs(b.p.x-p.x) : Math.abs(a.p.y-p.y)*1000+Math.abs(a.p.x-p.x)-Math.abs(b.p.y-p.y)*1000-Math.abs(b.p.x-p.x))[0]?.el;
+          next?.focus();
           return;
         }
         if (event.key === "Enter" || event.key === "OK" || event.key === " ") {
@@ -1239,7 +1267,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     </div>
 
     {upNextCard ? <section className="player-next-up" data-modal="true" aria-label="Up next">
-      {(upNext?.BackdropUrl || upNext?.PosterUrl) ? <img className="player-next-up-backdrop" src={upNext.BackdropUrl || upNext.PosterUrl} alt="" /> : null}
+      {(upNext?.BackdropUrl || upNext?.PosterUrl) && !(hideUnwatchedImages && upNext.UserData?.Played !== true && (upNext.UserData?.PlaybackPositionTicks ?? 0) <= 0) ? <img className="player-next-up-backdrop" src={upNext.BackdropUrl || upNext.PosterUrl} alt="" /> : null}
       <div className="player-next-up-card">
         <div ref={upNextPane} className="player-next-up-pane" />
         <div className="player-next-up-panel">
@@ -1251,7 +1279,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
               <strong>{upNext.Name}</strong>
               {upNext.RuntimeMinutes ? <span>· {upNext.RuntimeMinutes} min</span> : null}
             </div>
-            {upNext.Overview ? <p className="player-next-up-overview">{upNext.Overview}</p> : null}
+            {upNext.Overview && !(hideUnwatchedOverview && upNext.UserData?.Played !== true && (upNext.UserData?.PlaybackPositionTicks ?? 0) <= 0) ? <p className="player-next-up-overview">{upNext.Overview}</p> : null}
             <div className="player-next-up-actions">
               <button autoFocus data-tv-focusable="true" className="tv-button" onClick={() => advanceToNext(0)}>Play Now</button>
               {upNextCountdown ? <span className="player-next-up-count" aria-label={`Playing in ${upNextCountdown.seconds} seconds`}><svg viewBox="0 0 58 58"><circle cx="29" cy="29" r="26" className="track" /><circle cx="29" cy="29" r="26" className="arc" strokeDasharray={2 * Math.PI * 26} strokeDashoffset={2 * Math.PI * 26 * (1 - Math.min(1, Math.max(0, upNextCountdown.seconds / upNextCountdown.total)))} /></svg><b>{upNextCountdown.seconds}</b></span> : null}
@@ -1267,6 +1295,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
           {upNext ? <button data-tv-focusable="true" className="player-next-up-toggle" onClick={toggleAutoPlayNext}>Auto-play is {autoPlayNext ? "On" : "Off"}</button> : null}
         </div>
       </div>
+      {onDeckItems.length ? <div className="player-on-deck"><h3>On Deck</h3><div className="player-on-deck-row">{onDeckItems.map(candidate => <button key={candidate.Id} data-tv-focusable="true" className="player-on-deck-card" onClick={() => { setUpNextCard(null); onPlayNext?.(candidate, 0); }}><span className="player-on-deck-art">{candidate.BackdropUrl && !(hideUnwatchedImages && candidate.UserData?.Played !== true && (candidate.UserData?.PlaybackPositionTicks ?? 0) <= 0) ? <img src={candidate.BackdropUrl} alt="" /> : null}</span><strong>{candidate.SeriesName || candidate.Name}</strong><small>{candidate.ParentIndexNumber != null && candidate.IndexNumber != null ? `S${candidate.ParentIndexNumber}·E${candidate.IndexNumber} — ${candidate.Name}` : candidate.ProductionYear ?? ""}</small></button>)}</div></div> : null}
     </section> : null}
 
     {panel ? <section className="player-options" data-modal="true">
