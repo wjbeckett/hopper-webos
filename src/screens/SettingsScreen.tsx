@@ -112,10 +112,20 @@ function languageLabel(code: string) {
 
 const languageSuggestions = new Map<string, string[]>();
 
+const ENUM_LABELS: Record<string, Record<string, string>> = {
+  "playback.intro_skip_mode": { never: "Never", ask: "Ask to skip", always: "Skip automatically" },
+  "playback.buffering_quality_mode": { never: "Never", ask: "Ask first", always: "Automatically" },
+  "playback.subtitle_mode": { off: "Off", auto: "Auto", always: "Always" }
+};
+
+function enumLabel(key: string, value: unknown, fallback: string) {
+  return ENUM_LABELS[key]?.[String(value)] ?? fallback;
+}
+
 function choicesFor(definition: SettingDefinition, contract: SettingsContract, current?: unknown): Choice[] {
   const schema = definition.value_schema;
   if (schema.type === "enum") {
-    return (schema.values ?? []).filter(option => !option.deprecated).map((option: SettingOption) => ({ label: option.label, value: option.value }));
+    return (schema.values ?? []).filter(option => !option.deprecated).map((option: SettingOption) => ({ label: enumLabel(definition.key, option.value, option.label), value: option.value }));
   }
   if (schema.type === "language_tag") {
     const set = contract.option_sets[languageSetByKey[definition.key] ?? ""]?.options ?? [];
@@ -126,6 +136,9 @@ function choicesFor(definition: SettingDefinition, contract: SettingsContract, c
   }
   if (schema.type === "boolean") {
     return [{ label: "On", value: true }, { label: "Off", value: false }];
+  }
+  if (schema.type === "integer" && /^player\.(video|audiobook)_skip_(back|forward)_seconds$/.test(definition.key)) {
+    return SEEK_CHOICES.map(value => ({ label: `${value} seconds`, value }));
   }
   if (schema.type === "integer") {
     const min = schema.minimum ?? 0;
@@ -154,7 +167,7 @@ function describe(definition: SettingDefinition, value: unknown, contract: Setti
   if (value == null || value === "") return schema.type === "language_tag" ? unsetLanguageLabel(definition.key) : definition.unit === "kbps" ? "Unlimited" : "Default";
   const match = choicesFor(definition, contract).find(choice => choice.value === value);
   if (match) return match.label;
-  if (schema.type === "enum") return (schema.values ?? []).find(option => option.value === value)?.label ?? String(value);
+  if (schema.type === "enum") return enumLabel(definition.key, value, (schema.values ?? []).find(option => option.value === value)?.label ?? String(value));
   if (schema.type === "language_tag") return languageLabel(String(value));
   return String(value);
 }
@@ -509,7 +522,7 @@ export function SettingsScreen({
   }
 
   function pickerTitle(key: string): string {
-    return key === "playback.preferred_quality" ? "Resolution" : key === "playback.max_bitrate_kbps" ? "Maximum Bitrate" : key === "playback.audio_language" ? "Audio Language" : key === "playback.buffering_quality_mode" ? "Lower quality when buffering" : key === "playback.next_up_prompt_seconds" ? "Show Next Up" : key === "playback.intro_skip_mode" ? "Skip Intros" : definitions.get(key)?.label ?? key;
+    return key === "playback.preferred_quality" ? "Resolution" : key === "playback.max_bitrate_kbps" ? "Maximum Bitrate" : key === "playback.audio_language" ? "Audio Language" : key === "playback.buffering_quality_mode" ? "Lower quality when buffering" : key === "playback.next_up_prompt_seconds" ? "Show Next Up" : key === "playback.intro_skip_mode" ? "Skip Intros" : key.startsWith("player.video_skip_") || key.startsWith("player.audiobook_skip_") ? `${key.includes("audiobook") ? "Audiobooks" : "Video"} ${key.includes("back") ? "Skip Back" : "Skip Forward"}` : definitions.get(key)?.label ?? key;
   }
 
   async function refreshPlaybackValue(key: string) {
@@ -652,6 +665,23 @@ export function SettingsScreen({
     return toggleRow(key, label, checked, () => { const definition = definitions.get(key); if (definition) void savePlaybackSetting(definition, !checked); else void savePlaybackSetting({ key, label, value_schema: { type: "boolean" } } as SettingDefinition, !checked); });
   }
 
+  function renderSeekGroup(title: string, media: "video" | "audiobook") {
+    const back = `player.${media}_skip_back_seconds`;
+    const forward = `player.${media}_skip_forward_seconds`;
+    const supported = definitions.has(back) && definitions.has(forward);
+    const seconds = (key: string) => `${settingValue(key)} seconds`;
+    return (
+      <section className="settings-group">
+        <h3>{title}</h3>
+        {supported ? <>
+          {valueRow(back, "Skip Back", seconds(back), () => openSettingPicker(definitions.get(back)!))}
+          {valueRow(forward, "Skip Forward", seconds(forward), () => openSettingPicker(definitions.get(forward)!))}
+          <p className="settings-footer">{media === "video" ? "Used by left and right presses on the remote and the on-screen skip buttons. Applies to every device signed in to this profile." : "Used by the audiobook player's skip buttons. Applies to every device signed in to this profile."}</p>
+        </> : <p className="settings-footer">{media === "video" ? "This server uses fixed skip intervals for video. Update the server to choose them for this profile." : "This server does not sync skip intervals. Set them from the audiobook player; they stay on this TV."}</p>}
+      </section>
+    );
+  }
+
   function renderPlaybackPane() {
     if (!contract) return null;
     const buffering = definitions.has("playback.buffering_quality_mode");
@@ -706,22 +736,8 @@ export function SettingsScreen({
           {definitions.has("catalog.hide_unwatched_episode_overviews") ? toggleRow("catalog.hide_unwatched_episode_overviews", "Hide unwatched episode descriptions", Boolean(values.get("catalog.hide_unwatched_episode_overviews")), () => activate(definitions.get("catalog.hide_unwatched_episode_overviews")!)) : null}
           <p className="settings-footer">Applies to episodes you have not started, on every device that uses this profile.</p>
         </section>
-        {definitions.has("player.video_skip_back_seconds") ? (
-          <section className="settings-group">
-            <h3>Video</h3>
-            {valueRow("player.video_skip_back_seconds", "Skip Back", `${settingValue("player.video_skip_back_seconds")}s`, () => openSettingPicker(definitions.get("player.video_skip_back_seconds")!))}
-            {valueRow("player.video_skip_forward_seconds", "Skip Forward", `${settingValue("player.video_skip_forward_seconds")}s`, () => openSettingPicker(definitions.get("player.video_skip_forward_seconds")!))}
-            <p className="settings-footer">Used by left and right presses on the remote and the on-screen skip buttons. Applies to every device signed in to this profile.</p>
-          </section>
-        ) : null}
-        {definitions.has("player.audiobook_skip_back_seconds") ? (
-          <section className="settings-group">
-            <h3>Audiobooks</h3>
-            {valueRow("player.audiobook_skip_back_seconds", "Skip Back", `${settingValue("player.audiobook_skip_back_seconds")}s`, () => openSettingPicker(definitions.get("player.audiobook_skip_back_seconds")!))}
-            {valueRow("player.audiobook_skip_forward_seconds", "Skip Forward", `${settingValue("player.audiobook_skip_forward_seconds")}s`, () => openSettingPicker(definitions.get("player.audiobook_skip_forward_seconds")!))}
-            <p className="settings-footer">Used by the audiobook player's skip buttons. Applies to every device signed in to this profile.</p>
-          </section>
-        ) : null}
+        {renderSeekGroup("Video", "video")}
+        {renderSeekGroup("Audiobooks", "audiobook")}
         <section className="settings-group">
           <h3>Reset</h3>
           <button data-tv-focusable="true" data-setting-key="reset-playback" className="option-row settings-row settings-destructive" onClick={() => setConfirmReset(true)}><span>Use Profile Settings</span></button>

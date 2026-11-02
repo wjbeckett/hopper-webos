@@ -22,8 +22,10 @@ const SECONDS_PER_TICK_AT_1X = 2.0;
 const RATES = [1, 2, 4, 8, 16, 32];
 const RAMP_RATES = [2, 4, 8];
 const RAMP_STEP_MS = 1200;
-const SKIP_BACK_SECONDS = 10;
-const SKIP_FORWARD_SECONDS = 30;
+const DEFAULT_SKIP_BACK_SECONDS = 10;
+const DEFAULT_SKIP_FORWARD_SECONDS = 30;
+const SKIP_CHOICES = [5, 10, 15, 30, 45, 60, 90];
+const validSkip = (value: unknown, fallback: number) => typeof value === "number" && SKIP_CHOICES.includes(value) ? value : fallback;
 const CONTROLS_AUTO_HIDE_MS = 5000;
 const SKIP_FEEDBACK_HIDE_MS = 1200;
 const CLEAN_SEEK_HOLD_THRESHOLD_MS = 300;
@@ -109,7 +111,7 @@ type Pill = { kind: PillKind; key: string; label: string; secondsRemaining: numb
 type UiSnapshot = { upNextOpen: boolean; hud: boolean; panel: "audio" | "subtitles" | "quality" | null; scrubPreview: number | null; autoSeekRate: number; cleanSeek: { rate: number; preview: number } | null; pill: Pill | null; position: number; duration: number; playing: boolean };
 
 /** The player's transport glyphs: dark-disc buttons inverting to Paper on focus. */
-function TransportGlyph({ name }: { name: "play" | "pause" | "back10" | "forward30" | "subtitles" | "tune" | "close" }) {
+function TransportGlyph({ name, seconds = 0 }: { name: "play" | "pause" | "back10" | "forward30" | "subtitles" | "tune" | "close"; seconds?: number }) {
   const arc = (forward: boolean, seconds: number) => <g>
     <path d={forward ? "M12 4a8 8 0 1 1-7.4 4.9" : "M12 4a8 8 0 1 0 7.4 4.9"} fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" />
     <path d={forward ? "M3.2 6.4 4.9 9.2 7.8 7.9" : "M20.8 6.4 19.1 9.2 16.2 7.9"} fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" />
@@ -118,8 +120,8 @@ function TransportGlyph({ name }: { name: "play" | "pause" | "back10" | "forward
   switch (name) {
     case "play": return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 5.6v12.8c0 .9 1 1.4 1.7.9l9-6.4c.6-.4.6-1.4 0-1.8l-9-6.4c-.7-.5-1.7 0-1.7.9z" fill="currentColor" /></svg>;
     case "pause": return <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.4" y="5" width="3.9" height="14" rx="1.3" fill="currentColor" /><rect x="13.7" y="5" width="3.9" height="14" rx="1.3" fill="currentColor" /></svg>;
-    case "back10": return <svg viewBox="0 0 24 24" aria-hidden="true">{arc(false, SKIP_BACK_SECONDS)}</svg>;
-    case "forward30": return <svg viewBox="0 0 24 24" aria-hidden="true">{arc(true, SKIP_FORWARD_SECONDS)}</svg>;
+    case "back10": return <svg viewBox="0 0 24 24" aria-hidden="true">{arc(false, seconds)}</svg>;
+    case "forward30": return <svg viewBox="0 0 24 24" aria-hidden="true">{arc(true, seconds)}</svg>;
     case "subtitles": return <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.4" y="4.8" width="17.2" height="14.4" rx="2.6" fill="none" stroke="currentColor" strokeWidth="1.9" /><path d="M6.6 14.6h6.2M15.2 14.6h2.4M6.6 10.4h2.2M11 10.4h6.6" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" /></svg>;
     case "tune": return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h9m4 0h3M4 16h3m4 0h9" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" /><circle cx="15" cy="8" r="2.1" fill="none" stroke="currentColor" strokeWidth="1.9" /><circle cx="9" cy="16" r="2.1" fill="none" stroke="currentColor" strokeWidth="1.9" /></svg>;
     case "close": return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 6.6l10.8 10.8M17.4 6.6 6.6 17.4" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" /></svg>;
@@ -188,6 +190,9 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const shuffleMessageTimer = useRef<number | undefined>(undefined);
   const upNextPane = useRef<HTMLDivElement>(null);
   const [upNextRect, setUpNextRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const [skipSeconds, setSkipSeconds] = useState({ back: DEFAULT_SKIP_BACK_SECONDS, forward: DEFAULT_SKIP_FORWARD_SECONDS });
+  const skipRef = useRef(skipSeconds);
+  skipRef.current = skipSeconds;
   const [subtitleCss, setSubtitleCss] = useState("");
   const [appearance, setAppearance] = useState<SubtitleAppearance | null>(null);
   const [appearanceDeviceOnly, setAppearanceDeviceOnly] = useState(false);
@@ -520,7 +525,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     setAutoPlayNext(true);
     Promise.all([
       getWatchDetail(session, item),
-      getEffectiveSettings(session, ["playback.intro_skip_mode", "playback.auto_skip_credits", "playback.auto_play_next", "playback.subtitle_appearance", "catalog.hide_unwatched_episode_overviews", "catalog.hide_unwatched_episode_images"]).catch(() => new Map()),
+      getEffectiveSettings(session, ["playback.intro_skip_mode", "playback.auto_skip_credits", "playback.auto_play_next", "playback.subtitle_appearance", "catalog.hide_unwatched_episode_overviews", "catalog.hide_unwatched_episode_images", "player.video_skip_back_seconds", "player.video_skip_forward_seconds"]).catch(() => new Map()),
     ]).then(async ([watch, settings]) => {
       if (!alive) return;
       const configuredMode = settings.get("playback.intro_skip_mode")?.value;
@@ -535,6 +540,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       if (getSubtitleMatchesDevice(session.profileId)) void deviceCaptioningAppearance(loadedAppearance).then(value => { if (alive) setSubtitleCss(subtitleCueCss(value)); });
       setHideUnwatchedOverview(settings.get("catalog.hide_unwatched_episode_overviews")?.value === true);
       setHideUnwatchedImages(settings.get("catalog.hide_unwatched_episode_images")?.value === true);
+      setSkipSeconds({ back: validSkip(settings.get("player.video_skip_back_seconds")?.value, DEFAULT_SKIP_BACK_SECONDS), forward: validSkip(settings.get("player.video_skip_forward_seconds")?.value, DEFAULT_SKIP_FORWARD_SECONDS) });
       setPlayerSettingsLoaded(true);
       const selectedVersion = watch.versions.find(entry => entry.file_id === choices?.fileId)
         ?? bestVersionForDevice(watch.versions, watch.user_data?.last_file_id);
@@ -1018,13 +1024,13 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       if (event.key === "MediaRewind" || event.key === "MediaTrackPrevious") {
         event.preventDefault(); event.stopPropagation();
         stopCleanSeek();
-        performRelativeSeek(-SKIP_BACK_SECONDS, true);
+        performRelativeSeek(-skipRef.current.back, true);
         return;
       }
       if (event.key === "MediaFastForward" || event.key === "MediaTrackNext") {
         event.preventDefault(); event.stopPropagation();
         stopCleanSeek();
-        performRelativeSeek(SKIP_FORWARD_SECONDS, true);
+        performRelativeSeek(skipRef.current.forward, true);
         return;
       }
       if (/^Media(Pause|Play|PlayPause)$/.test(event.key)) {
@@ -1173,7 +1179,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
           pendingCleanPress.current = null;
           if (cleanSeekHold.current) window.clearTimeout(cleanSeekHold.current);
           if (held) commitCleanSeek();
-          else performRelativeSeek(direction < 0 ? -SKIP_BACK_SECONDS : SKIP_FORWARD_SECONDS, true);
+          else performRelativeSeek(direction < 0 ? -skipRef.current.back : skipRef.current.forward, true);
           return;
         }
         if (document.activeElement === scrubberRef.current) {
@@ -1183,10 +1189,10 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
             if (ui.current.autoSeekRate !== 0) {
               setAutoSeekRate(rate => bumpedRate(rate, direction));
             } else if (ui.current.scrubPreview != null) {
-              const step = direction < 0 ? -SKIP_BACK_SECONDS : SKIP_FORWARD_SECONDS;
+              const step = direction < 0 ? -skipRef.current.back : skipRef.current.forward;
               setScrubPreview(current => clampSeek((current ?? 0) + step, ui.current.duration));
             } else {
-              const delta = direction < 0 ? -SKIP_BACK_SECONDS : SKIP_FORWARD_SECONDS;
+              const delta = direction < 0 ? -skipRef.current.back : skipRef.current.forward;
               const target = clampSeek(ui.current.position + delta, ui.current.duration);
               setTapPreview(target);
               if (tapPreviewTimer.current) window.clearTimeout(tapPreviewTimer.current);
@@ -1313,9 +1319,9 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
 
         <div ref={transportRef} className="player-transport">
           <div className="transport-group">
-            <button className="transport-button" onClick={() => performRelativeSeek(-SKIP_BACK_SECONDS, true)} aria-label={`Skip back ${SKIP_BACK_SECONDS} seconds`}><TransportGlyph name="back10" /></button>
+            <button className="transport-button" onClick={() => performRelativeSeek(-skipRef.current.back, true)} aria-label={`Skip back ${skipSeconds.back} seconds`}><TransportGlyph name="back10" seconds={skipSeconds.back} /></button>
             <button className="transport-button primary" onClick={togglePlayPause} aria-label={playing ? "Pause" : "Play"}><TransportGlyph name={playing ? "pause" : "play"} /></button>
-            <button className="transport-button" onClick={() => performRelativeSeek(SKIP_FORWARD_SECONDS, true)} aria-label={`Skip forward ${SKIP_FORWARD_SECONDS} seconds`}><TransportGlyph name="forward30" /></button>
+            <button className="transport-button" onClick={() => performRelativeSeek(skipRef.current.forward, true)} aria-label={`Skip forward ${skipSeconds.forward} seconds`}><TransportGlyph name="forward30" seconds={skipSeconds.forward} /></button>
           </div>
           <div className="transport-group">
             <button className="transport-button labeled" onClick={() => openPanel("subtitles")} aria-label={`Subtitles · ${subtitleValue}`}><TransportGlyph name="subtitles" /><span>Subtitles</span><small>{subtitleValue}</small></button>

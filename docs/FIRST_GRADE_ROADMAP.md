@@ -75,3 +75,4 @@ Follow the official Silo TV clients:
 - SiloControl receiver compatibility
 
 Do not expose ebook reading or phone-style downloads management on TV unless product direction changes.
+- Settings skip intervals: the Video and Audiobooks groups show Android's "N seconds" values, the fixed 5-90 second choices and the unsupported-server footers. The player now reads the effective Video skip back/forward values (default 10/30) for the remote keys, transport buttons and glyphs. Android's "checking" and "Try Again" states and the legacy audiobook import are not built: webOS has no audiobook player or legacy device values, and a failed contract load blocks the whole pane. Intro skip, buffering and subtitle behavior pickers use Android's labels. Build-checked only.
