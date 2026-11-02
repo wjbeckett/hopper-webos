@@ -4,6 +4,7 @@ import { bestVersionForDevice, getMarkers, getTrickplay, getWatchDetail, playbac
 import type { Session, SiloItem } from "../types";
 import { getEffectiveSettings, putScopedSetting } from "../api/settings";
 import { parseSubtitleAppearance, subtitleCueCss } from "../core/subtitleStyle";
+import { attachSidecarSubtitle } from "../core/subtitleSidecar";
 import { localPassOutThreshold, localResumeRewindSeconds, markerAction, resumePositionWithRewind } from "../core/playerSettings";
 
 type PlaybackState = { plan: PlaybackPlan; playbackAttemptId: string; planAttemptId: string; attemptedKeys: string[] };
@@ -124,6 +125,7 @@ function TransportGlyph({ name }: { name: "play" | "pause" | "back10" | "forward
 export function PlayerScreen({ session, item, startPosition, choices, onBack, onEnded, resolveNextEpisode, onPlayNext, autoAdvanceCount = 0 }: { session: Session; item: SiloItem; startPosition?: number; choices?: PlaybackChoices; onBack: (elapsedSeconds: number) => void; onEnded?: () => void; resolveNextEpisode?: () => Promise<SiloItem | null>; onPlayNext?: (next: SiloItem, autoAdvanceCount: number) => void; autoAdvanceCount?: number }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const sidecarTrack = useRef<TextTrack | null>(null);
   const closedSessions = useRef(new Set<string>());
   const endedHandled = useRef(false);
   const stateRef = useRef<PlaybackState | undefined>(undefined);
@@ -208,6 +210,13 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     const video = videoRef.current;
     if (!video) return;
     const streamUrl = playbackUrl(session, next.plan.stream.url);
+    const sidecarHeaders = {
+      Authorization: `Bearer ${session.accessToken}`,
+      ...(session.profileId ? { "X-Profile-Id": session.profileId } : {}),
+      ...(session.profileToken ? { "X-Profile-Token": session.profileToken } : {}),
+      ...(next.plan.stream.headers ?? {})
+    };
+    void attachSidecarSubtitle(video, next.plan, session, sidecarHeaders, sidecarTrack.current).then(track => { sidecarTrack.current = track; }).catch(() => undefined);
     hlsRef.current?.destroy();
     hlsRef.current = null;
     console.info("[Silo webOS] installing playback-v3 plan", {
@@ -258,6 +267,14 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         hls.on(HlsPlayer.Events.ERROR, (_event, data) => {
           clientDiagnostic("HLS playback error", { fatal: data.fatal, type: data.type, details: data.details, reason: data.reason, responseCode: data.response?.code, responseUrl: data.response?.url });
           if (data.fatal) setError(`HLS playback error: ${data.details}`);
+        });
+        hls.on(HlsPlayer.Events.MANIFEST_PARSED, () => {
+          const rendition = next.plan.subtitle.hls_rendition;
+          if (rendition) {
+            const tracks = hls.subtitleTracks ?? [];
+            const index = tracks.findIndex(track => track.name === rendition.name);
+            if (index >= 0) hls.subtitleTrack = index;
+          }
         });
         hls.loadSource(streamUrl);
         hls.attachMedia(video);

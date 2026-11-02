@@ -17,7 +17,12 @@ export type PlaybackPlan = {
   stream: { url: string; protocol: string; container?: string; mime_type?: string; headers?: Record<string, string> };
   timeline: { source_start_seconds: number; player_start_seconds: number; timeline_offset_seconds: number; can_seek_anywhere: boolean };
   selected_tracks: { audio?: TrackIdentity; subtitle?: TrackIdentity };
-  subtitle: { mode: string; track_id?: string; inventory: SubtitleInventory[] };
+  subtitle: {
+    mode: string; track_id?: string; inventory: SubtitleInventory[];
+    artifact?: { url: string; format?: string; mime_type?: string; timing_origin_seconds?: number };
+    embedded?: { container_track_id?: string; stream_index: number };
+    hls_rendition?: { group_id: string; name: string; format?: string; mime_type?: string };
+  };
   available_qualities: Quality[];
 };
 type Decision = { outcome: string; session_id?: string; playback_plan?: PlaybackPlan; terminal?: { message: string; reason: string } };
