@@ -3,7 +3,7 @@ import type Hls from "hls.js";
 import { bestVersionForDevice, getMarkers, getTrickplay, getWatchDetail, playbackUrl, replanPlaybackV3, reportProgress, saveAudioPreference, saveSubtitlePreference, startPlaybackV3, stopPlayback, stopPlaybackKeepalive, type AudioTrack, type FileMarkers, type MarkerSegment, type PlaybackChoices, type PlaybackPlan, type Quality, type SubtitleInventory, type Trickplay, type WatchDetail } from "../api/playback";
 import type { Session, SiloItem } from "../types";
 import { getEffectiveSettings, putScopedSetting } from "../api/settings";
-import { getHomeRails, getShuffle, skipShuffle } from "../api/silo";
+import { artUrl, getHomeRails, getShuffle, skipShuffle } from "../api/silo";
 import { parseSubtitleAppearance, subtitleCueCss } from "../core/subtitleStyle";
 import { attachSidecarSubtitle } from "../core/subtitleSidecar";
 import { localPassOutThreshold, localResumeRewindSeconds, markerAction, resumePositionWithRewind } from "../core/playerSettings";
@@ -188,6 +188,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const [onDeckItems, setOnDeckItems] = useState<SiloItem[]>([]);
   const [hideUnwatchedOverview, setHideUnwatchedOverview] = useState(false);
   const [hideUnwatchedImages, setHideUnwatchedImages] = useState(false);
+  const hidesArt = (candidate: SiloItem) => hideUnwatchedImages && candidate.UserData?.Played !== true && (candidate.UserData?.PlaybackPositionTicks ?? 0) <= 0;
+  const nextUpBackdrop = (upNext && !hidesArt(upNext) ? artUrl(session, upNext) : "") || onDeckItems.map(candidate => hidesArt(candidate) ? "" : artUrl(session, candidate)).find(Boolean) || "";
   const upNextHandled = useRef(false);
   const upNextPendingEnd = useRef<boolean | null>(null);
   const upNextStartedAtEnd = useRef(false);
@@ -390,7 +392,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       const currentSeries = item.SeriesId;
       const items = rails.filter(rail => /continue|in.progress|next.up/i.test(rail.id + " " + rail.title))
         .flatMap(rail => rail.items)
-        .filter(candidate => candidate.Id !== item.Id && (!currentSeries || candidate.SeriesId !== currentSeries) && Boolean(candidate.BackdropUrl))
+        .filter(candidate => candidate.Id !== item.Id && (!currentSeries || candidate.SeriesId !== currentSeries) && Boolean(candidate.BackdropUrl || candidate.PosterUrl))
         .filter((candidate, index, all) => all.findIndex(other => other.Id === candidate.Id) === index)
         .slice(0, 12);
       setOnDeckItems(items);
@@ -1311,8 +1313,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     </div>
 
     {upNextCard ? <section className="player-next-up" data-modal="true" aria-label="Up next">
-      {(upNext?.BackdropUrl || upNext?.PosterUrl) && !(hideUnwatchedImages && upNext.UserData?.Played !== true && (upNext.UserData?.PlaybackPositionTicks ?? 0) <= 0) ? <img className="player-next-up-backdrop" src={upNext.BackdropUrl || upNext.PosterUrl} alt="" /> : null}
-      <div className="player-next-up-card">
+      {nextUpBackdrop ? <img className="player-next-up-backdrop" src={nextUpBackdrop} alt="" /> : null}
+      <div className="player-next-up-main"><div className="player-next-up-card">
         <div ref={upNextPane} className="player-next-up-pane" />
         <div className="player-next-up-panel">
           {shuffle && shuffleScope ? <div className="player-next-up-scope"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z" /></svg><span>Shuffling {shuffleScope}</span></div> : null}
@@ -1344,8 +1346,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
             {shuffle ? <><span>·</span><button data-tv-focusable="true" className="player-next-up-toggle" onClick={exitPlayer}>Stop shuffling</button></> : null}
           </div> : null}
         </div>
-      </div>
-      {onDeckItems.length ? <div className="player-on-deck"><h3>On Deck</h3><div className="player-on-deck-row">{onDeckItems.map(candidate => <button key={candidate.Id} data-tv-focusable="true" className="player-on-deck-card" onClick={() => { setUpNextCard(null); onPlayNext?.(candidate, 0); }}><span className="player-on-deck-art">{candidate.BackdropUrl && !(hideUnwatchedImages && candidate.UserData?.Played !== true && (candidate.UserData?.PlaybackPositionTicks ?? 0) <= 0) ? <img src={candidate.BackdropUrl} alt="" /> : null}</span><strong>{candidate.SeriesName || candidate.Name}</strong><small>{candidate.ParentIndexNumber != null && candidate.IndexNumber != null ? `S${candidate.ParentIndexNumber}·E${candidate.IndexNumber} — ${candidate.Name}` : candidate.ProductionYear ?? ""}</small></button>)}</div></div> : null}
+      </div></div>
+      {onDeckItems.length ? <div className="player-on-deck"><h3>On Deck</h3><div className="player-on-deck-row">{onDeckItems.map(candidate => <button key={candidate.Id} data-tv-focusable="true" className="player-on-deck-card" onClick={() => { setUpNextCard(null); onPlayNext?.(candidate, 0); }}><span className="player-on-deck-art">{!hidesArt(candidate) && artUrl(session, candidate) ? <img src={artUrl(session, candidate)} alt="" /> : null}</span><strong>{candidate.SeriesName || candidate.Name}</strong><small>{candidate.ParentIndexNumber != null && candidate.IndexNumber != null ? `S${candidate.ParentIndexNumber}·E${candidate.IndexNumber} — ${candidate.Name}` : candidate.ProductionYear ?? ""}</small></button>)}</div></div> : null}
     </section> : null}
 
     {panel ? <section className="player-options" data-modal="true">

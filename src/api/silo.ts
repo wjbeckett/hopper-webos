@@ -1100,6 +1100,10 @@ export function imageUrl(session: Session, item: SiloItem | string): string {
   return typeof item === "string" ? "" : assetUrl(session, item.PosterUrl);
 }
 
+export function artUrl(session: Session, item: SiloItem): string {
+  return assetUrl(session, item.Type === "Episode" ? item.PosterUrl ?? item.BackdropUrl : item.BackdropUrl ?? item.PosterUrl);
+}
+
 export function backdropUrl(session: Session, item: SiloItem | string): string {
   return typeof item === "string" ? "" : assetUrl(session, item.BackdropUrl ?? item.PosterUrl);
 }
