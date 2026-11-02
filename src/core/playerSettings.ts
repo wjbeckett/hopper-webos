@@ -24,3 +24,13 @@ export function localResumeRewindSeconds() {
     return 7;
   }
 }
+
+export function localPassOutThreshold() {
+  try {
+    const values = JSON.parse(localStorage.getItem(LOCAL_SETTINGS_STORAGE) ?? "{}");
+    const value = Number(values?.["player.passout_threshold"]);
+    return Number.isFinite(value) && value >= 0 ? value : 3;
+  } catch {
+    return 3;
+  }
+}

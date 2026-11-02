@@ -23,7 +23,7 @@ An early, community-built LG webOS TV client for the [Silo](https://silo.tv/) se
 - D-pad spatial navigation and LG Back-key handling
 - Protocol-v3 playback planning and replanning
 - HLS playback with negotiated request headers
-- Resume with configurable rewind, intro skip mode, automatic credits skipping, episode Next Up with configurable auto-play countdown, seek, chapter markers, and playback progress reporting
+- Resume with configurable rewind, intro skip mode, automatic credits skipping, Up Next card at the credits with auto-play countdown and Still Watching gate, seek, chapter markers, and playback progress reporting
 - Audio track, subtitle track, file version, and quality selection
 - Profile appearance themes and text preferences
 - Android TV-style Settings for General, Playback, Subtitles, local Diagnostics log viewing/ZIP export, and Server; diagnostic logs remain on-device and are never uploaded to Silo

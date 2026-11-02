@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type Hls from "hls.js";
 import { bestVersionForDevice, getMarkers, getTrickplay, getWatchDetail, playbackUrl, replanPlaybackV3, reportProgress, saveAudioPreference, saveSubtitlePreference, startPlaybackV3, stopPlayback, stopPlaybackKeepalive, type AudioTrack, type FileMarkers, type MarkerSegment, type PlaybackChoices, type PlaybackPlan, type Quality, type SubtitleInventory, type Trickplay, type WatchDetail } from "../api/playback";
 import type { Session, SiloItem } from "../types";
-import { getEffectiveSettings } from "../api/settings";
-import { localResumeRewindSeconds, markerAction, resumePositionWithRewind } from "../core/playerSettings";
+import { getEffectiveSettings, putScopedSetting } from "../api/settings";
+import { localPassOutThreshold, localResumeRewindSeconds, markerAction, resumePositionWithRewind } from "../core/playerSettings";
 
 type PlaybackState = { plan: PlaybackPlan; playbackAttemptId: string; planAttemptId: string; attemptedKeys: string[] };
 const ACTIVE_PLAYBACK_KEY = "silo-webos-active-playback-v1";
@@ -21,6 +21,7 @@ const SKIP_FORWARD_SECONDS = 30;
 const CONTROLS_AUTO_HIDE_MS = 5000;
 const SKIP_FEEDBACK_HIDE_MS = 1200;
 const CLEAN_SEEK_HOLD_THRESHOLD_MS = 300;
+const NEXT_UP_COUNTDOWN_SECONDS = 10;
 const INTRO_PROMPT_SECONDS = 5;
 // Marker band colors mirror TvPlayerScrubber's track bands.
 const BAND_COLORS: Record<string, string> = { intro: "#22D3EE", recap: "#8BC34A", credits: "#FFB74D", preview: "#BA68C8" };
@@ -99,7 +100,7 @@ function formatClock(seconds: number) {
 
 type PillKind = "intro" | "credits" | "recap";
 type Pill = { kind: PillKind; key: string; label: string; secondsRemaining: number | null; undo?: boolean };
-type UiSnapshot = { hud: boolean; panel: "audio" | "subtitles" | "quality" | null; scrubPreview: number | null; autoSeekRate: number; cleanSeek: { rate: number; preview: number } | null; pill: Pill | null; position: number; duration: number; playing: boolean };
+type UiSnapshot = { upNextOpen: boolean; hud: boolean; panel: "audio" | "subtitles" | "quality" | null; scrubPreview: number | null; autoSeekRate: number; cleanSeek: { rate: number; preview: number } | null; pill: Pill | null; position: number; duration: number; playing: boolean };
 
 /** The player's transport glyphs: dark-disc buttons inverting to Paper on focus. */
 function TransportGlyph({ name }: { name: "play" | "pause" | "back10" | "forward30" | "subtitles" | "tune" | "close" }) {
@@ -119,7 +120,7 @@ function TransportGlyph({ name }: { name: "play" | "pause" | "back10" | "forward
   }
 }
 
-export function PlayerScreen({ session, item, startPosition, choices, onBack, onEnded, resolveNextEpisode, onPlayNext }: { session: Session; item: SiloItem; startPosition?: number; choices?: PlaybackChoices; onBack: (elapsedSeconds: number) => void; onEnded?: () => void; resolveNextEpisode?: () => Promise<SiloItem | null>; onPlayNext?: (next: SiloItem) => void }) {
+export function PlayerScreen({ session, item, startPosition, choices, onBack, onEnded, resolveNextEpisode, onPlayNext, autoAdvanceCount = 0 }: { session: Session; item: SiloItem; startPosition?: number; choices?: PlaybackChoices; onBack: (elapsedSeconds: number) => void; onEnded?: () => void; resolveNextEpisode?: () => Promise<SiloItem | null>; onPlayNext?: (next: SiloItem, autoAdvanceCount: number) => void; autoAdvanceCount?: number }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const closedSessions = useRef(new Set<string>());
@@ -170,8 +171,14 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const [introSkipMode, setIntroSkipMode] = useState<"never" | "ask" | "always">("ask");
   const [autoSkipCredits, setAutoSkipCredits] = useState(false);
   const [autoPlayNext, setAutoPlayNext] = useState(true);
-  const [nextEpisode, setNextEpisode] = useState<SiloItem | null>(null);
-  const [nextCountdown, setNextCountdown] = useState<number | null>(null);
+  const [upNext, setUpNext] = useState<SiloItem | null>(null);
+  const [upNextCard, setUpNextCard] = useState<{ videoEnded: boolean } | null>(null);
+  const [upNextCountdown, setUpNextCountdown] = useState<{ seconds: number; total: number } | null>(null);
+  const upNextHandled = useRef(false);
+  const upNextPendingEnd = useRef<boolean | null>(null);
+  const upNextStartedAtEnd = useRef(false);
+  const upNextWall = useRef(NEXT_UP_COUNTDOWN_SECONDS);
+  const previousPosition = useRef(0);
   const [playerSettingsLoaded, setPlayerSettingsLoaded] = useState(false);
 
   const scrubberRef = useRef<HTMLDivElement>(null);
@@ -181,8 +188,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
 
   // The key handler binds once and reads this snapshot, so it always sees the
   // current render's values.
-  const ui = useRef<UiSnapshot>({ hud: true, panel: null, scrubPreview: null, autoSeekRate: 0, cleanSeek: null, pill: null, position: 0, duration: 0, playing: false });
-  ui.current = { hud, panel, scrubPreview, autoSeekRate, cleanSeek, pill, position, duration, playing };
+  const ui = useRef<UiSnapshot>({ upNextOpen: false, hud: true, panel: null, scrubPreview: null, autoSeekRate: 0, cleanSeek: null, pill: null, position: 0, duration: 0, playing: false });
+  ui.current = { upNextOpen: upNextCard != null, hud, panel, scrubPreview, autoSeekRate, cleanSeek, pill, position, duration, playing };
 
   const sourcePosition = useCallback(() => {
     const video = videoRef.current;
@@ -277,37 +284,100 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     hlsRef.current = null;
   }, [session, sourcePosition]);
 
-  const finishToNext = useCallback((next: SiloItem) => {
-    setNextCountdown(null);
+  const advanceToNext = useCallback((nextCount: number) => {
+    if (!upNext) return;
+    setUpNextCountdown(null);
     closePlayback(false);
-    onPlayNext?.(next);
-  }, [closePlayback, onPlayNext]);
+    onPlayNext?.(upNext, nextCount);
+  }, [upNext, closePlayback, onPlayNext]);
 
-  const handleMediaEnded = useCallback(async () => {
-    if (endedHandled.current) return;
-    endedHandled.current = true;
-    try {
-      const next = await resolveNextEpisode?.();
-      if (next) {
-        setNextEpisode(next);
-        setNextCountdown(autoPlayNext ? 10 : null);
-        setHud(false);
-        return;
-      }
-    } catch { /* A failed next-episode lookup falls back to normal end-of-playback. */ }
+  const commitApproachingEnd = useCallback((videoEnded: boolean) => {
+    upNextHandled.current = true;
+    upNextPendingEnd.current = null;
+    const threshold = localPassOutThreshold();
+    const gated = threshold > 0 && autoAdvanceCount >= threshold;
+    const counting = autoPlayNext && !gated;
+    const initial = !counting ? null : videoEnded ? NEXT_UP_COUNTDOWN_SECONDS : Math.ceil(Math.max(0, ui.current.duration - ui.current.position));
+    upNextStartedAtEnd.current = videoEnded;
+    upNextWall.current = NEXT_UP_COUNTDOWN_SECONDS;
+    setUpNextCard({ videoEnded });
+    setUpNextCountdown(initial == null ? null : { seconds: initial, total: Math.max(initial, 1) });
+    setHud(false);
+  }, [autoAdvanceCount, autoPlayNext]);
+
+  const onApproachingEnd = useCallback((videoEnded: boolean) => {
+    if (upNextHandled.current) {
+      if (videoEnded) { setUpNextCard({ videoEnded: true }); setHud(false); }
+      return;
+    }
+    if (!upNext) {
+      const ended = videoEnded || upNextPendingEnd.current === true;
+      upNextPendingEnd.current = ended;
+      if (ended) { setUpNextCard({ videoEnded: true }); setUpNextCountdown(null); setHud(false); }
+      return;
+    }
+    commitApproachingEnd(videoEnded);
+  }, [upNext, commitApproachingEnd]);
+
+  const handleMediaEnded = useCallback(() => {
+    if (resolveNextEpisode && item.Type === "Episode") {
+      onApproachingEnd(true);
+      return;
+    }
     closePlayback(false);
     onEnded?.();
-  }, [resolveNextEpisode, autoPlayNext, closePlayback, onEnded]);
+  }, [resolveNextEpisode, item.Type, onApproachingEnd, closePlayback, onEnded]);
+
+  const keepWatching = useCallback(() => {
+    upNextHandled.current = true;
+    setUpNextCountdown(null);
+    setUpNextCard(null);
+  }, []);
+
+  const toggleAutoPlayNext = useCallback(() => {
+    const next = !autoPlayNext;
+    setAutoPlayNext(next);
+    if (!next) setUpNextCountdown(null);
+    void putScopedSetting(session, "playback.auto_play_next", "profile_device", next).catch(() => undefined);
+  }, [autoPlayNext, session]);
 
   useEffect(() => {
-    if (nextCountdown == null || !nextEpisode) return;
-    if (nextCountdown <= 1) {
-      const timer = window.setTimeout(() => finishToNext(nextEpisode), 1000);
-      return () => window.clearTimeout(timer);
-    }
-    const timer = window.setTimeout(() => setNextCountdown(value => value == null ? null : value - 1), 1000);
-    return () => window.clearTimeout(timer);
-  }, [nextCountdown, nextEpisode, finishToNext]);
+    if (!resolveNextEpisode || item.Type !== "Episode") return;
+    let alive = true;
+    setUpNext(null);
+    upNextHandled.current = false;
+    upNextPendingEnd.current = null;
+    resolveNextEpisode().then(next => { if (alive) setUpNext(next); }).catch(() => undefined);
+    return () => { alive = false; };
+  }, [item.Id]);
+
+  useEffect(() => {
+    if (upNext && !upNextHandled.current && upNextPendingEnd.current != null) commitApproachingEnd(upNextPendingEnd.current);
+  }, [upNext]);
+
+  useEffect(() => {
+    const before = previousPosition.current;
+    previousPosition.current = position;
+    const creditsStart = markers?.credits?.start_seconds;
+    if (creditsStart == null || scrubPreview != null) return;
+    if (before < creditsStart && position >= creditsStart && position - before < 5) onApproachingEnd(false);
+  }, [position]);
+
+  useEffect(() => {
+    if (!upNextCard || !upNextCountdown || !upNext) return;
+    const timer = window.setInterval(() => {
+      const remaining = upNextStartedAtEnd.current
+        ? Math.max(0, --upNextWall.current)
+        : Math.ceil(Math.max(0, ui.current.duration - ui.current.position));
+      setUpNextCountdown(current => current ? { seconds: remaining, total: Math.max(current.total, remaining, 1) } : current);
+      const playbackEnded = upNextStartedAtEnd.current ? upNextWall.current <= 0 : upNextCard.videoEnded;
+      if (playbackEnded) {
+        window.clearInterval(timer);
+        advanceToNext(autoAdvanceCount + 1);
+      }
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [upNextCard?.videoEnded, upNextCountdown == null, upNext, autoAdvanceCount, advanceToNext]);
 
   useEffect(() => {
     try {
@@ -742,10 +812,10 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (nextEpisode) {
+      if (ui.current.upNextOpen) {
         if (isBackKey(event)) {
           event.preventDefault(); event.stopPropagation();
-          if (!event.repeat) (document.querySelector<HTMLElement>(".player-next-up [data-setting='exit']") ?? document.querySelector<HTMLElement>(".player-next-up [data-tv-focusable='true']"))?.click();
+          if (!event.repeat) document.querySelector<HTMLElement>(".player-next-up [data-setting='keep']")?.click() ?? document.querySelector<HTMLElement>(".player-next-up [data-setting='back']")?.click();
           return;
         }
         if (event.key === "ArrowUp" || event.key === "ArrowDown") {
@@ -997,7 +1067,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       stopAutoSeek();
       stopCleanSeek();
     };
-  }, [cancelScrub, commitCleanSeek, commitScrub, focusTransport, nextEpisode, performRelativeSeek, revealHud, stopAutoSeek, stopCleanSeek]);
+  }, [cancelScrub, commitCleanSeek, commitScrub, focusTransport, performRelativeSeek, revealHud, stopAutoSeek, stopCleanSeek]);
 
   // First focus lands on the transport's Play/Pause once the shell is
   // interactive, matching the overlay's default focus target.
@@ -1043,7 +1113,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     <video ref={videoRef} className="player" playsInline
       onPlay={() => { setPlaying(true); revealHud(); }}
       onPause={() => { setPlaying(false); revealHud(); }}
-      onEnded={() => { void handleMediaEnded(); }}
+      onEnded={handleMediaEnded}
       onTimeUpdate={event => {
         setPosition(sourcePosition());
         const video = event.currentTarget;
@@ -1134,15 +1204,32 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       {error ? <div className="player-error">{error}</div> : null}
     </div>
 
-    {nextEpisode ? <section className="player-next-up" data-modal="true" aria-label="Next episode">
+    {upNextCard ? <section className="player-next-up" data-modal="true" aria-label="Up next">
       <div className="player-next-up-card">
-        <div className="eyebrow">{nextCountdown == null ? "Up Next" : `Playing next in ${nextCountdown}`}</div>
-        <h2>{nextEpisode.SeriesName || detail?.series_title || item.SeriesName || "Next Episode"}</h2>
-        <p>{nextEpisode.ParentIndexNumber != null && nextEpisode.IndexNumber != null ? `Season ${nextEpisode.ParentIndexNumber} · Episode ${nextEpisode.IndexNumber} — ` : ""}{nextEpisode.Name}</p>
-        {nextEpisode.Overview ? <p className="player-next-up-overview">{nextEpisode.Overview}</p> : null}
-        <div className="player-next-up-actions">
-          <button autoFocus data-tv-focusable="true" className="tv-button" onClick={() => finishToNext(nextEpisode)}>Play Next</button>
-          <button data-tv-focusable="true" data-setting="exit" className="tv-button secondary" onClick={() => { setNextEpisode(null); setNextCountdown(null); closePlayback(false); onEnded?.(); }}>Exit Playback</button>
+        {upNext?.PosterUrl ? <img className="player-next-up-still" src={upNext.PosterUrl} alt="" /> : null}
+        <div className="player-next-up-panel">
+          <div className="player-next-up-eyebrow">{!upNext ? (upNextCard.videoEnded ? "Finished" : "More To Watch") : upNextCard.videoEnded ? "Playing Next" : "Up Next"}</div>
+          {upNext ? <>
+            <h2>{upNext.SeriesName || detail?.series_title || item.SeriesName || "Next Episode"}</h2>
+            <div className="player-next-up-line">
+              {upNext.ParentIndexNumber != null && upNext.IndexNumber != null ? <span>S{upNext.ParentIndexNumber}·E{upNext.IndexNumber}</span> : null}
+              <strong>{upNext.Name}</strong>
+              {upNext.RuntimeMinutes ? <span>· {upNext.RuntimeMinutes} min</span> : null}
+            </div>
+            {upNext.Overview ? <p className="player-next-up-overview">{upNext.Overview}</p> : null}
+            <div className="player-next-up-actions">
+              <button autoFocus data-tv-focusable="true" className="tv-button" onClick={() => advanceToNext(0)}>Play Now</button>
+              {upNextCountdown ? <span className="player-next-up-count" aria-label={`Playing in ${upNextCountdown.seconds} seconds`}>{upNextCountdown.seconds}</span> : null}
+            </div>
+          </> : <>
+            <h2>{upNextCard.videoEnded ? "End of playback" : "Almost finished"}</h2>
+            <p className="player-next-up-overview">No next episode is available.</p>
+          </>}
+          <div className="player-next-up-actions">
+            {!upNextCard.videoEnded ? <button autoFocus={!upNext} data-tv-focusable="true" data-setting="keep" className="tv-button secondary" onClick={keepWatching}>Keep Watching</button> : null}
+            <button autoFocus={!upNext && upNextCard.videoEnded} data-tv-focusable="true" data-setting="back" className="tv-button secondary" onClick={exitPlayer}>Back</button>
+          </div>
+          {upNext ? <button data-tv-focusable="true" className="player-next-up-toggle" onClick={toggleAutoPlayNext}>Auto-play is {autoPlayNext ? "On" : "Off"}</button> : null}
         </div>
       </div>
     </section> : null}

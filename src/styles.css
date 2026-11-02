@@ -1609,12 +1609,19 @@ input:focus {
   top: 42px;
   color: rgba(255,255,255,.72);
 }
-.player-next-up { position: absolute; inset: 0; z-index: 8; display: grid; place-items: center; padding: 5vh 6vw; background: rgba(0,0,0,.72); }
-.player-next-up-card { width: min(760px, 76vw); padding: 42px 48px; border: 1px solid rgba(255,255,255,.16); border-radius: 28px; background: rgba(24,25,28,.96); box-shadow: 0 24px 90px rgba(0,0,0,.6); }
-.player-next-up-card h2 { margin: 10px 0 6px; font-size: 2.4rem; }
-.player-next-up-card p { margin: 8px 0 24px; color: rgba(255,255,255,.82); font-size: 1.35rem; }
-.player-next-up-card .player-next-up-overview { max-height: 5.2em; overflow: hidden; color: rgba(255,255,255,.65); font-size: 1.05rem; }
-.player-next-up-actions { display: flex; gap: 16px; margin-top: 28px; }
+.player-next-up { position: absolute; inset: 0; z-index: 8; display: grid; place-items: center; padding: 5vh 6vw; background: rgba(0,0,0,.78); }
+.player-next-up-card { display: flex; gap: 40px; align-items: center; width: min(1280px, 88vw); }
+.player-next-up-still { flex: 0 0 auto; width: min(520px, 38vw); aspect-ratio: 16 / 9; object-fit: cover; border-radius: 18px; background: #111; }
+.player-next-up-panel { flex: 1; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.player-next-up-eyebrow { color: rgba(255,255,255,.52); font-size: 1.1rem; letter-spacing: .08em; text-transform: uppercase; }
+.player-next-up-panel h2 { margin: 0; font-size: 2.2rem; font-weight: 600; }
+.player-next-up-line { display: flex; gap: 10px; align-items: baseline; font-size: 1.4rem; color: rgba(255,255,255,.62); }
+.player-next-up-line strong { color: #fff; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.player-next-up-overview { margin: 0; color: rgba(255,255,255,.58); font-size: 1.15rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.player-next-up-actions { display: flex; gap: 20px; align-items: center; }
+.player-next-up-count { display: grid; place-items: center; width: 56px; height: 56px; border: 3px solid rgba(255,255,255,.7); border-radius: 50%; font-size: 1.4rem; }
+.player-next-up-toggle { align-self: flex-start; padding: 4px 14px; border: 0; border-radius: 999px; background: transparent; color: rgba(255,255,255,.54); font-size: 1.05rem; }
+.player-next-up-toggle:focus { background: #fff; color: #000; outline: none; }
 
 .player-options {
   position: absolute;

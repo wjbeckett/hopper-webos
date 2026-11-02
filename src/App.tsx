@@ -45,7 +45,7 @@ type DetailRoute =
   | { name: "series"; item: SiloItem; selectedEpisode?: SiloItem; castIndex?: number }
   | { name: "person"; personId?: string; personName: string; back: DetailRoute }
   | { name: "play-choice"; item: SiloItem; returnTo?: { series: SiloItem; selectedEpisode: SiloItem } }
-  | { name: "player"; item: SiloItem; startPosition?: number; choices?: PlaybackChoices; returnTo?: { series: SiloItem; selectedEpisode: SiloItem }; shuffleId?: string };
+  | { name: "player"; item: SiloItem; startPosition?: number; autoAdvanceCount?: number; choices?: PlaybackChoices; returnTo?: { series: SiloItem; selectedEpisode: SiloItem }; shuffleId?: string };
 
 type BrowseDetail =
   | { kind: "collection"; library: SiloLibrary; collection: SiloCollection }
@@ -546,10 +546,11 @@ export default function App() {
         startPosition={route.startPosition}
         choices={route.choices}
         resolveNextEpisode={() => resolveNextEpisode(route.item)}
-        onPlayNext={next => {
+        autoAdvanceCount={route.autoAdvanceCount ?? 0}
+        onPlayNext={(next, autoAdvanceCount) => {
           publishWatchState(applyWatchedState(route.item, true));
           const parentSeries = route.returnTo?.series ?? { Id: route.item.SeriesId ?? "", Name: route.item.SeriesName ?? "Series", Type: "Series" };
-          setRoute({ name: "player", item: next, startPosition: 0, returnTo: { series: parentSeries, selectedEpisode: next } });
+          setRoute({ name: "player", item: next, startPosition: 0, autoAdvanceCount, returnTo: { series: parentSeries, selectedEpisode: next } });
         }}
         onBack={(elapsed) => {
           publishWatchState(applyResumeState(route.item, elapsed));
