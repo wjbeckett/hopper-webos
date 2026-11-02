@@ -149,6 +149,9 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   hudPickerRef.current = hudPicker;
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [aspectMode, setAspectMode] = useState<"Fit" | "Zoom" | "Stretch">("Fit");
+  const aspectLabel = (mode: "Fit" | "Zoom" | "Stretch") => mode === "Fit" ? "Letterbox" : mode === "Zoom" ? "Zoom (crop)" : "Stretch";
+  const [sleepDeadline, setSleepDeadline] = useState<number | null>(null);
+  const [sleepRemaining, setSleepRemaining] = useState<number | null>(null);
   const [playerStats, setPlayerStats] = useState<{ totalFrames?: number; droppedFrames?: number; resolution?: string }>({});
   const [hudTab, setHudTab] = useState<HudTab>("Video");
   const hudTabsRef = useRef<HudTab[]>(["Info", "Video", "Subtitles"]);
@@ -159,6 +162,21 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const [duration, setDuration] = useState(0);
   const [playing, setPlaying] = useState(false);
   useEffect(() => { if (videoRef.current) videoRef.current.playbackRate = playbackSpeed; }, [playbackSpeed]);
+  useEffect(() => {
+    if (sleepDeadline == null) { setSleepRemaining(null); return; }
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((sleepDeadline - Date.now()) / 1000));
+      setSleepRemaining(remaining);
+      if (remaining === 0) {
+        videoRef.current?.pause();
+        setSleepDeadline(null);
+      }
+    };
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [sleepDeadline]);
+
   useEffect(() => {
     const read = () => {
       const video = videoRef.current as (HTMLVideoElement & { webkitDecodedFrameCount?: number; webkitDroppedFrameCount?: number }) | null;
@@ -1528,11 +1546,15 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
           <div><div className="player-hud-eyebrow">Playback</div>
             {qualities.length ? <button data-tv-focusable="true" data-hud-row="quality" className="option-row" onClick={() => presentHudPicker("Quality", [{ label: "Auto", value: "auto" }, ...qualities.map(quality => ({ label: quality.preserves_source ? `Original${quality.height ? ` · ${quality.height}p` : version?.resolution ? ` · ${version.resolution}` : ""}` : quality.label, value: quality.label }))], qualityRef.current, "quality", value => selectQuality({ label: value }))}><span>Quality</span><small>{qualityRef.current === "auto" ? "Auto" : qualityRef.current}</small></button> : null}
             <button data-tv-focusable="true" data-hud-row="speed" className="option-row" onClick={() => presentHudPicker("Playback speed", [0.75, 1, 1.25, 1.5, 2].map(value => ({ label: value === 1 ? "Normal" : `${value}×`, value: String(value) })), String(playbackSpeed), "speed", value => setPlaybackSpeed(Number(value)))}><span>Speed</span><small>{playbackSpeed === 1 ? "Normal" : `${playbackSpeed}×`}</small></button>
-            <button data-tv-focusable="true" data-hud-row="aspect" className="option-row" onClick={() => presentHudPicker("Aspect", ["Fit", "Zoom", "Stretch"].map(value => ({ label: value, value })), aspectMode, "aspect", value => setAspectMode(value as typeof aspectMode))}><span>Aspect</span><small>{aspectMode}</small></button>
+            <button data-tv-focusable="true" data-hud-row="aspect" className="option-row" onClick={() => presentHudPicker("Aspect", [{ label: "Letterbox", value: "Fit" }, { label: "Zoom (crop)", value: "Zoom" }, { label: "Stretch", value: "Stretch" }], aspectMode, "aspect", value => setAspectMode(value as typeof aspectMode))}><span>Aspect</span><small>{aspectLabel(aspectMode)}</small></button>
           </div>
           <div><div className="player-hud-eyebrow">Automation</div>
             <button data-tv-focusable="true" data-hud-row="intro-skip" className="option-row" onClick={() => presentHudPicker("Skip Intros", [{ label: "Never", value: "never" }, { label: "Ask to skip", value: "ask" }, { label: "Skip automatically", value: "always" }], introSkipMode, "intro-skip", value => { setIntroSkipMode(value as typeof introSkipMode); void putScopedSetting(session, "playback.intro_skip_mode", "profile_device", value).catch(() => undefined); })}><span>Skip intros</span><small>{{ never: "Never", ask: "Ask to skip", always: "Skip automatically" }[introSkipMode]}</small></button>
             <button data-tv-focusable="true" data-hud-row="auto-play" className="option-row" onClick={toggleAutoPlayNext}><span>Auto-play next</span><small>{autoPlayNext ? "On" : "Off"}</small></button>
+            <button data-tv-focusable="true" data-hud-row="sleep-timer" className="option-row" onClick={() => presentHudPicker("Sleep timer", [...(sleepDeadline != null ? [{ label: "Cancel timer", value: "cancel" }] : []), { label: "Off", value: "off" }, ...[15, 30, 45, 60, 90].map(minutes => ({ label: minutes >= 60 ? `${Math.floor(minutes / 60)}h${minutes % 60 ? ` ${minutes % 60}m` : ""}` : `${minutes}m`, value: String(minutes) }))], sleepDeadline != null ? "cancel" : "off", "sleep-timer", value => {
+              if (value === "cancel" || value === "off") setSleepDeadline(null);
+              else { const minutes = Number(value); if ([15, 30, 45, 60, 90].includes(minutes)) setSleepDeadline(Date.now() + minutes * 60_000); }
+            })}><span>Sleep timer</span><small>{sleepRemaining == null ? "Off" : `Sleeping in ${Math.floor(sleepRemaining / 60)}m ${sleepRemaining % 60}s`}</small></button>
           </div>
         </div> : null}
         {hudTab === "Audio" ? <div className="player-hud-columns">
