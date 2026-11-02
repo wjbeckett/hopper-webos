@@ -10,6 +10,8 @@ import { parseSubtitleAppearance, SUBTITLE_APPEARANCE_CHOICES, SUBTITLE_APPEARAN
 import { putDeviceSubtitleAppearance, putProfileSubtitleAppearance, type SubtitleAppearance } from "../api/settings";
 import { applySubtitleDelay, attachSidecarSubtitle, sidecarSubtitleArtifact } from "../core/subtitleSidecar";
 import { setAudioDelay } from "../platform/audioDelay";
+import { SubtitleSearchDialog } from "../components/SubtitleSearchDialog";
+import { languageSearchCode } from "../core/languageNames";
 import { delayLabel, localAudioSyncMs, localHdrEnabled, localPassOutThreshold, localResumeRewindSeconds, localSubtitleSyncMs, markerAction, resumePositionWithRewind, setLocalAudioSyncMs, setLocalHdrEnabled, setLocalSubtitleSyncMs } from "../core/playerSettings";
 
 type PlaybackState = { plan: PlaybackPlan; playbackAttemptId: string; planAttemptId: string; attemptedKeys: string[] };
@@ -253,6 +255,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const [hdrOn, setHdrOn] = useState(localHdrEnabled);
   const subtitleDelayRef = useRef(subtitleDelayMs);
   subtitleDelayRef.current = subtitleDelayMs;
+  const [subtitleSearch, setSubtitleSearch] = useState<{ language: string } | null>(null);
   const [styleView, setStyleView] = useState<null | "list" | "timing" | keyof SubtitleAppearance>(null);
   const styleViewRef = useRef(styleView);
   styleViewRef.current = styleView;
@@ -938,6 +941,33 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     if (detail?.series_id) void saveSubtitlePreference(session, detail.series_id, track).catch(console.error);
     void replan("track_change", qualityRef.current, plan?.selected_tracks.audio, track ? { id: track.track_id, index: track.combined_index } : undefined);
   }
+  async function openSubtitleSearch() {
+    let language = plan?.subtitle.inventory.find(track => track.track_id === plan.selected_tracks.subtitle?.id)?.language;
+    try { const value = (await getEffectiveSettings(session, ["playback.subtitle_language"])).get("playback.subtitle_language")?.value; if (typeof value === "string" && value) language = value; } catch { /* keep fallback */ }
+    setPanel(null);
+    setHudPicker(null);
+    setSubtitleSearch({ language: languageSearchCode(language) });
+  }
+  function closeSubtitleSearch() {
+    setSubtitleSearch(null);
+    revealHud();
+    focusTransport();
+  }
+  async function refreshAfterSubtitleDownload() {
+    const active = stateRef.current;
+    if (!active) return false;
+    const known = new Set(active.plan.subtitle.inventory.map(track => track.track_id));
+    try {
+      const refreshed = await replanPlaybackV3(session, active, "track_change", sourcePosition(), qualityRef.current, { audio: active.plan.selected_tracks.audio, subtitle: active.plan.selected_tracks.subtitle });
+      const added = refreshed.plan.subtitle.inventory.filter(track => !known.has(track.track_id));
+      if (!added.length) { installPlan(refreshed); return false; }
+      const track = added[added.length - 1];
+      if (detail?.series_id) void saveSubtitlePreference(session, detail.series_id, track).catch(console.error);
+      const selected = await replanPlaybackV3(session, refreshed, "track_change", sourcePosition(), qualityRef.current, { audio: refreshed.plan.selected_tracks.audio, subtitle: { id: track.track_id, index: track.combined_index } });
+      installPlan(selected);
+      return true;
+    } catch { return false; }
+  }
   function selectQuality(quality: Quality | { label: string }) {
     void replan("quality_change", quality.label, plan?.selected_tracks.audio, plan?.selected_tracks.subtitle);
   }
@@ -1591,6 +1621,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       {onDeckItems.length ? <div className="player-on-deck"><h3>On Deck</h3><div className="player-on-deck-row">{onDeckItems.map(candidate => <button key={candidate.Id} data-tv-focusable="true" className="player-on-deck-card" onClick={() => { setUpNextCard(null); onPlayNext?.(candidate, 0); }}><span className="player-on-deck-art">{!hidesArt(candidate) && artUrl(session, candidate) ? <img src={artUrl(session, candidate)} alt="" /> : null}</span><strong>{candidate.SeriesName || candidate.Name}</strong><small>{candidate.ParentIndexNumber != null && candidate.IndexNumber != null ? `S${candidate.ParentIndexNumber}·E${candidate.IndexNumber} — ${candidate.Name}` : candidate.ProductionYear ?? ""}</small></button>)}</div></div> : null}
     </section> : null}
 
+    {subtitleSearch && version?.file_id != null ? <SubtitleSearchDialog session={session} mediaFileId={version.file_id} defaultLanguage={subtitleSearch.language} onClose={closeSubtitleSearch} onDownloaded={refreshAfterSubtitleDownload} /> : null}
     {panel ? <section className="player-options" data-modal="true" aria-label="Player options">
       <nav className="player-hud-tabs" aria-label="Player information tabs">
         {hudTabs.map(tab => <button key={tab} data-tv-focusable="true" data-hud-tab={tab} className={`player-hud-tab ${hudTab === tab ? "selected" : ""}`} onFocus={() => setHudTab(tab)} onClick={() => setHudTab(tab)}>{tab}</button>)}
@@ -1643,7 +1674,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
             <div className="player-hud-readonly"><span>Container</span><strong>{plan?.stream.container?.toUpperCase() || version?.container?.toUpperCase() || "—"}</strong></div>
           </div>
         </div> : null}
-        {hudTab === "Subtitles" ? <div className="player-hud-list"><div className="player-hud-eyebrow">Subtitles</div>{!styleView ? <><button data-tv-focusable="true" data-hud-row={!activeSubtitle ? "subtitle-track" : undefined} className="option-row" onClick={() => selectSubtitle()}><span>Off</span>{!activeSubtitle ? <small>Current</small> : null}</button>{subtitles.map(track => <button data-tv-focusable="true" data-hud-row={activeSubtitle?.track_id === track.track_id ? "subtitle-track" : undefined} className="option-row" key={track.track_id} onClick={() => selectSubtitle(track)}><span>{subtitleName(track)}</span><small>{activeSubtitle?.track_id === track.track_id ? "Current" : subtitleDetail(track)}</small></button>)}{appearance ? <button data-tv-focusable="true" data-style-entry className="option-row" onClick={() => setStyleView("list")}><span>Appearance</span><small>{subtitleChoiceLabel("fontSize", appearance.fontSize)} · {subtitleChoiceLabel("position", appearance.position)}</small></button> : null}<button data-tv-focusable="true" data-timing-entry className="option-row" disabled={!hasSidecarSubtitle} onClick={() => setStyleView("timing")}><span>Timing</span><small>{hasSidecarSubtitle ? delayLabel(subtitleDelayMs) : "Unavailable"}</small></button></> : styleView === "timing" ? <><div className="player-hud-eyebrow">Timing</div><button data-tv-focusable="true" data-hud-row="subtitle-delay" className="option-row" onClick={() => presentHudPicker("Subtitle delay", delayChoices(-2000, 2000, 100), String(subtitleDelayMs), "subtitle-delay", value => changeSubtitleDelay(Number(value)))}><span>Delay</span><small>{delayLabel(subtitleDelayMs)}</small></button></> : appearance && styleView === "list" ? <>{SUBTITLE_APPEARANCE_FIELDS.map(([key, label], i) => <button key={key} data-tv-focusable="true" data-style-key={key} className="option-row" onClick={() => setStyleView(key)}><span>{label}</span><small>{subtitleChoiceLabel(key, appearance[key])}</small></button>)}<div className="subtitle-settings-preview" style={{ color: appearance.fontColor, opacity: appearance.textOpacity / 100, fontFamily: appearance.fontFamily }}>Subtitle preview</div></> : appearance && styleView && styleView !== "list" ? SUBTITLE_APPEARANCE_CHOICES[styleView].map(choice => <button key={String(choice.value)} data-tv-focusable="true" className="option-row" onClick={() => changeAppearance(styleView, choice.value)}><span>{choice.label}</span>{choice.value === appearance[styleView] ? <small>Current</small> : null}</button>) : null}</div> : null}
+        {hudTab === "Subtitles" ? <div className="player-hud-list"><div className="player-hud-eyebrow">Subtitles</div>{!styleView ? <><button data-tv-focusable="true" data-hud-row={!activeSubtitle ? "subtitle-track" : undefined} className="option-row" onClick={() => selectSubtitle()}><span>Off</span>{!activeSubtitle ? <small>Current</small> : null}</button>{subtitles.map(track => <button data-tv-focusable="true" data-hud-row={activeSubtitle?.track_id === track.track_id ? "subtitle-track" : undefined} className="option-row" key={track.track_id} onClick={() => selectSubtitle(track)}><span>{subtitleName(track)}</span><small>{activeSubtitle?.track_id === track.track_id ? "Current" : subtitleDetail(track)}</small></button>)}{appearance ? <button data-tv-focusable="true" data-style-entry className="option-row" onClick={() => setStyleView("list")}><span>Appearance</span><small>{subtitleChoiceLabel("fontSize", appearance.fontSize)} · {subtitleChoiceLabel("position", appearance.position)}</small></button> : null}<button data-tv-focusable="true" data-timing-entry className="option-row" disabled={!hasSidecarSubtitle} onClick={() => setStyleView("timing")}><span>Timing</span><small>{hasSidecarSubtitle ? delayLabel(subtitleDelayMs) : "Unavailable"}</small></button>{version?.file_id != null ? <><div className="player-hud-eyebrow">Find more</div><button data-tv-focusable="true" data-hud-row="subtitle-search" className="option-row" onClick={() => void openSubtitleSearch()}><span>Search online</span></button></> : null}</> : styleView === "timing" ? <><div className="player-hud-eyebrow">Timing</div><button data-tv-focusable="true" data-hud-row="subtitle-delay" className="option-row" onClick={() => presentHudPicker("Subtitle delay", delayChoices(-2000, 2000, 100), String(subtitleDelayMs), "subtitle-delay", value => changeSubtitleDelay(Number(value)))}><span>Delay</span><small>{delayLabel(subtitleDelayMs)}</small></button></> : appearance && styleView === "list" ? <>{SUBTITLE_APPEARANCE_FIELDS.map(([key, label], i) => <button key={key} data-tv-focusable="true" data-style-key={key} className="option-row" onClick={() => setStyleView(key)}><span>{label}</span><small>{subtitleChoiceLabel(key, appearance[key])}</small></button>)}<div className="subtitle-settings-preview" style={{ color: appearance.fontColor, opacity: appearance.textOpacity / 100, fontFamily: appearance.fontFamily }}>Subtitle preview</div></> : appearance && styleView && styleView !== "list" ? SUBTITLE_APPEARANCE_CHOICES[styleView].map(choice => <button key={String(choice.value)} data-tv-focusable="true" className="option-row" onClick={() => changeAppearance(styleView, choice.value)}><span>{choice.label}</span>{choice.value === appearance[styleView] ? <small>Current</small> : null}</button>) : null}</div> : null}
         {hudTab === "Chapters" ? <div className="player-hud-list"><div className="player-hud-eyebrow">Chapters</div>{chapters.map((chapter, i) => <button data-tv-focusable="true" className="option-row" key={`${chapter.index}-${chapter.start_seconds}`} onClick={() => { seekToPosition(chapter.start_seconds); setPanel(null); revealHud(); }}><span>{chapter.title || `Chapter ${i + 1}`}</span><small>{formatClock(chapter.start_seconds)}</small></button>)}</div> : null}
       </div>
       {hudPicker ? <div className="player-hud-picker-scrim" onClick={event => { if (event.target === event.currentTarget) { setHudPicker(null); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-hud-row="${hudPicker.returnKey}"]`)?.focus()); } }}><section className="player-hud-picker" role="dialog" aria-label={hudPicker.title}><h2>{hudPicker.title}</h2><div className="player-hud-picker-hint">Choose an option</div>{hudPicker.choices.map(choice => <button key={choice.value} data-tv-focusable="true" data-picker-value={choice.value} className={`option-row ${choice.value === hudPicker.selected ? "selected" : ""}`} onClick={() => chooseHudPicker(choice.value)}><span>{choice.label}</span>{choice.value === hudPicker.selected ? <small>✓</small> : null}</button>)}</section></div> : null}

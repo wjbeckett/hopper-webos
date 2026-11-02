@@ -1778,6 +1778,24 @@ input:focus {
 .player-hud-picker .option-row { min-height: 34px; margin: 0 0 6px; padding: 7px 10px; border-radius: 10px; }
 .player-hud-picker .option-row.selected:not(:focus) { background: rgba(255,255,255,.075); }
 
+.subtitle-search-scrim { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 24px; background: rgba(0,0,0,.42); }
+.subtitle-search { width: min(420px, calc(100vw - 48px)); max-height: calc(100vh - 48px); overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 16px; border: 1px solid rgba(255,255,255,.20); border-radius: 14px; background: rgba(10,10,12,.68); }
+.subtitle-search h2 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: 1.1px; color: rgba(255,255,255,.58); }
+.subtitle-search .option-row { margin: 0; }
+.subtitle-search-error { color: #EF4444; font-size: 14px; }
+.subtitle-search-warning { color: #FBBF24; font-size: 13px; }
+.subtitle-search-empty { color: rgba(255,255,255,.58); font-size: 14px; }
+.subtitle-search-results { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; }
+.subtitle-search-result { display: flex; align-items: center; gap: 10px; text-align: left; }
+.subtitle-search-score { flex: none; min-width: 44px; padding: 4px 6px; border-radius: 8px; color: #fff; font-size: 16px; text-align: center; }
+.subtitle-search-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.subtitle-search-release { font-size: 16px; font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.subtitle-search-meta { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.subtitle-search-meta i { padding: 1px 6px; border-radius: 4px; font-style: normal; font-weight: 700; color: #fff; }
+.subtitle-search-meta i.subtitle-search-hi { background: rgba(255,255,255,.28); }
+.subtitle-search-meta em { font-style: normal; color: rgba(255,255,255,.58); }
+.subtitle-search-spinner { flex: none; width: 22px; height: 22px; border-width: 3px; }
+
 .settings-screen {
   max-width: 1100px;
 }
