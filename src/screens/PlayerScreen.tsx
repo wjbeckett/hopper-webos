@@ -121,7 +121,7 @@ type HudTab = "Info" | "Stats" | "Video" | "Audio" | "Subtitles" | "Chapters";
 type PlayerFileVersion = WatchDetail["versions"][number];
 type PillKind = "intro" | "credits" | "recap";
 type Pill = { kind: PillKind; key: string; label: string; secondsRemaining: number | null; undo?: boolean };
-type UiSnapshot = { upNextOpen: boolean; hud: boolean; panel: "audio" | "subtitles" | "quality" | null; hudTab: HudTab; audioAvailable: boolean; scrubPreview: number | null; autoSeekRate: number; cleanSeek: { rate: number; preview: number } | null; pill: Pill | null; position: number; duration: number; playing: boolean };
+type UiSnapshot = { upNextOpen: boolean; hud: boolean; panel: "audio" | "subtitles" | "quality" | null; hudTab: HudTab; audioAvailable: boolean; subtitlesAvailable: boolean; scrubPreview: number | null; autoSeekRate: number; cleanSeek: { rate: number; preview: number } | null; pill: Pill | null; position: number; duration: number; playing: boolean };
 
 /** The player's transport glyphs: dark-disc buttons inverting to Paper on focus. */
 function TransportGlyph({ name, seconds = 0 }: { name: "play" | "pause" | "back10" | "forward30" | "subtitles" | "tune" | "close" | "upNext"; seconds?: number }) {
@@ -299,8 +299,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
 
   // The key handler binds once and reads this snapshot, so it always sees the
   // current render's values.
-  const ui = useRef<UiSnapshot>({ upNextOpen: false, hud: true, panel: null, hudTab: "Video", audioAvailable: false, scrubPreview: null, autoSeekRate: 0, cleanSeek: null, pill: null, position: 0, duration: 0, playing: false });
-  ui.current = { upNextOpen: upNextCard != null, hud, panel, hudTab, audioAvailable: Boolean(version?.audio_tracks?.length), scrubPreview, autoSeekRate, cleanSeek, pill, position, duration, playing };
+  const ui = useRef<UiSnapshot>({ upNextOpen: false, hud: true, panel: null, hudTab: "Video", audioAvailable: false, subtitlesAvailable: false, scrubPreview: null, autoSeekRate: 0, cleanSeek: null, pill: null, position: 0, duration: 0, playing: false });
+  ui.current = { upNextOpen: upNextCard != null, hud, panel, hudTab, audioAvailable: Boolean(version?.audio_tracks?.length), subtitlesAvailable: Boolean(plan?.subtitle.inventory.length), scrubPreview, autoSeekRate, cleanSeek, pill, position, duration, playing };
 
   const sourcePosition = useCallback(() => {
     const video = videoRef.current;
@@ -1387,8 +1387,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         else if (onTransportButton || onPill) { /* bottom row: stay */ }
         else if (snapshot.cleanSeek) stopCleanSeek();
         else if (!snapshot.hud) {
-          const tab: HudTab = snapshot.audioAvailable ? "Audio" : "Subtitles";
-          setPanel(tab === "Audio" ? "audio" : "subtitles");
+          const tab: HudTab = snapshot.audioAvailable ? "Audio" : snapshot.subtitlesAvailable ? "Subtitles" : "Video";
+          setPanel(tab === "Audio" ? "audio" : tab === "Subtitles" ? "subtitles" : "quality");
           setHudTab(tab);
           requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-hud-tab="${tab}"]`)?.focus());
         } else revealHud("transport");
@@ -1567,8 +1567,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const selectedSubtitle = plan?.selected_tracks.subtitle;
   const activeSubtitle = selectedSubtitle ? subtitles.find(track => track.track_id === selectedSubtitle.id) : null;
   const subtitleValue = activeSubtitle ? subtitleName(activeSubtitle) : "Off";
-  const previewCard = tileBackground(160, 90);
-  const holdCard = cleanSeek ? tileBackground(240, 135) : null;
+  const previewCard = tileBackground(320, 180);
+  const holdCard = cleanSeek ? tileBackground(480, 270) : null;
   const holdTile = cleanSeek && trickplay ? trickplayTileAt(trickplay, cleanSeek.preview) : null;
   const pillFill = pill?.secondsRemaining != null ? 1 - pill.secondsRemaining / INTRO_PROMPT_SECONDS : null;
 
@@ -1610,7 +1610,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
 
         <div ref={scrubberRef} className="player-scrubber" tabIndex={-1} data-active={scrubberFocused || scrubPreview != null} data-focused={scrubberFocused}
           onFocus={() => setScrubberFocused(true)} onBlur={() => setScrubberFocused(false)}>
-          {previewSeconds != null && (previewCard || autoSeekRate !== 0) ? <div className="scrub-preview-stack" data-fast={autoSeekRate !== 0} style={{ left: `clamp(84px, ${playedFraction * 100}%, calc(100% - 84px))` }}>
+          {previewSeconds != null && (previewCard || autoSeekRate !== 0) ? <div className="scrub-preview-stack" data-fast={autoSeekRate !== 0} style={{ left: `clamp(168px, ${playedFraction * 100}%, calc(100% - 168px))` }}>
             {previewCard ? <div className="scrub-preview-card">
               <div className="trickplay-frame" style={previewCard} />
               <span className="scrub-preview-time">{formatClock(previewSeconds)}</span>
@@ -1622,8 +1622,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
               const span = end - start;
               if (span <= 0) return null;
               const local = (fraction: number) => Math.max(0, Math.min(1, (fraction - start) / span));
-              const innerLeft = index === 0 ? 0 : 1;
-              const innerRight = index === segments.length - 1 ? 0 : 1;
+              const innerLeft = index === 0 ? 0 : 2;
+              const innerRight = index === segments.length - 1 ? 0 : 2;
               return <div key={index} className="scrub-segment" style={{ left: `calc(${start * 100}% + ${innerLeft}px)`, width: `calc(${span * 100}% - ${innerLeft + innerRight}px)` }}>
                 {bandRanges.map(({ kind, segment }) => {
                   const bandStart = Math.max(segment.start_seconds / (duration || 1), start);
@@ -1658,20 +1658,22 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         </div>
       </div>
 
-      {pill ? <div ref={pillRef} className="skip-pill" tabIndex={-1} onClick={selectPill} data-prompt={pill.kind}>
-        {pillFill != null ? <b className="skip-pill-fill" style={{ width: `${Math.max(0, Math.min(1, pillFill)) * 100}%` }} /> : null}
+      {pill && !panel && !upNextCard ? <div className="skip-pill" data-controls={hud}>
         {pill.undo ? <small className="skip-pill-caption">Intro skipped</small> : null}
-        <span>{pill.label}</span>
+        <div ref={pillRef} className="skip-pill-capsule" tabIndex={-1} onClick={selectPill} data-prompt={pill.kind}>
+          {pillFill != null ? <b className="skip-pill-fill" style={{ width: `${Math.max(0, Math.min(1, pillFill)) * 100}%` }} /> : null}
+          <span>{pill.label}</span>
+        </div>
       </div> : null}
 
       {cleanSeek ? <div className="hold-seek-indicator">
-        <div className="hold-seek-frame" style={holdCard ?? { background: "rgba(0,0,0,.42)" }} />
-        <div className="hold-seek-chip"><strong>{cleanSeek.rate < 0 ? "−" : ""}{Math.abs(cleanSeek.rate)}×</strong><span>{formatClock(cleanSeek.preview)}</span></div>
+        <div className="hold-seek-frame" style={holdCard ?? undefined} />
+        <div className="hold-seek-chip"><strong>{cleanSeek.rate === 0 ? "Paused" : `${cleanSeek.rate < 0 ? "-" : ""}${Math.abs(cleanSeek.rate)}×`}</strong><span>{formatClock(cleanSeek.preview)}</span></div>
         {duration > 0 ? <div className="hold-seek-track"><b style={{ width: `${Math.max(0, Math.min(1, cleanSeek.preview / duration)) * 100}%` }} /></div> : null}
         <div className="hold-seek-hint">← → speed · ◉ play · ↩ cancel</div>
       </div> : null}
 
-      {skipFeedback && !cleanSeek ? <div className="skip-feedback" data-nonce={skipFeedback.nonce}>
+      {skipFeedback && !cleanSeek && !panel && !upNextCard ? <div className="skip-feedback" data-nonce={skipFeedback.nonce} data-controls={hud}>
         <div className="skip-feedback-chip"><strong>{skipFeedback.delta < 0 ? `−${-skipFeedback.delta}s` : `+${skipFeedback.delta}s`}</strong><span>{formatClock(skipFeedback.target)}</span></div>
         {!hud && duration > 0 ? <div className="skip-feedback-track"><b style={{ width: `${Math.max(0, Math.min(1, skipFeedback.target / duration)) * 100}%` }} /></div> : null}
       </div> : null}
