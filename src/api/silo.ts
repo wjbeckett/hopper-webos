@@ -1114,13 +1114,26 @@ export function requestArtworkUrl(path?: string): string {
   return `https://image.tmdb.org/t/p/w780${path.startsWith("/") ? path : `/${path}`}`;
 }
 
-export type Shuffle = { id: string; current: SiloItem; next: SiloItem };
+export type Shuffle = { id: string; scopeLabel?: string; current: SiloItem; next: SiloItem };
 
-type NativeShuffle = { id?: string; current?: NativeItem; next?: NativeItem };
+type NativeShuffle = { id?: string; scope?: { title?: string; parent_title?: string }; current?: NativeItem; next?: NativeItem };
 
 function toShuffle(response: NativeShuffle): Shuffle {
   if (!response.id || !response.current || !response.next) throw new Error("The shuffle response has no pick.");
-  return { id: response.id, current: toItem(response.current), next: toItem(response.next) };
+  const title = response.scope?.title?.trim();
+  const parent = response.scope?.parent_title?.trim();
+  return { id: response.id, scopeLabel: title ? (parent ? `${parent} · ${title}` : title) : undefined, current: toItem(response.current), next: toItem(response.next) };
+}
+
+export async function getShuffle(session: Session, shuffleId: string): Promise<Shuffle> {
+  return toShuffle(await requestV2<NativeShuffle>(session, `/shuffles/${encodeURIComponent(shuffleId)}?image_size=large`));
+}
+
+export async function skipShuffle(session: Session, shuffleId: string, nextContentId: string): Promise<Shuffle> {
+  return toShuffle(await requestV2<NativeShuffle>(session, `/shuffles/${encodeURIComponent(shuffleId)}/skip?image_size=large`, {
+    method: "POST",
+    body: JSON.stringify({ next_content_id: nextContentId })
+  }));
 }
 
 export async function getShuffleCapability(session: Session): Promise<{ available: boolean; scopeKinds: string[] }> {

@@ -3,7 +3,7 @@ import type Hls from "hls.js";
 import { bestVersionForDevice, getMarkers, getTrickplay, getWatchDetail, playbackUrl, replanPlaybackV3, reportProgress, saveAudioPreference, saveSubtitlePreference, startPlaybackV3, stopPlayback, stopPlaybackKeepalive, type AudioTrack, type FileMarkers, type MarkerSegment, type PlaybackChoices, type PlaybackPlan, type Quality, type SubtitleInventory, type Trickplay, type WatchDetail } from "../api/playback";
 import type { Session, SiloItem } from "../types";
 import { getEffectiveSettings, putScopedSetting } from "../api/settings";
-import { getHomeRails } from "../api/silo";
+import { getHomeRails, getShuffle, skipShuffle } from "../api/silo";
 import { parseSubtitleAppearance, subtitleCueCss } from "../core/subtitleStyle";
 import { attachSidecarSubtitle } from "../core/subtitleSidecar";
 import { localPassOutThreshold, localResumeRewindSeconds, markerAction, resumePositionWithRewind } from "../core/playerSettings";
@@ -123,7 +123,7 @@ function TransportGlyph({ name }: { name: "play" | "pause" | "back10" | "forward
   }
 }
 
-export function PlayerScreen({ session, item, startPosition, choices, onBack, onEnded, resolveNextEpisode, onPlayNext, autoAdvanceCount = 0 }: { session: Session; item: SiloItem; startPosition?: number; choices?: PlaybackChoices; onBack: (elapsedSeconds: number) => void; onEnded?: () => void; resolveNextEpisode?: () => Promise<SiloItem | null>; onPlayNext?: (next: SiloItem, autoAdvanceCount: number) => void; autoAdvanceCount?: number }) {
+export function PlayerScreen({ session, item, startPosition, choices, onBack, onEnded, resolveNextEpisode, onPlayNext, shuffle, onShuffleAdvance, autoAdvanceCount = 0 }: { session: Session; item: SiloItem; startPosition?: number; choices?: PlaybackChoices; onBack: (elapsedSeconds: number) => void; onEnded?: () => void; resolveNextEpisode?: () => Promise<SiloItem | null>; onPlayNext?: (next: SiloItem, autoAdvanceCount: number) => void; shuffle?: { id: string; scopeLabel?: string; next?: SiloItem }; onShuffleAdvance?: (autoAdvanceCount: number) => void; autoAdvanceCount?: number }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const sidecarTrack = useRef<TextTrack | null>(null);
@@ -178,6 +178,10 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const [upNext, setUpNext] = useState<SiloItem | null>(null);
   const [upNextCard, setUpNextCard] = useState<{ videoEnded: boolean } | null>(null);
   const [upNextCountdown, setUpNextCountdown] = useState<{ seconds: number; total: number } | null>(null);
+  const [shuffleScope, setShuffleScope] = useState(shuffle?.scopeLabel);
+  const [shufflePicking, setShufflePicking] = useState(false);
+  const [shuffleMessage, setShuffleMessage] = useState<string | null>(null);
+  const shuffleMessageTimer = useRef<number | undefined>(undefined);
   const upNextPane = useRef<HTMLDivElement>(null);
   const [upNextRect, setUpNextRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const [subtitleCss, setSubtitleCss] = useState("");
@@ -324,8 +328,9 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     if (!upNext) return;
     setUpNextCountdown(null);
     closePlayback(false);
-    onPlayNext?.(upNext, nextCount);
-  }, [upNext, closePlayback, onPlayNext]);
+    if (shuffle) onShuffleAdvance?.(nextCount);
+    else onPlayNext?.(upNext, nextCount);
+  }, [upNext, closePlayback, onPlayNext, onShuffleAdvance, shuffle != null]);
 
   const commitApproachingEnd = useCallback((videoEnded: boolean) => {
     upNextHandled.current = true;
@@ -356,7 +361,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   }, [upNext, commitApproachingEnd]);
 
   const handleMediaEnded = useCallback(() => {
-    if (resolveNextEpisode && item.Type === "Episode") {
+    if (shuffle || (resolveNextEpisode && item.Type === "Episode")) {
       onApproachingEnd(true);
       return;
     }
@@ -393,8 +398,47 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     return () => { alive = false; };
   }, [item.Id, session]);
 
+  const showShuffleMessage = useCallback((message: string) => {
+    window.clearTimeout(shuffleMessageTimer.current);
+    setShuffleMessage(message);
+    shuffleMessageTimer.current = window.setTimeout(() => setShuffleMessage(null), 4000);
+  }, []);
+
+  useEffect(() => () => window.clearTimeout(shuffleMessageTimer.current), []);
+
+  const applyShuffleNext = useCallback((next: SiloItem | undefined, scopeLabel?: string) => {
+    if (scopeLabel) setShuffleScope(scopeLabel);
+    setUpNext(next && next.Id !== item.Id ? next : null);
+  }, [item.Id]);
+
+  const pickAnotherShuffle = useCallback(() => {
+    if (!shuffle || !upNext || shufflePicking) return;
+    setShufflePicking(true);
+    skipShuffle(session, shuffle.id, upNext.Id).then(result => {
+      applyShuffleNext(result.next, result.scopeLabel);
+      if (upNextStartedAtEnd.current) {
+        upNextWall.current = NEXT_UP_COUNTDOWN_SECONDS;
+        setUpNextCountdown(current => current ? { seconds: NEXT_UP_COUNTDOWN_SECONDS, total: NEXT_UP_COUNTDOWN_SECONDS } : current);
+      }
+    }).catch(error => {
+      if (String(error).includes(": 409")) { setUpNext(null); setUpNextCountdown(null); }
+      else showShuffleMessage("Couldn't pick another.");
+    }).finally(() => setShufflePicking(false));
+  }, [shuffle, upNext, shufflePicking, session, applyShuffleNext, showShuffleMessage]);
+
   useEffect(() => {
-    if (!resolveNextEpisode || item.Type !== "Episode") return;
+    if (!shuffle) return;
+    let alive = true;
+    setUpNext(null);
+    upNextHandled.current = false;
+    upNextPendingEnd.current = null;
+    applyShuffleNext(shuffle.next, shuffle.scopeLabel);
+    getShuffle(session, shuffle.id).then(result => { if (alive) applyShuffleNext(result.next, result.scopeLabel); }).catch(() => undefined);
+    return () => { alive = false; };
+  }, [item.Id]);
+
+  useEffect(() => {
+    if (shuffle || !resolveNextEpisode || item.Type !== "Episode") return;
     let alive = true;
     setUpNext(null);
     upNextHandled.current = false;
@@ -1271,28 +1315,34 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       <div className="player-next-up-card">
         <div ref={upNextPane} className="player-next-up-pane" />
         <div className="player-next-up-panel">
-          <div className="player-next-up-eyebrow">{!upNext ? (upNextCard.videoEnded ? "Finished" : "More To Watch") : upNextCard.videoEnded ? "Playing Next" : "Up Next"}</div>
+          {shuffle && shuffleScope ? <div className="player-next-up-scope"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z" /></svg><span>Shuffling {shuffleScope}</span></div> : null}
+          <div className="player-next-up-eyebrow">{!upNext ? (upNextCard.videoEnded ? "Finished" : "More To Watch") : shuffle ? "Up Next at Random" : upNextCard.videoEnded ? "Playing Next" : "Up Next"}</div>
           {upNext ? <>
-            <h2>{upNext.SeriesName || detail?.series_title || item.SeriesName || "Next Episode"}</h2>
-            <div className="player-next-up-line">
+            {upNext.Type === "Episode" || !shuffle ? <h2>{upNext.SeriesName || detail?.series_title || item.SeriesName || "Next Episode"}</h2> : <h2>{upNext.Name}</h2>}
+            {upNext.Type === "Episode" || !shuffle ? <div className="player-next-up-line">
               {upNext.ParentIndexNumber != null && upNext.IndexNumber != null ? <span>S{upNext.ParentIndexNumber}·E{upNext.IndexNumber}</span> : null}
               <strong>{upNext.Name}</strong>
               {upNext.RuntimeMinutes ? <span>· {upNext.RuntimeMinutes} min</span> : null}
-            </div>
+            </div> : upNext.RuntimeMinutes ? <div className="player-next-up-line"><span>{upNext.RuntimeMinutes} min</span></div> : null}
             {upNext.Overview && !(hideUnwatchedOverview && upNext.UserData?.Played !== true && (upNext.UserData?.PlaybackPositionTicks ?? 0) <= 0) ? <p className="player-next-up-overview">{upNext.Overview}</p> : null}
             <div className="player-next-up-actions">
               <button autoFocus data-tv-focusable="true" className="tv-button" onClick={() => advanceToNext(0)}>Play Now</button>
               {upNextCountdown ? <span className="player-next-up-count" aria-label={`Playing in ${upNextCountdown.seconds} seconds`}><svg viewBox="0 0 58 58"><circle cx="29" cy="29" r="26" className="track" /><circle cx="29" cy="29" r="26" className="arc" strokeDasharray={2 * Math.PI * 26} strokeDashoffset={2 * Math.PI * 26 * (1 - Math.min(1, Math.max(0, upNextCountdown.seconds / upNextCountdown.total)))} /></svg><b>{upNextCountdown.seconds}</b></span> : null}
             </div>
+            {shuffle ? <button data-tv-focusable="true" className="tv-button secondary player-next-up-pick" disabled={shufflePicking} onClick={pickAnotherShuffle}>Pick Another</button> : null}
           </> : <>
             <h2>{upNextCard.videoEnded ? "End of playback" : "Almost finished"}</h2>
-            <p className="player-next-up-overview">No next episode is available.</p>
+            <p className="player-next-up-overview">{shuffle ? "Nothing else in this shuffle can play." : "No next episode is available."}</p>
           </>}
           <div className="player-next-up-actions">
             {!upNextCard.videoEnded ? <button autoFocus={!upNext} data-tv-focusable="true" data-setting="keep" className="tv-button secondary" onClick={keepWatching}>Keep Watching</button> : null}
             <button autoFocus={!upNext && upNextCard.videoEnded} data-tv-focusable="true" data-setting="back" className="tv-button secondary" onClick={exitPlayer}>Back</button>
           </div>
-          {upNext ? <button data-tv-focusable="true" className="player-next-up-toggle" onClick={toggleAutoPlayNext}>Auto-play is {autoPlayNext ? "On" : "Off"}</button> : null}
+          {shuffleMessage ? <p className="player-next-up-error">{shuffleMessage}</p> : null}
+          {upNext ? <div className="player-next-up-toggles">
+            <button data-tv-focusable="true" className="player-next-up-toggle" onClick={toggleAutoPlayNext}>Auto-play is {autoPlayNext ? "On" : "Off"}</button>
+            {shuffle ? <><span>·</span><button data-tv-focusable="true" className="player-next-up-toggle" onClick={exitPlayer}>Stop shuffling</button></> : null}
+          </div> : null}
         </div>
       </div>
       {onDeckItems.length ? <div className="player-on-deck"><h3>On Deck</h3><div className="player-on-deck-row">{onDeckItems.map(candidate => <button key={candidate.Id} data-tv-focusable="true" className="player-on-deck-card" onClick={() => { setUpNextCard(null); onPlayNext?.(candidate, 0); }}><span className="player-on-deck-art">{candidate.BackdropUrl && !(hideUnwatchedImages && candidate.UserData?.Played !== true && (candidate.UserData?.PlaybackPositionTicks ?? 0) <= 0) ? <img src={candidate.BackdropUrl} alt="" /> : null}</span><strong>{candidate.SeriesName || candidate.Name}</strong><small>{candidate.ParentIndexNumber != null && candidate.IndexNumber != null ? `S${candidate.ParentIndexNumber}·E${candidate.IndexNumber} — ${candidate.Name}` : candidate.ProductionYear ?? ""}</small></button>)}</div></div> : null}

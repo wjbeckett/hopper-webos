@@ -1628,6 +1628,11 @@ input:focus {
 .player-next-up-count b { font-size: 1.3rem; font-weight: 500; }
 .player-next-up-toggle { align-self: flex-start; padding: 4px 14px; border: 0; border-radius: 999px; background: transparent; color: rgba(255,255,255,.54); font-size: 1.05rem; }
 .player-next-up-toggle:focus { background: #fff; color: #000; outline: none; }
+.player-next-up-toggles { display: flex; align-items: center; color: rgba(255,255,255,.54); font-size: 1.05rem; }
+.player-next-up-scope { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; background: rgba(255,255,255,.10); color: rgba(255,255,255,.75); font-size: 1.05rem; }
+.player-next-up-scope svg { width: 16px; height: 16px; fill: currentColor; }
+.player-next-up-pick { align-self: flex-start; min-width: 260px; }
+.player-next-up-error { margin: 0; color: #ffb4ab; font-size: 1.05rem; }
 
 .player-options {
   position: absolute;

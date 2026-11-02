@@ -45,7 +45,7 @@ type DetailRoute =
   | { name: "series"; item: SiloItem; selectedEpisode?: SiloItem; castIndex?: number }
   | { name: "person"; personId?: string; personName: string; back: DetailRoute }
   | { name: "play-choice"; item: SiloItem; returnTo?: { series: SiloItem; selectedEpisode: SiloItem } }
-  | { name: "player"; item: SiloItem; startPosition?: number; autoAdvanceCount?: number; choices?: PlaybackChoices; returnTo?: { series: SiloItem; selectedEpisode: SiloItem }; shuffleId?: string };
+  | { name: "player"; item: SiloItem; startPosition?: number; autoAdvanceCount?: number; choices?: PlaybackChoices; returnTo?: { series: SiloItem; selectedEpisode: SiloItem }; shuffleId?: string; shuffleNext?: SiloItem; shuffleScope?: string };
 
 type BrowseDetail =
   | { kind: "collection"; library: SiloLibrary; collection: SiloCollection }
@@ -450,15 +450,15 @@ export default function App() {
   async function startShuffle(kind: string, id: string | number) {
     if (!session) throw new Error("A connected server session is required to shuffle.");
     const shuffle = await createShuffle(session, kind, id);
-    setRoute({ name: "player", item: shuffle.current, startPosition: 0, shuffleId: shuffle.id });
+    setRoute({ name: "player", item: shuffle.current, startPosition: 0, shuffleId: shuffle.id, shuffleNext: shuffle.next, shuffleScope: shuffle.scopeLabel });
   }
 
-  async function advanceShuffleRoute(shuffleId: string, finished: SiloItem) {
+  async function advanceShuffleRoute(shuffleId: string, finished: SiloItem, autoAdvanceCount = 0) {
     if (!session) return;
     try {
       const shuffle = await advanceShuffle(session, shuffleId, finished.Id);
       if (shuffle.current.Id === finished.Id) throw new Error("Nothing else can play.");
-      setRoute({ name: "player", item: shuffle.current, startPosition: 0, shuffleId });
+      setRoute({ name: "player", item: shuffle.current, startPosition: 0, shuffleId, shuffleNext: shuffle.next, shuffleScope: shuffle.scopeLabel, autoAdvanceCount });
     } catch {
       void deleteShuffle(session, shuffleId).catch(() => undefined);
       setRoute({ name: "main" });
@@ -547,7 +547,13 @@ export default function App() {
         choices={route.choices}
         resolveNextEpisode={() => resolveNextEpisode(route.item)}
         autoAdvanceCount={route.autoAdvanceCount ?? 0}
+        shuffle={route.shuffleId ? { id: route.shuffleId, scopeLabel: route.shuffleScope, next: route.shuffleNext } : undefined}
+        onShuffleAdvance={(autoAdvanceCount) => {
+          publishWatchState(applyWatchedState(route.item, true));
+          void advanceShuffleRoute(route.shuffleId!, route.item, autoAdvanceCount);
+        }}
         onPlayNext={(next, autoAdvanceCount) => {
+          if (route.shuffleId && session) void deleteShuffle(session, route.shuffleId).catch(() => undefined);
           publishWatchState(applyWatchedState(route.item, true));
           const parentSeries = route.returnTo?.series ?? { Id: route.item.SeriesId ?? "", Name: route.item.SeriesName ?? "Series", Type: "Series" };
           setRoute({ name: "player", item: next, startPosition: 0, autoAdvanceCount, returnTo: { series: parentSeries, selectedEpisode: next } });
