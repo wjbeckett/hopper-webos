@@ -307,7 +307,7 @@ function CalloutIcon({ name }: { name: "sparkles" | "grid" | "collections" | "he
   );
 }
 
-function ProfileAvatar({ session }: { session: Session }) {
+export function ProfileAvatar({ session }: { session: Session }) {
   const value = session.profileAvatar?.trim() ?? "";
   const source = avatarImageUrl(value, session.serverUrl);
   const [image, setImage] = useState("");

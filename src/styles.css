@@ -4155,7 +4155,7 @@ body {
 .settings-account-name { font-size: 30px; line-height: 36px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .settings-category small,
 .settings-account small { font-size: 28px; line-height: 34px; color: inherit; opacity: .62; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.settings-avatar { flex: none; display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; background: #3A3A3C; font-size: 28px; font-weight: 700; }
+.settings-avatar { flex: none; overflow: hidden; display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; background: #3A3A3C; font-size: 28px; font-weight: 700; }
 .settings-category[aria-current="true"] { background: rgba(255,255,255,.14); border-color: rgba(255,255,255,.10); }
 .settings-account:focus,
 .settings-category:focus { outline: none; box-shadow: none; background: #EDEDED; border-color: transparent; color: #000; }

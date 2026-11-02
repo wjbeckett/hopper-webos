@@ -112,7 +112,7 @@ export function clearDeviceSubtitleAppearance(session: Session) {
   });
 }
 
-export type CardScope = "profile_device" | "profile_client";
+export type CardScope = "profile" | "profile_device" | "profile_client";
 
 function cardScopeQuery(session: Session, scope: CardScope) {
   const params = new URLSearchParams({ scope });

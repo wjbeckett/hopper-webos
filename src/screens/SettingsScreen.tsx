@@ -1,3 +1,4 @@
+import { ProfileAvatar } from "../components/TopNav";
 import { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { serverRegistry } from "../core/serverRegistry";
@@ -31,17 +32,15 @@ const categories: Array<{ id: Category; label: string; blurb: string; pane: stri
   { id: "server", label: "Server", blurb: "Connection and version", pane: "The Silo server this TV is connected to." }
 ];
 
-type KeyGroup = { title: string; keys: string[]; footer?: string };
+type KeyGroup = { title: string; keys: string[]; footer?: string; labels?: Record<string, string> };
 
 const keysByCategory: Record<"general" | "subtitles", KeyGroup[]> = {
   general: [
-    { title: "Title Pages", keys: ["ui.title_art"], footer: "Use logo artwork as the title when available." },
-    { title: "Theme Music", keys: ["ui.theme_music_enabled", "ui.theme_music_loop"], footer: "Play a title's theme music while its page is open, when the server has one. Loop repeats it until you leave the page." },
     { title: "Top Menu", keys: ["nav.show_audiobooks"], footer: "Adds an Audiobooks tab to the top menu when your server has an audiobook library. Hidden by default." }
   ],
   subtitles: [
-    { title: "Profile", keys: ["playback.subtitle_language", "playback.subtitle_mode", "playback.show_forced_subtitles"] },
-    { title: "Metadata", keys: ["catalog.metadata_language"] }
+    { title: "Profile", keys: ["playback.subtitle_language", "playback.subtitle_mode", "playback.show_forced_subtitles"], labels: { "playback.subtitle_language": "Language", "playback.subtitle_mode": "Behavior", "playback.show_forced_subtitles": "Show Forced Subtitles" }, footer: "Used to pick a matching track when one is available. Forced subtitles cover foreign-language dialogue even when subtitles are off or set to auto." },
+    { title: "Metadata", keys: ["catalog.metadata_language"], labels: { "catalog.metadata_language": "Metadata Language" }, footer: "Fallback language Silo prefers for titles, descriptions, and artwork." }
   ]
 };
 
@@ -74,7 +73,7 @@ const RESOLUTION_OPTIONS: Array<{ label: string; value: string }> = [
 const profileLayeredKeys = [
   "playback.preferred_quality", "playback.max_bitrate_kbps", "playback.audio_language",
   "playback.buffering_quality_mode", "playback.next_up_prompt_seconds", "playback.intro_skip_mode",
-  "playback.auto_play_next", "playback.auto_skip_credits"
+  "playback.auto_play_next", "playback.auto_skip_credits", "ui.theme_music_enabled", "ui.theme_music_loop"
 ];
 const BITRATE_CHOICES_KBPS = [200000, 100000, 60000, 40000, 20000, 15000, 10000, 6000, 4000, 2000, 1500];
 const SEEK_CHOICES = [5, 10, 15, 30, 45, 60, 90];
@@ -285,7 +284,7 @@ export function SettingsScreen({
   onChangeServer: () => void;
   onSwitchProfile: () => void;
 }) {
-  const [category, setCategory] = useState<Category>("playback");
+  const [category, setCategory] = useState<Category>("general");
   const [contract, setContract] = useState<SettingsContract | null>(null);
   const [values, setValues] = useState<Map<string, unknown>>(new Map());
   const [error, setError] = useState("");
@@ -321,7 +320,7 @@ export function SettingsScreen({
   const activeServer = serverRegistry.active();
   const returnFocusRef = useRef<string | null>(null);
 
-  const allKeys = useMemo(() => [...Object.values(keysByCategory).flat().flatMap(group => group.keys), "ui.card_presentation", "playback.subtitle_appearance", "playback.preferred_quality", "playback.max_bitrate_kbps", "playback.audio_language", "playback.buffering_quality_mode", "playback.next_up_prompt_seconds", "playback.intro_skip_mode", "playback.auto_play_next", "playback.auto_skip_credits", "playback.auto_skip_recap", "player.dolby_vision_enabled", "player.dv_profile7_hdr10_fallback", "player.match_frame_rate", "player.resume_rewind_seconds", "player.passout_threshold", "player.video_skip_back_seconds", "player.video_skip_forward_seconds", "player.audiobook_skip_back_seconds", "player.audiobook_skip_forward_seconds"], []);
+  const allKeys = useMemo(() => [...Object.values(keysByCategory).flat().flatMap(group => group.keys), "ui.card_presentation", "ui.title_art", "ui.theme_music_enabled", "ui.theme_music_loop", "playback.subtitle_appearance", "playback.preferred_quality", "playback.max_bitrate_kbps", "playback.audio_language", "playback.buffering_quality_mode", "playback.next_up_prompt_seconds", "playback.intro_skip_mode", "playback.auto_play_next", "playback.auto_skip_credits", "playback.auto_skip_recap", "player.dolby_vision_enabled", "player.dv_profile7_hdr10_fallback", "player.match_frame_rate", "player.resume_rewind_seconds", "player.passout_threshold", "player.video_skip_back_seconds", "player.video_skip_forward_seconds", "player.audiobook_skip_back_seconds", "player.audiobook_skip_forward_seconds"], []);
 
   useEffect(() => {
     if (!showPrivacyPolicy) return;
@@ -712,7 +711,7 @@ export function SettingsScreen({
             className={`option-row settings-row${definition.value_schema.type === "boolean" ? " settings-toggle" : ""}${definition.value_schema.type === "boolean" && values.get(definition.key) ? " is-on" : ""}`}
             onClick={() => activate(definition)}
           >
-            <span>{definition.label}</span>
+            <span>{group.labels?.[definition.key] ?? definition.label}</span>
             <strong>{describe(definition, values.get(definition.key), contract!)}</strong>
           </button>
         ))}
@@ -793,6 +792,57 @@ export function SettingsScreen({
             <p className="settings-footer">Poster size syncs with other TVs on this profile unless Only This Device is on.</p>
           </>
         )}
+      </section>
+    );
+  }
+
+  async function writeTitleArt(show: boolean, all: boolean, previousAll: boolean) {
+    const key = "ui.title_art";
+    const previous = values.get(key);
+    const previousSource = sources.get(key);
+    setValues(current => new Map(current).set(key, show));
+    setSources(current => new Map(current).set(key, all ? "profile" : "profile_device"));
+    try {
+      if (all) await putScopedSetting(session, key, "profile", show);
+      else if (previousAll) {
+        await putScopedSetting(session, key, "profile_device", show);
+        await clearScopedSetting(session, key, "profile");
+      } else await putScopedSetting(session, key, "profile_device", show);
+      await refreshPlaybackValue(key);
+    } catch (reason) {
+      setValues(current => new Map(current).set(key, previous));
+      setSources(current => new Map(current).set(key, previousSource ?? ""));
+      setError(reason instanceof Error ? reason.message : "Could not save title art.");
+    }
+  }
+
+  function renderTitleArt() {
+    if (!definitions.has("ui.title_art")) return null;
+    const show = values.get("ui.title_art") !== false;
+    const all = sources.get("ui.title_art") === "profile";
+    return (
+      <section className="settings-group">
+        <h3>Title Pages</h3>
+        {toggleRow("ui.title_art", "Show title art", show, () => void writeTitleArt(!show, all, all))}
+        <p className="settings-footer">Use logo artwork as the title when available.</p>
+        {toggleRow("ui.title_art.all", "Apply to all devices", all, () => void writeTitleArt(show, !all, all))}
+        <p className="settings-footer">{all ? `On: every device on this profile uses this choice. Title art is ${show ? "on" : "off"} on every device signed into this profile. Changing it here changes it everywhere. Turn off \u201CApply to all devices\u201D to choose for this TV only.` : "Off: only affects this TV. Your other devices keep their own setting."}</p>
+      </section>
+    );
+  }
+
+  function renderThemeMusic() {
+    if (!definitions.has("ui.theme_music_enabled") && !definitions.has("ui.theme_music_loop")) return null;
+    const row = (key: string, label: string) => definitions.has(key) ? <>
+      {deviceToggle(key, label)}
+      {layered(key) && isDeviceOverridden(key) ? valueRow(`use-profile-${key}`, "Use Profile Setting", "", () => void useProfileSetting(key)) : null}
+    </> : null;
+    return (
+      <section className="settings-group">
+        <h3>Theme Music</h3>
+        {row("ui.theme_music_enabled", "Theme Music")}
+        {row("ui.theme_music_loop", "Loop Theme Music")}
+        <p className="settings-footer">Play a title's theme music while its page is open, when the server has one. Loop repeats it until you leave the page.</p>
       </section>
     );
   }
@@ -931,7 +981,7 @@ export function SettingsScreen({
   } else if (category === "subtitles") {
     pane = <>{renderGroups(keysByCategory.subtitles)}{renderSubtitleAppearance()}</>;
   } else if (category === "general") {
-    pane = <>{renderProfileLaunch()}{renderHomeSections()}{renderCardPresentation()}{renderGroups(keysByCategory.general)}</>;
+    pane = <>{renderProfileLaunch()}{renderHomeSections()}{renderCardPresentation()}{renderTitleArt()}{renderThemeMusic()}{renderGroups(keysByCategory.general)}</>;
   } else {
     pane = renderPlaybackPane();
   }
@@ -963,10 +1013,10 @@ export function SettingsScreen({
       <nav className="settings-rail" ref={railRef} aria-label="Settings">
         <h1>Settings</h1>
         <button data-tv-focusable="true" className="settings-account" onClick={onSwitchProfile}>
-          <span className="settings-avatar" aria-hidden="true">{(session.username || "S").slice(0, 1).toUpperCase()}</span>
+          <span className="settings-avatar" aria-hidden="true"><ProfileAvatar session={session} /></span>
           <span className="settings-account-text">
             <span className="settings-account-name">{session.username}</span>
-            <small>Switch profile</small>
+            <small>Signed in</small>
           </span>
           <SettingsGlyph name="chevron" className="settings-chevron" />
         </button>
