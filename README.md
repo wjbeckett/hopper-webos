@@ -14,7 +14,8 @@ An early, community-built LG webOS TV client for the [Silo](https://silo.tv/) se
 - Movies, TV, music, and audiobook library surfaces
 - Library Browse with catalog-backed sorting, facets, server-side A–Z prefix, remembered sort/filters, and TV-remote-friendly filter panels
 - Per-library Collections (grouped, with collection detail), audiobook Authors/Series, A–Z, empty-library states, and server-backed Shuffle for libraries and collections
-- Series, season, and episode navigation
+- Series, season, and episode navigation with profile-driven unwatched-episode spoiler protection
+- Detail-page theme music with profile enable/loop settings and fade/interruption handling
 - Calendar releases, collections, watch history, and request workflows
 - Household profile switching with PIN verification
 - Continue Watching and other server-defined home rails, refreshed live from the server's realtime events socket (user_state/catalog), with a polling fallback

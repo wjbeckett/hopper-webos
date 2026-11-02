@@ -22,17 +22,16 @@ Build a first-class LG webOS TV client for Silo with feature parity directionall
 - Prefer direct play when the TV supports it, but playback must ultimately be negotiated through Silo PlaybackInfo/device profiles.
 - Treat the current `directVideoUrl()` implementation as temporary scaffolding.
 
-## Immediate next milestones
-1. Device/QR login implemented from Silo's native `/api/v2/auth/device/start` + `/poll` contract; keep it primary and password as fallback.
-2. Implement exact device profile + playback-v3 negotiation.
-3. Add TV series -> seasons -> episodes navigation.
-4. Add Continue Watching / Next Up sections.
-5. Persist/report playback progress and watched state.
-6. Add audio/subtitle track selection.
-7. Implement LG Back key / media keys robustly.
-8. Add search.
-9. Add server discovery / connection management.
-10. Add tests for spatial navigation and API parsing.
+## Remaining parity milestones
+1. Complete audiobook detail and dedicated player workflows against Android TV (whole-book resume, multipart playback, chapters, bookmarks, sleep, speed and skip intervals); current webOS audiobook detail/player still share generic movie/video flows.
+2. Evaluate Android TV's release-disabled experimental Watch Party for webOS; do not claim parity unless the full server-backed room workflow and remote focus/back behavior are implemented.
+3. Add LAN server discovery only if webOS exposes a supported discovery API; browser-based mDNS is unavailable, so preserve manual and saved-server management meanwhile.
+4. Finish episode long-press actions, detail translation controls, and any remaining destinations identified by the side-by-side Android parity audit.
+5. Run end-to-end Android comparison on a physical LG TV for every exposed destination, including confirmation of playback, remote focus and device-specific capabilities.
+6. Keep audio delay at 0..1000 ms unless a webOS-safe negative-delay implementation is demonstrated; Android supports -1000..1000 ms, while WebAudio DelayNode cannot advance audio.
+7. Maintain native Silo API parsing/playback tests and spatial-navigation regression coverage as workflows are completed.
+
+The source/build-only status, verified parity and explicit gaps are recorded in `docs/FIRST_GRADE_ROADMAP.md`; update it after every verified step.
 
 ## UX
 This is a 10-foot UI. Every interactive element must be reachable with Up/Down/Left/Right/OK/Back. Mouse/pointer support is secondary.
