@@ -4173,6 +4173,7 @@ body {
 .settings-pane-tile { display: grid; place-items: center; flex: none; width: 72px; height: 72px; border-radius: 18px; background: #3A3A3C; }
 .settings-pane-tile .settings-glyph { width: 36px; height: 36px; }
 .settings-group { display: grid; gap: 8px; max-width: 1080px; margin-bottom: 28px; }
+.settings-nested { display: grid; gap: 12px; margin: 4px 0 0 28px; padding: 12px; border-radius: 20px; background: rgba(255,255,255,.025); border: 1px solid rgba(255,255,255,.07); }
 .settings-group h3 { margin: 16px 0 4px; padding-left: 24px; font-size: 28px; line-height: 36px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: rgba(255,255,255,.62); }
 
 .settings-pane .option-row,

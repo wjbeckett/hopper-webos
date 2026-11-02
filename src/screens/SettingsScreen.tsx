@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { serverRegistry } from "../core/serverRegistry";
 import { clearDeviceSubtitleAppearance, clearScopedSetting, clearSetting, DEFAULT_SUBTITLE_APPEARANCE, getEffectiveSettings, getSettingsContract, isClientLocal, putDeviceSubtitleAppearance, putScopedSetting, putSetting } from "../api/settings";
-import { SUBTITLE_APPEARANCE_CHOICES } from "../core/subtitleStyle";
+import { SUBTITLE_APPEARANCE_CHOICES, settingsAppearanceChoices, subtitleChoiceLabel } from "../core/subtitleStyle";
 import type { SettingDefinition, SettingOption, SettingsContract, SubtitleAppearance } from "../api/settings";
 import { getPlaybackConnection, resetLearnedLimit, runSpeedTest } from "../api/playbackConnection";
 import type { PlaybackConnection } from "../api/playbackConnection";
@@ -310,6 +310,7 @@ export function SettingsScreen({
   const [localSpeed, setLocalSpeed] = useState("");
   const [learnedResetFailed, setLearnedResetFailed] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmSubtitleReset, setConfirmSubtitleReset] = useState(false);
   const [resetNotice, setResetNotice] = useState("");
   const [posterSource, setPosterSource] = useState("");
   const [launchBehavior, setLaunchBehavior] = useState<ProfileLaunchBehavior>(readProfileLaunchBehavior);
@@ -728,7 +729,7 @@ export function SettingsScreen({
   function changeAppearance(key: keyof SubtitleAppearance) {
     if (!appearanceDefinition) return;
     const title = key === "fontSize" ? "Font size" : key === "fontFamily" ? "Font family" : key === "fontColor" ? "Font color" : key === "textOpacity" ? "Text opacity" : key === "backgroundColor" ? "Background color" : key === "backgroundStyle" ? "Background style" : key === "backgroundOpacity" ? "Background opacity" : key === "textOutline" ? "Text outline" : key === "textOutlineColor" ? "Outline color" : "Position";
-    setPicker({ title, choices: appearanceOptions[key], current: subtitleAppearance[key], returnKey: `subtitle-appearance-${key}`, onPick: value => { setPicker(null); void chooseAppearance(key, value); } });
+    setPicker({ title, choices: settingsAppearanceChoices(key, subtitleAppearance[key]), current: subtitleAppearance[key], returnKey: `subtitle-appearance-${key}`, onPick: value => { setPicker(null); void chooseAppearance(key, value); } });
   }
   async function writePoster(next: string, scope: "profile_device" | "profile_client") {
     const definition = definitions.get("ui.card_presentation");
@@ -834,12 +835,22 @@ export function SettingsScreen({
     }
     requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-setting-key='subtitle-appearance-${key}']`)?.focus());
   }
+  async function resetSubtitleAppearance() {
+    setSubtitleAppearance(DEFAULT_SUBTITLE_APPEARANCE);
+    try {
+      if (subtitleDeviceOnly) await putDeviceSubtitleAppearance(session, DEFAULT_SUBTITLE_APPEARANCE);
+      else if (appearanceDefinition) await putSetting(session, appearanceDefinition, DEFAULT_SUBTITLE_APPEARANCE);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not reset subtitle appearance."); }
+  }
+
   function renderSubtitleAppearance() {
     if (!appearanceDefinition) return null;
-    const fields: Array<[keyof SubtitleAppearance, string]> = [["fontSize", "Font size"], ["fontFamily", "Font family"], ["fontColor", "Font color"], ["textOpacity", "Text opacity"], ["backgroundStyle", "Background style"], ["backgroundColor", "Background color"], ["backgroundOpacity", "Background opacity"], ["textOutline", "Text outline"], ["textOutlineColor", "Outline color"], ["position", "Position"]];
-    const values = (appearance: SubtitleAppearance) => fields.map(([key, label]) => <button key={key} data-tv-focusable="true" data-setting-key={`subtitle-appearance-${key}`} className="option-row settings-row" onClick={() => changeAppearance(key)}><span>{label}</span><strong>{String(appearance[key])}</strong></button>);
-    return <section className="settings-group"><h3>Appearance</h3>
-      <button data-tv-focusable="true" className="option-row settings-row" onClick={async () => {
+    const a = subtitleAppearance;
+    const row = (key: keyof SubtitleAppearance, label: string) => <button key={key} data-tv-focusable="true" data-setting-key={`subtitle-appearance-${key}`} className="option-row settings-row" onClick={() => changeAppearance(key)}><span>{label}</span><strong>{subtitleChoiceLabel(key, a[key])}</strong></button>;
+    const sizePx: Record<string, string> = { small: "1rem", medium: "1.2rem", large: "1.5rem", xlarge: "1.8rem", xxlarge: "2rem" };
+    return <><section className="settings-group"><h3>Appearance</h3>
+      <div className="subtitle-settings-preview" style={{ color: a.fontColor, opacity: a.textOpacity / 100, fontFamily: a.fontFamily, fontSize: sizePx[a.fontSize] ?? "1.5rem", background: a.backgroundStyle === "box" ? a.backgroundColor : "transparent", textShadow: a.backgroundStyle === "shadow" ? "0 2px 5px #000" : undefined, WebkitTextStroke: a.textOutline || a.backgroundStyle === "outline" ? `1px ${a.backgroundStyle === "outline" && !a.textOutline ? "#000" : a.textOutlineColor}` : undefined }}>Subtitles will look like this</div>
+      <button data-tv-focusable="true" data-setting-key="subtitle-device-only" className={`option-row settings-row settings-toggle${subtitleDeviceOnly ? " is-on" : ""}`} onClick={async () => {
         const next = !subtitleDeviceOnly; setSubtitleDeviceOnly(next);
         try {
           if (next) await putDeviceSubtitleAppearance(session, subtitleAppearance);
@@ -852,17 +863,22 @@ export function SettingsScreen({
             setProfileSubtitleAppearance(restored);
           }
         } catch (reason) { setSubtitleDeviceOnly(!next); setError(reason instanceof Error ? reason.message : "Could not change subtitle scope."); }
-      }}><span>Only on this device</span><strong>{subtitleDeviceOnly ? "On" : "Off"}</strong></button>
-      {values(subtitleAppearance)}
-      <button data-tv-focusable="true" className="option-row settings-row" onClick={async () => {
-        setSubtitleAppearance(DEFAULT_SUBTITLE_APPEARANCE);
-        try {
-          if (subtitleDeviceOnly) await putDeviceSubtitleAppearance(session, DEFAULT_SUBTITLE_APPEARANCE);
-          else if (appearanceDefinition) await putSetting(session, appearanceDefinition, DEFAULT_SUBTITLE_APPEARANCE);
-        } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not reset subtitle appearance."); }
-      }}><span>Reset appearance</span></button>
-      <div className="subtitle-settings-preview" style={{ color: subtitleAppearance.fontColor, opacity: subtitleAppearance.textOpacity / 100, fontFamily: subtitleAppearance.fontFamily, fontSize: subtitleAppearance.fontSize === "small" ? "1rem" : subtitleAppearance.fontSize === "medium" ? "1.2rem" : subtitleAppearance.fontSize === "xlarge" ? "1.8rem" : subtitleAppearance.fontSize === "xxlarge" ? "2rem" : "1.5rem", background: subtitleAppearance.backgroundStyle === "none" ? "transparent" : subtitleAppearance.backgroundColor, textShadow: subtitleAppearance.backgroundStyle === "shadow" ? "0 2px 5px #000" : undefined, WebkitTextStroke: subtitleAppearance.textOutline ? `1px ${subtitleAppearance.textOutlineColor}` : undefined }}>A live subtitle preview</div>
-    </section>;
+      }}><span>Only on This Device</span><strong>{subtitleDeviceOnly ? "On" : "Off"}</strong></button>
+      <div className="settings-nested">
+        {row("fontSize", "Font Size")}
+        {row("fontFamily", "Font Family")}
+        {row("fontColor", "Font Color")}
+        {row("textOpacity", "Text Opacity")}
+        {toggleRow("subtitle-appearance-textOutline", "Text Outline", a.textOutline, () => void chooseAppearance("textOutline", !a.textOutline))}
+        {row("textOutlineColor", "Outline Color")}
+        {row("backgroundStyle", "Background Style")}
+        {row("backgroundOpacity", "Background Opacity")}
+        {row("backgroundColor", "Background Color")}
+        {row("position", "Position")}
+        <button data-tv-focusable="true" data-setting-key="subtitle-appearance-reset" className="option-row settings-row settings-destructive" onClick={() => setConfirmSubtitleReset(true)}><span>Reset Appearance</span></button>
+      </div>
+    </section>
+    <p className="settings-footer">{subtitleDeviceOnly ? "Only on this device." : "Saved for this profile on all devices."}</p></>;
   }
 
   function renderDiagnosticsPane() {
@@ -1064,6 +1080,19 @@ export function SettingsScreen({
         </div>
       ) : null}
 
+
+      {confirmSubtitleReset ? (
+        <div className="details-more-scrim" data-modal="true" onClick={() => setConfirmSubtitleReset(false)}>
+          <div className="details-more settings-confirm" role="alertdialog" aria-label="Reset subtitle appearance" onClick={event => event.stopPropagation()}>
+            <h2>Reset subtitle appearance?</h2>
+            <p>This restores every subtitle appearance option to its default.</p>
+            <div className="settings-confirm-actions">
+              <TvButton className="secondary" onClick={() => { setConfirmSubtitleReset(false); refocus("subtitle-appearance-reset"); }}>Cancel</TvButton>
+              <TvButton className="destructive" autoFocus onClick={() => { setConfirmSubtitleReset(false); void resetSubtitleAppearance(); refocus("subtitle-appearance-reset"); }}>Reset</TvButton>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {confirmSignOut ? (
         <div className="details-more-scrim" data-modal="true" onClick={() => setConfirmSignOut(false)}>

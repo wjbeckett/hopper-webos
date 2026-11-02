@@ -33,19 +33,36 @@ export type AppearanceChoice = { label: string; value: string | number | boolean
 
 export const SUBTITLE_APPEARANCE_FIELDS: Array<[keyof SubtitleAppearance, string]> = [["fontSize", "Font size"], ["fontFamily", "Font family"], ["fontColor", "Font color"], ["textOpacity", "Text opacity"], ["backgroundStyle", "Background style"], ["backgroundColor", "Background color"], ["backgroundOpacity", "Background opacity"], ["textOutline", "Text outline"], ["textOutlineColor", "Outline color"], ["position", "Position"]];
 
+const FONT_COLORS: AppearanceChoice[] = [["#ffffff", "White"], ["#facc15", "Yellow"], ["#22c55e", "Green"], ["#06b6d4", "Cyan"], ["#d946ef", "Magenta"], ["#ef4444", "Red"], ["#3b82f6", "Blue"], ["#9ca3af", "Gray"], ["#000000", "Black"]].map(([value, label]) => ({ label, value }));
+const BACKGROUND_COLORS: AppearanceChoice[] = [["#000000", "Black"], ["#374151", "Dark Gray"], ["#1e3a5f", "Navy"], ["#7f1d1d", "Dark Red"], ["#14532d", "Dark Green"]].map(([value, label]) => ({ label, value }));
+
 export const SUBTITLE_APPEARANCE_CHOICES: Record<keyof SubtitleAppearance, AppearanceChoice[]> = {
-  fontSize: ["small", "medium", "large", "xlarge", "xxlarge"].map(value => ({ label: value, value })),
-  fontFamily: ["sans-serif", "serif", "monospace"].map(value => ({ label: value, value })),
-  fontColor: ["#ffffff", "#ffff00", "#00ffff", "#00ff00"].map(value => ({ label: value, value, detail: value })),
+  fontSize: [["small", "Small"], ["medium", "Medium"], ["large", "Large"], ["xlarge", "X-Large"], ["xxlarge", "XX-Large"]].map(([value, label]) => ({ label, value })),
+  fontFamily: [["sans-serif", "Sans-serif"], ["serif", "Serif"], ["monospace", "Monospace"]].map(([value, label]) => ({ label, value })),
+  fontColor: FONT_COLORS,
   textOpacity: [25, 50, 75, 100].map(value => ({ label: `${value}%`, value })),
-  backgroundColor: ["#000000", "#202020", "#000033", "#ffffff"].map(value => ({ label: value, value, detail: value })),
-  backgroundStyle: ["box", "shadow", "outline", "none"].map(value => ({ label: value, value })),
+  backgroundColor: BACKGROUND_COLORS,
+  backgroundStyle: [["none", "No background"], ["box", "Box"], ["shadow", "Drop Shadow"], ["outline", "Outline"]].map(([value, label]) => ({ label, value })),
   backgroundOpacity: [0, 25, 50, 75, 100].map(value => ({ label: `${value}%`, value })),
   textOutline: [{ label: "On", value: true }, { label: "Off", value: false }],
-  textOutlineColor: ["#000000", "#ffffff", "#ffff00"].map(value => ({ label: value, value })),
-  position: [{ label: "Bottom", value: "bottom" }, { label: "Lower third", value: "lower-third" }, { label: "Top", value: "top" }]
+  textOutlineColor: BACKGROUND_COLORS,
+  position: [{ label: "Bottom", value: "bottom" }, { label: "Lower Third", value: "lower-third" }, { label: "Top", value: "top" }]
 };
 
+function percentChoices(from: number, current: unknown): AppearanceChoice[] {
+  const steps = new Set<number>();
+  for (let value = from; value <= 100; value += 5) steps.add(value);
+  if (typeof current === "number") steps.add(current);
+  return Array.from(steps).sort((a, b) => a - b).map(value => ({ label: `${value}%`, value }));
+}
+
+export function settingsAppearanceChoices(key: keyof SubtitleAppearance, current: unknown): AppearanceChoice[] {
+  if (key === "textOpacity") return percentChoices(5, current);
+  if (key === "backgroundOpacity") return percentChoices(0, current);
+  return SUBTITLE_APPEARANCE_CHOICES[key];
+}
+
 export function subtitleChoiceLabel(key: keyof SubtitleAppearance, value: unknown) {
-  return SUBTITLE_APPEARANCE_CHOICES[key].find(choice => choice.value === value)?.label ?? String(value);
+  if (key === "textOpacity" || key === "backgroundOpacity") return `${value}%`;
+  return SUBTITLE_APPEARANCE_CHOICES[key].find(choice => typeof value === "string" ? String(choice.value).toLowerCase() === value.toLowerCase() : choice.value === value)?.label ?? String(value);
 }
