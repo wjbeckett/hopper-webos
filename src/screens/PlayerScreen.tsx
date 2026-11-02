@@ -111,7 +111,7 @@ type Pill = { kind: PillKind; key: string; label: string; secondsRemaining: numb
 type UiSnapshot = { upNextOpen: boolean; hud: boolean; panel: "audio" | "subtitles" | "quality" | null; scrubPreview: number | null; autoSeekRate: number; cleanSeek: { rate: number; preview: number } | null; pill: Pill | null; position: number; duration: number; playing: boolean };
 
 /** The player's transport glyphs: dark-disc buttons inverting to Paper on focus. */
-function TransportGlyph({ name, seconds = 0 }: { name: "play" | "pause" | "back10" | "forward30" | "subtitles" | "tune" | "close"; seconds?: number }) {
+function TransportGlyph({ name, seconds = 0 }: { name: "play" | "pause" | "back10" | "forward30" | "subtitles" | "tune" | "close" | "upNext"; seconds?: number }) {
   const arc = (forward: boolean, seconds: number) => <g>
     <path d={forward ? "M12 4a8 8 0 1 1-7.4 4.9" : "M12 4a8 8 0 1 0 7.4 4.9"} fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" />
     <path d={forward ? "M3.2 6.4 4.9 9.2 7.8 7.9" : "M20.8 6.4 19.1 9.2 16.2 7.9"} fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" />
@@ -125,6 +125,7 @@ function TransportGlyph({ name, seconds = 0 }: { name: "play" | "pause" | "back1
     case "subtitles": return <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.4" y="4.8" width="17.2" height="14.4" rx="2.6" fill="none" stroke="currentColor" strokeWidth="1.9" /><path d="M6.6 14.6h6.2M15.2 14.6h2.4M6.6 10.4h2.2M11 10.4h6.6" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" /></svg>;
     case "tune": return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h9m4 0h3M4 16h3m4 0h9" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" /><circle cx="15" cy="8" r="2.1" fill="none" stroke="currentColor" strokeWidth="1.9" /><circle cx="9" cy="16" r="2.1" fill="none" stroke="currentColor" strokeWidth="1.9" /></svg>;
     case "close": return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 6.6l10.8 10.8M17.4 6.6 6.6 17.4" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" /></svg>;
+    case "upNext": return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5v14l11-7L4 5zm13 0v14h3V5h-3z" fill="currentColor" /></svg>;
   }
 }
 
@@ -1324,8 +1325,9 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
             <button className="transport-button" onClick={() => performRelativeSeek(skipRef.current.forward, true)} aria-label={`Skip forward ${skipSeconds.forward} seconds`}><TransportGlyph name="forward30" seconds={skipSeconds.forward} /></button>
           </div>
           <div className="transport-group">
-            <button className="transport-button labeled" onClick={() => openPanel("subtitles")} aria-label={`Subtitles · ${subtitleValue}`}><TransportGlyph name="subtitles" /><span>Subtitles</span><small>{subtitleValue}</small></button>
-            <button className="transport-button labeled" onClick={() => openPanel("quality")} aria-label="Options" disabled={!qualities.length}><TransportGlyph name="tune" /><span>Options</span></button>
+            {upNext ? <button className="transport-button labeled" onClick={() => commitApproachingEnd(false)} aria-label="Up Next"><TransportGlyph name="upNext" /><span>Up next</span></button> : null}
+            <button className="transport-button labeled" onClick={() => openPanel("subtitles")} aria-label={`Subtitles${subtitleValue ? ` · ${subtitleValue}` : ""}`}><TransportGlyph name="subtitles" /><span>Subtitles</span><small>{subtitleValue}</small></button>
+            <button className="transport-button labeled" onClick={() => openPanel("quality")} aria-label="Options"><TransportGlyph name="tune" /><span>Options</span></button>
             <button className="transport-button labeled" onClick={exitPlayer} aria-label="Close player"><TransportGlyph name="close" /><span>Close</span></button>
           </div>
         </div>

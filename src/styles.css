@@ -1468,7 +1468,7 @@ input:focus {
 }
 .auto-seek-chip svg { width: 14px; height: 14px; }
 
-/* Transport cluster: 44dp discs, inversion focus, labeled secondary pills. */
+/* Transport row matches TvPlayerTransportCluster: focused labels expand, idle controls stay discs. */
 .player-transport {
   display: flex;
   justify-content: space-between;
@@ -1478,9 +1478,10 @@ input:focus {
 .transport-group { display: flex; align-items: center; gap: 10px; }
 .transport-button {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  gap: 9px;
+  gap: 0;
   height: 44px;
   min-width: 44px;
   padding: 0;
@@ -1492,18 +1493,32 @@ input:focus {
   font: inherit;
   outline: none;
   cursor: pointer;
+  transition: background-color 120ms ease, padding 160ms ease, box-shadow 120ms ease;
 }
-.transport-button svg { width: 22px; height: 22px; }
-.transport-button.labeled { padding: 0 16px; }
-.transport-button.labeled span { font-size: 15px; font-weight: 600; }
-.transport-button.labeled small { font-size: 13px; color: rgba(237,237,237,.62); }
+.transport-button svg { flex: 0 0 auto; width: 20px; height: 20px; }
+.transport-button.primary svg { width: 22px; height: 22px; }
+.transport-button.labeled { padding: 0; }
+.transport-button.labeled span,
+.transport-button.labeled small {
+  max-width: 0;
+  margin: 0;
+  overflow: hidden;
+  opacity: 0;
+  white-space: nowrap;
+  transition: max-width 160ms ease, opacity 100ms ease, margin 160ms ease;
+}
+.transport-button.labeled span { font-size: 14px; font-weight: 600; line-height: 18px; }
+.transport-button.labeled small { font-size: 13px; font-weight: 500; color: rgba(11,11,12,.58); }
+.transport-button.labeled:focus { padding: 0 13px; }
+.transport-button.labeled:focus span { max-width: 180px; margin-left: 8px; margin-right: 5px; opacity: 1; }
+.transport-button.labeled:focus small { max-width: 220px; margin-left: 6px; opacity: 1; }
 .transport-button:disabled { opacity: .4; cursor: default; }
 .transport-button:focus {
   background: #EDEDED;
-  box-shadow: none;
+  box-shadow: 0 5px 10px rgba(0,0,0,.38);
   color: #0B0B0C;
 }
-.transport-button:focus small { color: rgba(11,11,12,.66); }
+.transport-button:focus:not(.labeled) { box-shadow: 0 5px 10px rgba(0,0,0,.38); }
 
 /* Skip pill: intro ask carries the 5s countdown fill; credits/recap are static. */
 .skip-pill {
