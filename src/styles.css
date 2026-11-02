@@ -1618,11 +1618,31 @@ input:focus {
 .hold-seek-track b { display: block; height: 100%; border-radius: inherit; background: #EDEDED; }
 .hold-seek-hint { font-size: 13px; color: rgba(255,255,255,.55); }
 
-.player-status {
+.player-loading {
   position: absolute;
-  right: 48px;
-  top: 42px;
-  color: rgba(255,255,255,.72);
+  inset: 0;
+  z-index: 7;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.player-loading svg { width: 64px; height: 64px; animation: player-loading-spin .9s linear infinite; }
+.player-loading circle { fill: none; stroke: #EDEDED; stroke-width: 4; stroke-linecap: round; stroke-dasharray: 132 44; }
+@keyframes player-loading-spin { to { transform: rotate(360deg); } }
+.player-error {
+  position: absolute;
+  z-index: 9;
+  top: 32px;
+  left: 32px;
+  max-width: min(560px, calc(100vw - 64px));
+  padding: 14px 20px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 16px;
+  background: rgba(19,20,23,.96);
+  color: #EDEDED;
+  font-size: 18px;
+  line-height: 1.35;
+  box-shadow: 0 8px 24px rgba(0,0,0,.42);
 }
 .player-next-up { position: absolute; inset: 0; z-index: 8; display: flex; flex-direction: column; overflow: hidden; background: #000; }
 .player-next-up-main { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; }

@@ -1351,8 +1351,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         {!hud && duration > 0 ? <div className="skip-feedback-track"><b style={{ width: `${Math.max(0, Math.min(1, skipFeedback.target / duration)) * 100}%` }} /></div> : null}
       </div> : null}
 
-      {busy ? <div className="player-status">Asking Silo for the best playback route...</div> : null}
-      {error ? <div className="player-error">{error}</div> : null}
+      {busy ? <div className="player-loading" role="status" aria-label="Loading"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="28" /></svg></div> : null}
+      {error ? <div className="player-error" role="alert">{error}</div> : null}
     </div>
 
     {upNextCard ? <section className="player-next-up" data-modal="true" aria-label="Up next">
