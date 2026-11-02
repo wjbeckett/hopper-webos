@@ -4450,3 +4450,4 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 .server-row-group { display: flex; gap: 12px; align-items: stretch; }
 .server-row-group > .server-row:first-child { flex: 1 1 auto; width: auto; }
 .server-row-remove { width: auto; flex: 0 0 auto; justify-content: center; color: #ffb4ab; }
+.details-backdrop.spoiler-hidden-image { filter: blur(22px); transform: scale(1.08); }
