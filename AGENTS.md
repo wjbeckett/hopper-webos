@@ -31,7 +31,7 @@ Build a first-class LG webOS TV client for Silo with feature parity directionall
 6. Keep audio delay at 0..1000 ms unless a webOS-safe negative-delay implementation is demonstrated; Android supports -1000..1000 ms, while WebAudio DelayNode cannot advance audio.
 7. Maintain native Silo API parsing/playback tests and spatial-navigation regression coverage as workflows are completed.
 
-The source/build-only status, verified parity and explicit gaps are recorded in `docs/FIRST_GRADE_ROADMAP.md`; update it after every verified step.
+The source/build-only status, verified parity and explicit gaps are recorded in `docs/FIRST_GRADE_ROADMAP.md`; prioritized remaining work is in `docs/ANDROID_PARITY_TODO.md`. Update both after every verified step.
 
 ## UX
 This is a 10-foot UI. Every interactive element must be reachable with Up/Down/Left/Right/OK/Back. Mouse/pointer support is secondary.

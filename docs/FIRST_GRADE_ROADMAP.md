@@ -49,7 +49,7 @@ This client should feel like a native TV product, not a browser page packaged as
 8. Network-loss/reconnect UX and expired-session recovery.
 9. Automated tests for navigation geometry, auth state, API parsing and player state.
 10. Store assets, accessibility pass, privacy copy, trademark approval and LG certification checklist.
-11. Side-by-side Android TV parity verification remains open. The client still lacks the Android inbox/notifications and person-detail flows; its detail screen omits cast/crew, trailers, facts, and version sections; audiobook detail/playback uses the generic video flow; and Back does not consistently return to the originating screen. Home metadata enrichment and LG-remote focus transitions also need verification. The sampled Home ambient tint is implemented, but artwork CORS behavior and physical-TV rendering still need validation; parity must not be claimed until the remaining gaps and device behavior are checked.
+11. Side-by-side Android TV parity verification remains open. Android TV has an inbox screen but no navigation route to it; webOS already has person-detail, cast/crew, trailers/extras and facts. Dedicated audiobook detail/playback still uses the generic video flow, and Back does not consistently return to the originating screen. Home metadata enrichment and LG-remote focus transitions also need verification. The sampled Home ambient tint is implemented, but artwork CORS behavior and physical-TV rendering still need validation; parity must not be claimed until the remaining gaps and device behavior are checked. The prioritized Android destination/workflow list is tracked in [`ANDROID_PARITY_TODO.md`](ANDROID_PARITY_TODO.md).
 
 ### Product parity targets
 Follow the official Silo TV clients:
