@@ -1163,6 +1163,16 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         }
         if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
           event.preventDefault(); event.stopPropagation();
+          if (event.repeat) return;
+          const current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          const column = current?.closest<HTMLElement>(".player-hud-video-grid > div, .player-hud-columns > div");
+          const sibling = event.key === "ArrowRight" ? column?.nextElementSibling : column?.previousElementSibling;
+          if (current && column && sibling instanceof HTMLElement) {
+            const rowsOf = (root: HTMLElement) => Array.from(root.querySelectorAll<HTMLElement>("[data-tv-focusable='true']:not([disabled])")).filter(row => row.offsetParent !== null);
+            const target = rowsOf(sibling);
+            const index = Math.max(0, rowsOf(column).indexOf(current));
+            target[Math.min(index, target.length - 1)]?.focus();
+          }
           return;
         }
         return;
