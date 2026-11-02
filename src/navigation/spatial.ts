@@ -494,15 +494,23 @@ export function installSpatialNavigation() {
       return;
     }
     if (modal && modalDirection) {
-      const rows = Array.from(modal.querySelectorAll<HTMLElement>("[data-tv-focusable='true']"))
+      const rows = Array.from(modal.querySelectorAll<HTMLElement>("[data-tv-focusable='true']:not([disabled])"))
         .filter(item => item.offsetParent !== null);
       if (rows.length) {
         const active = document.activeElement instanceof HTMLElement && modal.contains(document.activeElement) ? document.activeElement : null;
         if (!active) {
           focusElement(rows[0]);
         } else {
-          const index = rows.indexOf(active);
-          const next = modalDirection === "down" ? rows[index + 1] : modalDirection === "up" ? rows[index - 1] : undefined;
+          const center = (element: HTMLElement) => { const rect = element.getBoundingClientRect(); return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }; };
+          const point = center(active);
+          const candidates = rows.filter(row => row !== active).map(element => ({ element, point: center(element) }));
+          const horizontal = modalDirection === "left" || modalDirection === "right";
+          const next = candidates.filter(candidate => horizontal
+            ? Math.abs(candidate.point.y - point.y) < Math.max(active.offsetHeight, candidate.element.offsetHeight) * 0.7 && (modalDirection === "right" ? candidate.point.x > point.x : candidate.point.x < point.x)
+            : (modalDirection === "down" ? candidate.point.y > point.y : candidate.point.y < point.y))
+            .sort((a, b) => horizontal
+              ? Math.abs(a.point.x - point.x) - Math.abs(b.point.x - point.x)
+              : Math.abs(a.point.y - point.y) * 1000 + Math.abs(a.point.x - point.x) - (Math.abs(b.point.y - point.y) * 1000 + Math.abs(b.point.x - point.x)))[0]?.element;
           if (next) focusElement(next);
         }
         event.preventDefault();

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type Hls from "hls.js";
 import { bestVersionForDevice, getMarkers, getTrickplay, getWatchDetail, playbackUrl, replanPlaybackV3, reportProgress, saveAudioPreference, saveSubtitlePreference, startPlaybackV3, stopPlayback, stopPlaybackKeepalive, type AudioTrack, type FileMarkers, type MarkerSegment, type PlaybackChoices, type PlaybackPlan, type Quality, type SubtitleInventory, type Trickplay, type WatchDetail } from "../api/playback";
 import type { Session, SiloItem } from "../types";
+import { getEffectiveSettings } from "../api/settings";
+import { localResumeRewindSeconds, resumePositionWithRewind } from "../core/playerSettings";
 
 type PlaybackState = { plan: PlaybackPlan; playbackAttemptId: string; planAttemptId: string; attemptedKeys: string[] };
 const ACTIVE_PLAYBACK_KEY = "silo-webos-active-playback-v1";
@@ -96,7 +98,7 @@ function formatClock(seconds: number) {
 }
 
 type PillKind = "intro" | "credits" | "recap";
-type Pill = { kind: PillKind; key: string; label: string; secondsRemaining: number | null };
+type Pill = { kind: PillKind; key: string; label: string; secondsRemaining: number | null; undo?: boolean };
 type UiSnapshot = { hud: boolean; panel: "audio" | "subtitles" | "quality" | null; scrubPreview: number | null; autoSeekRate: number; cleanSeek: { rate: number; preview: number } | null; pill: Pill | null; position: number; duration: number; playing: boolean };
 
 /** The player's transport glyphs: dark-disc buttons inverting to Paper on focus. */
@@ -158,11 +160,14 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const pendingTapDirection = useRef(0);
   const pendingCleanPress = useRef<{ direction: number; generation: number; becameHold: boolean } | null>(null);
   const resolvedMarkers = useRef(new Set<string>());
+  const autoSkippedMarkers = useRef(new Set<string>());
   const expiredMarkerKey = useRef<string | null>(null);
   const trickplayReadAt = useRef(0);
   const nonceRef = useRef(0);
   const [trickplay, setTrickplay] = useState<Trickplay | null>(null);
   const [markers, setMarkers] = useState<FileMarkers | null>(null);
+  const [introSkipMode, setIntroSkipMode] = useState<"never" | "ask" | "always">("ask");
+  const [playerSettingsLoaded, setPlayerSettingsLoaded] = useState(false);
 
   const scrubberRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -294,14 +299,26 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   useEffect(() => {
     let alive = true;
     setBusy(true);
-    getWatchDetail(session, item).then(async (watch) => {
+    setPlayerSettingsLoaded(false);
+    setIntroSkipMode("ask");
+    Promise.all([
+      getWatchDetail(session, item),
+      getEffectiveSettings(session, ["playback.intro_skip_mode"]).catch(() => new Map()),
+    ]).then(async ([watch, settings]) => {
       if (!alive) return;
+      const configuredMode = settings.get("playback.intro_skip_mode")?.value;
+      if (configuredMode === "never" || configuredMode === "ask" || configuredMode === "always") setIntroSkipMode(configuredMode);
+      setPlayerSettingsLoaded(true);
       const selectedVersion = watch.versions.find(entry => entry.file_id === choices?.fileId)
         ?? bestVersionForDevice(watch.versions, watch.user_data?.last_file_id);
       if (!selectedVersion) throw new Error("Silo did not return a playable media file.");
       setDetail(watch);
       setVersion(selectedVersion);
-      const started = await startPlaybackV3(session, watch, selectedVersion, "auto", choices?.audioIndex ?? selectedVersion.effective_audio_track_index, choices?.subtitleOff ? -1 : choices?.subtitleIndex, startPosition);
+      const resumePosition = startPosition ?? watch.user_data?.position_seconds;
+      const playbackStart = startPosition === 0
+        ? 0
+        : resumePositionWithRewind(resumePosition, localResumeRewindSeconds());
+      const started = await startPlaybackV3(session, watch, selectedVersion, "auto", choices?.audioIndex ?? selectedVersion.effective_audio_track_index, choices?.subtitleOff ? -1 : choices?.subtitleIndex, playbackStart);
       if (!alive) { void stopPlayback(session, started.plan.session_id); return; }
       installPlan({ ...started, attemptedKeys: [] });
     }).catch((reason) => alive && setError(reason instanceof Error ? reason.message : "Playback failed."))
@@ -497,20 +514,28 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   // shows again this session; an expired intro offer waits for the position
   // to leave the range before re-offering.
   useEffect(() => {
-    if (!markers || scrubPreview != null) return;
+    if (!playerSettingsLoaded || !markers || scrubPreview != null) return;
     const kinds: PillKind[] = ["intro", "credits", "recap"];
     const active = kinds.map(kind => ({ kind, segment: markers[kind] as MarkerSegment | null }))
       .find(entry => entry.segment && position >= entry.segment.start_seconds && position < entry.segment.end_seconds);
     const key = active ? `${active.kind}:${active.segment!.start_seconds}` : null;
-    setPill(current => {
-      if (current && key === current.key) return current;
-      if (!active || !key || resolvedMarkers.current.has(key) || expiredMarkerKey.current === key) return null;
-      if (active.kind === "intro") return { kind: "intro", key, label: "Skip Intro", secondsRemaining: INTRO_PROMPT_SECONDS };
-      return { kind: active.kind, key, label: active.kind === "credits" ? "Skip Credits" : "Skip Recap", secondsRemaining: null };
-    });
     const introKey = markers.intro ? `intro:${markers.intro.start_seconds}` : null;
+    if (pill?.undo && pill.key === introKey) return;
+    if (pill && key === pill.key) return;
+    if (!active || !key || resolvedMarkers.current.has(key) || expiredMarkerKey.current === key) {
+      setPill(null);
+    } else if (active.kind === "intro") {
+      if (introSkipMode === "never") setPill(null);
+      else if (introSkipMode === "always") {
+        if (!autoSkippedMarkers.current.has(key)) {
+          autoSkippedMarkers.current.add(key);
+          seekToPosition(active.segment!.end_seconds);
+        }
+        setPill({ kind: "intro", key, label: "Watch Intro", secondsRemaining: INTRO_PROMPT_SECONDS, undo: true });
+      } else setPill({ kind: "intro", key, label: "Skip Intro", secondsRemaining: INTRO_PROMPT_SECONDS });
+    } else setPill({ kind: active.kind, key, label: active.kind === "credits" ? "Skip Credits" : "Skip Recap", secondsRemaining: null });
     if (expiredMarkerKey.current && expiredMarkerKey.current !== introKey) expiredMarkerKey.current = null;
-  }, [markers, position, scrubPreview]);
+  }, [markers, position, scrubPreview, playerSettingsLoaded, introSkipMode, seekToPosition, pill?.key, pill?.undo]);
 
   function selectPill() {
     const current = ui.current.pill;
@@ -518,7 +543,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     const segment = markers[current.kind];
     resolvedMarkers.current.add(current.key);
     setPill(null);
-    if (segment) seekToPosition(segment.end_seconds);
+    if (segment) seekToPosition(current.undo ? segment.start_seconds : segment.end_seconds);
   }
 
   function dismissPill() {
@@ -1016,6 +1041,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
 
       {pill ? <div ref={pillRef} className="skip-pill" tabIndex={-1} onClick={selectPill} data-prompt={pill.kind}>
         {pillFill != null ? <b className="skip-pill-fill" style={{ width: `${Math.max(0, Math.min(1, pillFill)) * 100}%` }} /> : null}
+        {pill.undo ? <small className="skip-pill-caption">Intro skipped</small> : null}
         <span>{pill.label}</span>
       </div> : null}
 
