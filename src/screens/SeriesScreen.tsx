@@ -9,6 +9,7 @@ import type { DetailPerson, DetailTrailer } from "../api/silo";
 import type { Session, SiloItem } from "../types";
 import { applyWatchedState, publishWatchState } from "../core/watchState";
 import { LoadingState } from "../components/LoadingState";
+import { hidesEpisodeImage, hidesEpisodeOverview, useEpisodeSpoilerPreferences } from "../core/episodeSpoilers";
 
 type Props = {
   session: Session;
@@ -104,6 +105,7 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
   const [reload, setReload] = useState(0);
   const [logoFailed, setLogoFailed] = useState(false);
   const extras = useDetailExtras(session, series.Id);
+  const spoilerPreferences = useEpisodeSpoilerPreferences(session);
   const [choices, setChoices] = useState<PlaybackChoices>({});
   const [optionsOpen, setOptionsOpen] = useState(false);
   const optionsRef = useRef<HTMLButtonElement>(null);
@@ -220,7 +222,7 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
   const rating = show.ImdbRating ?? show.TmdbRating;
   const seasonCount = show.SeasonCount ?? seasons.filter(season => seasonNumber(season) > 0).length;
   const synopsis = focusedEpisode
-    ? [focusedEpisode.Name, focusedEpisode.Overview ?? ""].filter(Boolean).join(" · ")
+    ? hidesEpisodeOverview(focusedEpisode, spoilerPreferences) ? "" : [focusedEpisode.Name, focusedEpisode.Overview ?? ""].filter(Boolean).join(" · ")
     : show.Overview ?? "";
   const metaTokens = [
     focusedEpisode
@@ -363,7 +365,8 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
             <EpisodeCard key={episode.Id} session={session} episode={episode} current={highlightedId === episode.Id}
               onFocus={() => { setActiveButton(null); setMode(String(episode.ParentIndexNumber ?? 0)); setFocusedEpisodeId(episode.Id); setRememberedEpisodeId(episode.Id); }}
               onOpen={() => onPlayEpisode(episode, resumePosition(episode))}
-              onSetWatched={(changed, next) => void markWatched(changed.Id, next)} />
+              onSetWatched={(changed, next) => void markWatched(changed.Id, next)}
+              hideImage={hidesEpisodeImage(episode, spoilerPreferences, episode.PosterIsEpisodeStill)} />
           )) : <div className="screen-state">No episodes available</div>}
         </div>
         <div className="series-related">
@@ -424,13 +427,14 @@ function MoreRow({ children, onClick, innerRef }: { children: string; onClick: (
   );
 }
 
-function EpisodeCard({ session, episode, current, onFocus, onOpen, onSetWatched }: {
+function EpisodeCard({ session, episode, current, onFocus, onOpen, onSetWatched, hideImage }: {
   session: Session;
   episode: SiloItem;
   current: boolean;
   onFocus: () => void;
   onOpen: () => void;
   onSetWatched: (episode: SiloItem, watched: boolean) => void;
+  hideImage: boolean;
 }) {
   const image = imageUrl(session, episode);
   const progress = Math.max(0, Math.min(100, episode.UserData?.PlayedPercentage ?? 0));
@@ -482,7 +486,7 @@ function EpisodeCard({ session, episode, current, onFocus, onOpen, onSetWatched 
       onClick={onOpen}
     >
       <div className="episode-tile-art">
-        {image ? <img src={image} alt="" loading="lazy" onError={event => { event.currentTarget.hidden = true; }} /> : null}
+        {image ? <img className={hideImage ? "spoiler-hidden-image" : undefined} src={image} alt="" loading="lazy" onError={event => { event.currentTarget.hidden = true; }} /> : null}
         {watched ? <span className="media-card-watched-check" aria-label="Watched">✓</span> : null}
         {!watched && progress > 0 && progress < 100 ? <i><span style={{ width: `${progress}%` }} /></i> : null}
       </div>

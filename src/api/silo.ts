@@ -95,6 +95,8 @@ type NativeItem = Record<string, unknown> & {
   media_type?: string;
   poster_url?: string;
   backdrop_url?: string;
+  poster_is_episode_still?: boolean;
+  backdrop_is_episode_still?: boolean;
   overview?: string;
   description?: string;
   year?: number;
@@ -300,6 +302,8 @@ function toItem(item: NativeItem): SiloItem {
     RunTimeTicks: typeof runtimeSeconds === "number" ? runtimeSeconds * 10_000_000 : undefined,
     PosterUrl: item.poster_url ?? item.still_url,
     BackdropUrl: item.backdrop_url,
+    PosterIsEpisodeStill: item.poster_is_episode_still,
+    BackdropIsEpisodeStill: item.backdrop_is_episode_still,
     LogoUrl: item.logo_url,
     UserData: hasUserState ? userState : undefined
   };

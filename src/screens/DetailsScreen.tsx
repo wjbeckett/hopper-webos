@@ -8,6 +8,7 @@ import { TvButton } from "../components/TvButton";
 import type { PlaybackChoices } from "../api/playback";
 import type { DetailPerson, DetailTrailer } from "../api/silo";
 import type { Session, SiloItem } from "../types";
+import { hidesEpisodeImage, hidesEpisodeOverview, useEpisodeSpoilerPreferences } from "../core/episodeSpoilers";
 
 type Props = {
   session: Session;
@@ -50,6 +51,7 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
   const [similar, setSimilar] = useState<SiloItem[]>([]);
   const [actionError, setActionError] = useState("");
   const extras = useDetailExtras(session, item.Id);
+  const spoilerPreferences = useEpisodeSpoilerPreferences(session);
   const watchDetail = useWatchDetail(session, item.Type === "Movie" || item.Type === "Episode" ? item : undefined);
   const hasPlaybackSummary = item.Type === "Movie" || item.Type === "Episode";
   const [choices, setChoices] = useState<PlaybackChoices>({});
@@ -148,11 +150,13 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
   const directorCredit = extras?.crew.filter(member => member.role?.toLowerCase() === "director").slice(0, 2).map(member => member.name).filter(Boolean).join(", ") || "";
   const tokens = [typeLabel(detail.Type), ...(detail.Genres ?? []).slice(0, 2)].filter(Boolean);
   const relatedTitle = detail.Type === "Movie" ? "Related Movies" : "Related";
+  const hideEpisodeOverview = hidesEpisodeOverview(detail, spoilerPreferences);
+  const hideEpisodeBackdrop = hidesEpisodeImage(detail, spoilerPreferences, detail.BackdropIsEpisodeStill);
 
   return (
     <main className="details-shell">
       <div
-        className="details-backdrop"
+        className={`details-backdrop${hideEpisodeBackdrop ? " spoiler-hidden-image" : ""}`}
         style={{ backgroundImage: `url("${backdropUrl(session, detail)}")` }}
       />
       <div className="details-scrim" />
@@ -166,7 +170,7 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
           {facts.map(fact => <span key={fact}>{fact}</span>)}
         </div>
         {extras?.tagline ? <div className="details-tokens">{extras.tagline}</div> : null}
-        {detail.Overview ? <p className="details-overview">{detail.Overview}</p> : null}
+        {detail.Overview && !hideEpisodeOverview ? <p className="details-overview">{detail.Overview}</p> : null}
         {detail.Author || detail.Narrator ? (
           <div className="details-credit">{[detail.Author, detail.Narrator ? `Narrated by ${detail.Narrator}` : ""].filter(Boolean).join(" · ")}</div>
         ) : null}

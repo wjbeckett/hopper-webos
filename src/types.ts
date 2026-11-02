@@ -39,6 +39,8 @@ export type SiloItem = {
   BackdropImageTags?: string[];
   PosterUrl?: string;
   BackdropUrl?: string;
+  PosterIsEpisodeStill?: boolean;
+  BackdropIsEpisodeStill?: boolean;
   LogoUrl?: string;
   UserData?: {
     Played?: boolean;

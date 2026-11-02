@@ -275,6 +275,8 @@ input:focus {
   opacity: .72;
 }
 
+.spoiler-hidden-image { filter: blur(22px); transform: scale(1.08); }
+
 .details-scrim {
   position: absolute;
   inset: 0;
