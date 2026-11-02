@@ -16,7 +16,7 @@ import { AiTranslateDialog, type AiSource } from "../components/AiTranslateDialo
 import { createAiTranslateStore, type AiTranslateStore } from "../core/aiTranslateJob";
 import { getAiStatus, type AiStatus } from "../api/subtitles";
 import { createSubtitleSyncStore, delaySecondsLabel, FORBIDDEN_MESSAGE, timingActionsFor, timingValue, type SubtitleSyncStore, type SyncUiState } from "../core/subtitleSync";
-import { delayLabel, localAudioSyncMs, localHdrEnabled, localPassOutThreshold, localResumeRewindSeconds, localSubtitleSyncMs, markerAction, resumePositionWithRewind, setLocalAudioSyncMs, setLocalHdrEnabled, setLocalSubtitleSyncMs } from "../core/playerSettings";
+import { delayLabel, localAudioSyncMs, localDolbyVisionEnabled, localHdrEnabled, localPassOutThreshold, localResumeRewindSeconds, localSubtitleSyncMs, markerAction, resumePositionWithRewind, setLocalAudioSyncMs, setLocalDolbyVisionEnabled, setLocalHdrEnabled, setLocalSubtitleSyncMs } from "../core/playerSettings";
 
 type PlaybackState = { plan: PlaybackPlan; playbackAttemptId: string; planAttemptId: string; attemptedKeys: string[] };
 const ACTIVE_PLAYBACK_KEY = "silo-webos-active-playback-v1";
@@ -257,6 +257,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const [audioDelayMs, setAudioDelayMs] = useState(localAudioSyncMs);
   const [subtitleDelayMs, setSubtitleDelayMs] = useState(localSubtitleSyncMs);
   const [hdrOn, setHdrOn] = useState(localHdrEnabled);
+  const [dolbyOn, setDolbyOn] = useState(localDolbyVisionEnabled);
+  const [dolbyApplying, setDolbyApplying] = useState(false);
   const subtitleDelayRef = useRef(subtitleDelayMs);
   subtitleDelayRef.current = subtitleDelayMs;
   const [subtitleSearch, setSubtitleSearch] = useState<{ language: string } | null>(null);
@@ -1063,6 +1065,36 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     }
   }
 
+  async function toggleDolbyVision() {
+    if (dolbyApplying || busy) return;
+    const next = !dolbyOn;
+    setDolbyOn(next);
+    setLocalDolbyVisionEnabled(next);
+    const active = stateRef.current;
+    if (!active || !detail || !version) return;
+    const isDolbyVision = active.plan.claims?.video?.dolby_vision === true || Boolean(active.plan.source?.dolby_vision_profile);
+    if (!isDolbyVision) return;
+    const wasPaused = videoRef.current?.paused ?? false;
+    const positionNow = sourcePosition();
+    const audio = active.plan.selected_tracks.audio;
+    const subtitle = active.plan.selected_tracks.subtitle;
+    setDolbyApplying(true);
+    setBusy(true);
+    setError("");
+    closePlayback(false);
+    try {
+      const started = await startPlaybackV3(session, detail, version, qualityRef.current, audio?.index, subtitle ? subtitle.index : -1, positionNow);
+      installPlan({ ...started, attemptedKeys: [] });
+      if (wasPaused) requestAnimationFrame(() => videoRef.current?.pause());
+      requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-hud-row="dolby-vision"]')?.focus());
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Silo could not restart playback for Dolby Vision.");
+    } finally {
+      setBusy(false);
+      setDolbyApplying(false);
+    }
+  }
+
   function togglePlayPause() {
     const video = videoRef.current;
     if (!video) return;
@@ -1721,6 +1753,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
           </div>
           <div><div className="player-hud-eyebrow">Output</div>
             <button data-tv-focusable="true" data-hud-row="hdr" className="option-row" onClick={() => { const next = !hdrOn; setHdrOn(next); setLocalHdrEnabled(next); }}><span>HDR passthrough</span><small>{hdrOn ? "On" : "Off"}</small></button>
+            <button data-tv-focusable="true" data-hud-row="dolby-vision" className="option-row" onClick={() => void toggleDolbyVision()}><span>Dolby Vision</span><small>{dolbyApplying ? `${dolbyOn ? "On" : "Off"} · Applying...` : dolbyOn ? "On" : "Off"}</small></button>
             <div className="player-hud-eyebrow">Automation</div>
             <button data-tv-focusable="true" data-hud-row="intro-skip" className="option-row" onClick={() => presentHudPicker("Skip Intros", [{ label: "Never", value: "never" }, { label: "Ask to skip", value: "ask" }, { label: "Skip automatically", value: "always" }], introSkipMode, "intro-skip", value => { setIntroSkipMode(value as typeof introSkipMode); void putScopedSetting(session, "playback.intro_skip_mode", "profile_device", value).catch(() => undefined); })}><span>Skip intros</span><small>{{ never: "Never", ask: "Ask to skip", always: "Skip automatically" }[introSkipMode]}</small></button>
             <button data-tv-focusable="true" data-hud-row="auto-play" className="option-row" onClick={toggleAutoPlayNext}><span>Auto-play next</span><small>{autoPlayNext ? "On" : "Off"}</small></button>

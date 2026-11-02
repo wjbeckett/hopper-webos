@@ -57,6 +57,15 @@ export function setLocalHdrEnabled(value: boolean) {
   writeLocal("player.hdr_enabled", value);
 }
 
+export function localDolbyVisionEnabled() {
+  const value = readLocal("player.dolby_vision_enabled");
+  return typeof value === "boolean" ? value : true;
+}
+
+export function setLocalDolbyVisionEnabled(value: boolean) {
+  writeLocal("player.dolby_vision_enabled", value);
+}
+
 export function displaySupportsHdr() {
   try { return typeof matchMedia === "function" && matchMedia("(dynamic-range: high)").matches; } catch { return false; }
 }
