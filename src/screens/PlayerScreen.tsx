@@ -866,17 +866,22 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       const next = await replanPlaybackV3(session, active, operation, sourcePosition(), quality, { audio, subtitle });
       qualityRef.current = quality;
       installPlan(next);
-      setPanel(null);
-      revealHud();
-      focusTransport();
+      if (panel) {
+        requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-hud-row="${hudTab === "Audio" ? "audio-track" : hudTab === "Subtitles" ? "subtitle-track" : "quality"}"]`)?.focus());
+      } else {
+        setPanel(null);
+        revealHud();
+        focusTransport();
+      }
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Silo could not change playback."); }
     finally { setBusy(false); }
   }
 
-  function selectAudio(track: AudioTrack) {
-    if (track.index == null || !version) return;
+  function selectAudio(track: AudioTrack, fallbackIndex?: number) {
+    const index = track.index ?? fallbackIndex;
+    if (index == null || !version) return;
     if (detail?.series_id) void saveAudioPreference(session, detail.series_id, track).catch(console.error);
-    void replan("track_change", qualityRef.current, { id: `file:${version.file_id}:audio:${track.index}`, index: track.index }, plan?.selected_tracks.subtitle);
+    void replan("track_change", qualityRef.current, { id: `file:${version.file_id}:audio:${index}`, index }, plan?.selected_tracks.subtitle);
   }
   function selectSubtitle(track?: SubtitleInventory) {
     if (detail?.series_id) void saveSubtitlePreference(session, detail.series_id, track).catch(console.error);
@@ -1313,6 +1318,10 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     ? [detail?.series_title ?? item.SeriesName, episodeCode].filter(Boolean).join(" · ")
     : "Movie";
   const audioTracks = version?.audio_tracks ?? [];
+  const plannedAudioIndex = Number(plan?.selected_tracks.audio?.id.match(/audio:(\\d+)$/)?.[1]);
+  const effectiveAudioIndex = Number.isFinite(plannedAudioIndex) ? plannedAudioIndex : version?.effective_audio_track_index;
+  const selectedAudioTrack = audioTracks.find(track => track.index === effectiveAudioIndex) ?? audioTracks.find(track => track.default) ?? audioTracks[0];
+  const audioTrackDescription = (track: AudioTrack | undefined, index = 0) => track ? [track.title || track.language || `Track ${index + 1}`, track.codec?.toUpperCase(), track.channels ? `${track.channels} ch` : ""].filter(Boolean).join(" · ") : "Default";
   const subtitles = plan?.subtitle.inventory ?? [];
   const qualities = plan?.available_qualities ?? [];
   const chapters = version?.chapters ?? [];
@@ -1486,7 +1495,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         </div> : null}
         {hudTab === "Video" ? <div className="player-hud-video-grid">
           <div><div className="player-hud-eyebrow">Playback</div>
-            {qualities.length ? <button data-tv-focusable="true" data-hud-row="quality" className="option-row" onClick={() => presentHudPicker("Quality", qualities.map(quality => ({ label: quality.preserves_source ? `Original${quality.height ? ` · ${quality.height}p` : version?.resolution ? ` · ${version.resolution}` : ""}` : quality.label, value: quality.label })), qualityRef.current, "quality", value => selectQuality({ label: value }))}><span>Quality</span><small>{qualityRef.current === "auto" ? "Auto" : qualityRef.current}</small></button> : null}
+            {qualities.length ? <button data-tv-focusable="true" data-hud-row="quality" className="option-row" onClick={() => presentHudPicker("Quality", [{ label: "Auto", value: "auto" }, ...qualities.map(quality => ({ label: quality.preserves_source ? `Original${quality.height ? ` · ${quality.height}p` : version?.resolution ? ` · ${version.resolution}` : ""}` : quality.label, value: quality.label }))], qualityRef.current, "quality", value => selectQuality({ label: value }))}><span>Quality</span><small>{qualityRef.current === "auto" ? "Auto" : qualityRef.current}</small></button> : null}
             <button data-tv-focusable="true" data-hud-row="speed" className="option-row" onClick={() => presentHudPicker("Playback speed", [0.75, 1, 1.25, 1.5, 2].map(value => ({ label: value === 1 ? "Normal" : `${value}×`, value: String(value) })), String(playbackSpeed), "speed", value => setPlaybackSpeed(Number(value)))}><span>Speed</span><small>{playbackSpeed === 1 ? "Normal" : `${playbackSpeed}×`}</small></button>
             <button data-tv-focusable="true" data-hud-row="aspect" className="option-row" onClick={() => presentHudPicker("Aspect", ["Fit", "Zoom", "Stretch"].map(value => ({ label: value, value })), aspectMode, "aspect", value => setAspectMode(value as typeof aspectMode))}><span>Aspect</span><small>{aspectMode}</small></button>
           </div>
@@ -1495,8 +1504,18 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
             <button data-tv-focusable="true" data-hud-row="auto-play" className="option-row" onClick={toggleAutoPlayNext}><span>Auto-play next</span><small>{autoPlayNext ? "On" : "Off"}</small></button>
           </div>
         </div> : null}
-        {hudTab === "Audio" ? <div className="player-hud-list"><div className="player-hud-eyebrow">Audio tracks</div>{audioTracks.map((track, i) => <button data-tv-focusable="true" className="option-row" key={track.index ?? i} onClick={() => selectAudio(track)}><span>{track.title || track.language || `Track ${i + 1}`}</span><small>{[track.codec?.toUpperCase(), track.channels ? `${track.channels} ch` : ""].filter(Boolean).join(" · ")}</small></button>)}</div> : null}
-        {hudTab === "Subtitles" ? <div className="player-hud-list"><div className="player-hud-eyebrow">Subtitles</div>{!styleView ? <><button data-tv-focusable="true" className="option-row" onClick={() => selectSubtitle()}><span>Off</span></button>{subtitles.map(track => <button data-tv-focusable="true" className="option-row" key={track.track_id} onClick={() => selectSubtitle(track)}><span>{subtitleName(track)}</span><small>{subtitleDetail(track)}</small></button>)}{appearance ? <button data-tv-focusable="true" data-style-entry className="option-row" onClick={() => setStyleView("list")}><span>Appearance</span><small>{subtitleChoiceLabel("fontSize", appearance.fontSize)} · {subtitleChoiceLabel("position", appearance.position)}</small></button> : null}</> : appearance && styleView === "list" ? <>{SUBTITLE_APPEARANCE_FIELDS.map(([key, label], i) => <button key={key} data-tv-focusable="true" data-style-key={key} className="option-row" onClick={() => setStyleView(key)}><span>{label}</span><small>{subtitleChoiceLabel(key, appearance[key])}</small></button>)}<div className="subtitle-settings-preview" style={{ color: appearance.fontColor, opacity: appearance.textOpacity / 100, fontFamily: appearance.fontFamily }}>Subtitle preview</div></> : appearance && styleView && styleView !== "list" ? SUBTITLE_APPEARANCE_CHOICES[styleView].map(choice => <button key={String(choice.value)} data-tv-focusable="true" className="option-row" onClick={() => changeAppearance(styleView, choice.value)}><span>{choice.label}</span>{choice.value === appearance[styleView] ? <small>Current</small> : null}</button>) : null}</div> : null}
+        {hudTab === "Audio" ? <div className="player-hud-columns">
+          <div><div className="player-hud-eyebrow">Track</div>
+            {audioTracks.length > 1 ? <button data-tv-focusable="true" data-hud-row="audio-track" className="option-row" onClick={() => presentHudPicker("Audio track", audioTracks.map((track, i) => ({ label: audioTrackDescription(track, i), value: String(track.index ?? i) })), String(selectedAudioTrack?.index ?? audioTracks.indexOf(selectedAudioTrack!)), "audio-track", value => { const selectedIndex = Number(value); const chosen = audioTracks.find((track, i) => (track.index ?? i) === selectedIndex); if (chosen) selectAudio(chosen, selectedIndex); })}><span>Audio track</span><small>{audioTrackDescription(selectedAudioTrack, audioTracks.indexOf(selectedAudioTrack))}</small></button> : <div className="player-hud-readonly"><span>Audio track</span><strong>{audioTrackDescription(selectedAudioTrack, audioTracks.indexOf(selectedAudioTrack))}</strong></div>}
+            <p className="player-hud-note">Track changes are negotiated by Silo for this playback session.</p>
+          </div>
+          <div><div className="player-hud-eyebrow">Output</div>
+            <div className="player-hud-readonly"><span>Codec</span><strong>{selectedAudioTrack?.codec?.toUpperCase() || version?.codec_audio?.toUpperCase() || "—"}</strong></div>
+            <div className="player-hud-readonly"><span>Delivery</span><strong>{plan?.stream.protocol?.toUpperCase() || "—"}</strong></div>
+            <div className="player-hud-readonly"><span>Container</span><strong>{plan?.stream.container?.toUpperCase() || version?.container?.toUpperCase() || "—"}</strong></div>
+          </div>
+        </div> : null}
+        {hudTab === "Subtitles" ? <div className="player-hud-list"><div className="player-hud-eyebrow">Subtitles</div>{!styleView ? <><button data-tv-focusable="true" data-hud-row={!activeSubtitle ? "subtitle-track" : undefined} className="option-row" onClick={() => selectSubtitle()}><span>Off</span>{!activeSubtitle ? <small>Current</small> : null}</button>{subtitles.map(track => <button data-tv-focusable="true" data-hud-row={activeSubtitle?.track_id === track.track_id ? "subtitle-track" : undefined} className="option-row" key={track.track_id} onClick={() => selectSubtitle(track)}><span>{subtitleName(track)}</span><small>{activeSubtitle?.track_id === track.track_id ? "Current" : subtitleDetail(track)}</small></button>)}{appearance ? <button data-tv-focusable="true" data-style-entry className="option-row" onClick={() => setStyleView("list")}><span>Appearance</span><small>{subtitleChoiceLabel("fontSize", appearance.fontSize)} · {subtitleChoiceLabel("position", appearance.position)}</small></button> : null}</> : appearance && styleView === "list" ? <>{SUBTITLE_APPEARANCE_FIELDS.map(([key, label], i) => <button key={key} data-tv-focusable="true" data-style-key={key} className="option-row" onClick={() => setStyleView(key)}><span>{label}</span><small>{subtitleChoiceLabel(key, appearance[key])}</small></button>)}<div className="subtitle-settings-preview" style={{ color: appearance.fontColor, opacity: appearance.textOpacity / 100, fontFamily: appearance.fontFamily }}>Subtitle preview</div></> : appearance && styleView && styleView !== "list" ? SUBTITLE_APPEARANCE_CHOICES[styleView].map(choice => <button key={String(choice.value)} data-tv-focusable="true" className="option-row" onClick={() => changeAppearance(styleView, choice.value)}><span>{choice.label}</span>{choice.value === appearance[styleView] ? <small>Current</small> : null}</button>) : null}</div> : null}
         {hudTab === "Chapters" ? <div className="player-hud-list"><div className="player-hud-eyebrow">Chapters</div>{chapters.map((chapter, i) => <button data-tv-focusable="true" className="option-row" key={`${chapter.index}-${chapter.start_seconds}`} onClick={() => { seekToPosition(chapter.start_seconds); setPanel(null); revealHud(); }}><span>{chapter.title || `Chapter ${i + 1}`}</span><small>{formatClock(chapter.start_seconds)}</small></button>)}</div> : null}
       </div>
       {hudPicker ? <div className="player-hud-picker-scrim" onClick={event => { if (event.target === event.currentTarget) { setHudPicker(null); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-hud-row="${hudPicker.returnKey}"]`)?.focus()); } }}><section className="player-hud-picker" role="dialog" aria-label={hudPicker.title}><h2>{hudPicker.title}</h2><div className="player-hud-picker-hint">Choose an option</div>{hudPicker.choices.map(choice => <button key={choice.value} data-tv-focusable="true" data-picker-value={choice.value} className={`option-row ${choice.value === hudPicker.selected ? "selected" : ""}`} onClick={() => chooseHudPicker(choice.value)}><span>{choice.label}</span>{choice.value === hudPicker.selected ? <small>✓</small> : null}</button>)}</section></div> : null}

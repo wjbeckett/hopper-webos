@@ -1766,6 +1766,7 @@ input:focus {
 .player-hud-readonly span { color: rgba(237,237,237,.60); font-size: 14px; }
 .player-hud-readonly strong { max-width: 64%; overflow: hidden; font-size: 14px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .player-hud-empty { margin: 10px; color: rgba(237,237,237,.60); font-size: 14px; }
+.player-hud-note { margin: 8px 10px; color: rgba(237,237,237,.60); font-size: 14px; line-height: 18px; }
 .option-row { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 16px; margin: 7px 0; padding: 15px 17px; border: 0; border-radius: 13px; color: white; background: rgba(255,255,255,.07); text-align: left; font: inherit; }
 .option-row small { color: rgba(255,255,255,.55); }
 .option-row:focus { outline: none; background: #EDEDED; color: #0B0B0C; }
