@@ -174,6 +174,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const [upNext, setUpNext] = useState<SiloItem | null>(null);
   const [upNextCard, setUpNextCard] = useState<{ videoEnded: boolean } | null>(null);
   const [upNextCountdown, setUpNextCountdown] = useState<{ seconds: number; total: number } | null>(null);
+  const upNextPane = useRef<HTMLDivElement>(null);
+  const [upNextRect, setUpNextRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const upNextHandled = useRef(false);
   const upNextPendingEnd = useRef<boolean | null>(null);
   const upNextStartedAtEnd = useRef(false);
@@ -283,6 +285,17 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     hlsRef.current?.destroy();
     hlsRef.current = null;
   }, [session, sourcePosition]);
+
+  useEffect(() => {
+    if (!upNextCard) { setUpNextRect(null); return; }
+    const measure = () => {
+      const rect = upNextPane.current?.getBoundingClientRect();
+      if (rect && rect.width > 0) setUpNextRect({ left: rect.left, top: rect.top, width: rect.width, height: rect.height });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [upNextCard != null]);
 
   const advanceToNext = useCallback((nextCount: number) => {
     if (!upNext) return;
@@ -1110,7 +1123,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     .filter((entry): entry is { kind: typeof entry.kind; segment: MarkerSegment } => entry.segment != null && entry.segment.end_seconds > entry.segment.start_seconds);
 
   return <main className="player-shell" onMouseMove={() => revealHud()}>
-    <video ref={videoRef} className="player" playsInline
+    <video ref={videoRef} className={upNextRect ? "player player-in-next-up" : "player"} style={upNextRect ? { left: upNextRect.left, top: upNextRect.top, width: upNextRect.width, height: upNextRect.height } : undefined} playsInline
       onPlay={() => { setPlaying(true); revealHud(); }}
       onPause={() => { setPlaying(false); revealHud(); }}
       onEnded={handleMediaEnded}
@@ -1205,8 +1218,9 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     </div>
 
     {upNextCard ? <section className="player-next-up" data-modal="true" aria-label="Up next">
+      {(upNext?.BackdropUrl || upNext?.PosterUrl) ? <img className="player-next-up-backdrop" src={upNext.BackdropUrl || upNext.PosterUrl} alt="" /> : null}
       <div className="player-next-up-card">
-        {upNext?.PosterUrl ? <img className="player-next-up-still" src={upNext.PosterUrl} alt="" /> : null}
+        <div ref={upNextPane} className="player-next-up-pane" />
         <div className="player-next-up-panel">
           <div className="player-next-up-eyebrow">{!upNext ? (upNextCard.videoEnded ? "Finished" : "More To Watch") : upNextCard.videoEnded ? "Playing Next" : "Up Next"}</div>
           {upNext ? <>
@@ -1219,7 +1233,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
             {upNext.Overview ? <p className="player-next-up-overview">{upNext.Overview}</p> : null}
             <div className="player-next-up-actions">
               <button autoFocus data-tv-focusable="true" className="tv-button" onClick={() => advanceToNext(0)}>Play Now</button>
-              {upNextCountdown ? <span className="player-next-up-count" aria-label={`Playing in ${upNextCountdown.seconds} seconds`}>{upNextCountdown.seconds}</span> : null}
+              {upNextCountdown ? <span className="player-next-up-count" aria-label={`Playing in ${upNextCountdown.seconds} seconds`}><svg viewBox="0 0 58 58"><circle cx="29" cy="29" r="26" className="track" /><circle cx="29" cy="29" r="26" className="arc" strokeDasharray={2 * Math.PI * 26} strokeDashoffset={2 * Math.PI * 26 * (1 - Math.min(1, Math.max(0, upNextCountdown.seconds / upNextCountdown.total)))} /></svg><b>{upNextCountdown.seconds}</b></span> : null}
             </div>
           </> : <>
             <h2>{upNextCard.videoEnded ? "End of playback" : "Almost finished"}</h2>
