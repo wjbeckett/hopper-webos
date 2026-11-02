@@ -1,3 +1,4 @@
+import { hideThemeMusic, showThemeMusic } from "../core/themeMusic";
 import { useEffect, useState } from "react";
 import { getDetailExtras } from "../api/silo";
 import type { DetailExtras, DetailPerson, DetailTrailer } from "../api/silo";
@@ -14,6 +15,11 @@ export function useDetailExtras(session: Session, contentId: string) {
     getDetailExtras(session, contentId).then(next => { if (alive) setExtras(next); }).catch(() => undefined);
     return () => { alive = false; };
   }, [session, contentId]);
+  useEffect(() => {
+    const owner = {};
+    showThemeMusic(owner, extras?.themes ?? null);
+    return () => hideThemeMusic(owner);
+  }, [extras]);
   return extras;
 }
 

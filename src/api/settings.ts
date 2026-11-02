@@ -29,8 +29,37 @@ export type SettingValue = { key: string; value: unknown; source?: string };
 
 const deviceHeaders = () => ({ "X-Silo-Device-Id": getDeviceId(), "X-Silo-Client-Family": "tv" });
 
-export function getSettingsContract(session: Session) {
-  return requestV2<SettingsContract>(session, "/settings/contract");
+const TEXT_OPACITY_MIN_MANIFEST_REVISION = 14;
+let manifestRevision: number | null = null;
+
+export function supportsTextOpacity(revision: number | null = manifestRevision) {
+  return revision == null || revision >= TEXT_OPACITY_MIN_MANIFEST_REVISION;
+}
+
+function wireAppearance(appearance: SubtitleAppearance) {
+  if (supportsTextOpacity()) return appearance;
+  const { textOpacity: _omit, ...rest } = appearance;
+  return rest;
+}
+
+export async function getSettingsContract(session: Session) {
+  const contract = await requestV2<SettingsContract>(session, "/settings/contract");
+  manifestRevision = typeof contract.revision === "number" ? contract.revision : null;
+  return contract;
+}
+
+export async function getMetadataAiAvailable(session: Session) {
+  try {
+    const status = await requestV2<{ state?: string; on_view?: string }>(session, "/capabilities/metadata-ai");
+    return status.state === "available" && status.on_view !== "off";
+  } catch { return false; }
+}
+
+export async function getAccountRole(session: Session) {
+  try {
+    const account = await requestV2<{ role?: string; user?: { role?: string } }>(session, "/account/me");
+    return account.role ?? account.user?.role ?? "";
+  } catch { return ""; }
 }
 
 export async function getEffectiveSettings(session: Session, keys: string[]): Promise<Map<string, SettingValue>> {
@@ -94,7 +123,7 @@ export const DEFAULT_SUBTITLE_APPEARANCE: SubtitleAppearance = {
 
 export function putDeviceSubtitleAppearance(session: Session, appearance: SubtitleAppearance) {
   return requestV2<unknown>(session, "/settings/device/subtitle-appearance", {
-    method: "PUT", headers: deviceHeaders(), body: JSON.stringify({ value: JSON.stringify(appearance) })
+    method: "PUT", headers: deviceHeaders(), body: JSON.stringify({ value: JSON.stringify(wireAppearance(appearance)) })
   });
 }
 
@@ -102,7 +131,7 @@ export function putProfileSubtitleAppearance(session: Session, appearance: Subti
   const params = new URLSearchParams({ scope: "profile" });
   if (session.profileId) params.set("profile_id", session.profileId);
   return requestV2<unknown>(session, `/settings/values/playback.subtitle_appearance?${params}`, {
-    method: "PUT", headers: deviceHeaders(), body: JSON.stringify({ value: appearance })
+    method: "PUT", headers: deviceHeaders(), body: JSON.stringify({ value: wireAppearance(appearance) })
   });
 }
 

@@ -1,3 +1,6 @@
+import { getEffectiveSettings } from "./api/settings";
+import { hydrateTitleArt } from "./core/titleArt";
+import { setThemeMusicPreferences, setThemeMusicSession } from "./core/themeMusic";
 import { useCallback, useEffect, useState } from "react";
 import { TopNav, type AppSection, type LibraryLanding } from "./components/TopNav";
 import { advanceShuffle, createShuffle, deleteShuffle, getCatalogItem, getEpisodes, getLibraries, getProfileAppearance, getRequestsFeatureStatus, getSeasons, restoreDefaultProfile } from "./api/silo";
@@ -250,6 +253,17 @@ export default function App() {
     };
     localStorage.setItem(NAVIGATION_KEY, JSON.stringify(saved));
   }, [navigationRestored, route, section, session?.profileId, session?.serverUrl]);
+
+  useEffect(() => {
+    setThemeMusicSession(session ?? null);
+    if (!session?.profileId) return;
+    let alive = true;
+    void hydrateTitleArt(session);
+    getEffectiveSettings(session, ["ui.theme_music_enabled", "ui.theme_music_loop"]).then(effective => {
+      if (alive) setThemeMusicPreferences(effective.get("ui.theme_music_enabled")?.value === true, effective.get("ui.theme_music_loop")?.value === true);
+    }).catch(() => undefined);
+    return () => { alive = false; };
+  }, [session?.profileId, session?.serverUrl]);
 
   useEffect(() => {
     if (!session?.profileId) return;

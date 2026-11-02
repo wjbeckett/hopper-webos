@@ -1,3 +1,4 @@
+import { interruptThemeMusic } from "../core/themeMusic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type Hls from "hls.js";
 import { bestVersionForDevice, getMarkers, getTrickplay, getWatchDetail, playbackUrl, replanPlaybackV3, reportProgress, saveAudioPreference, saveSubtitlePreference, startPlaybackV3, stopPlayback, stopPlaybackKeepalive, type AudioTrack, type FileMarkers, type MarkerSegment, type PlaybackChoices, type PlaybackPlan, type Quality, type SubtitleInventory, type Trickplay, type WatchDetail } from "../api/playback";
@@ -125,6 +126,7 @@ function TransportGlyph({ name }: { name: "play" | "pause" | "back10" | "forward
 }
 
 export function PlayerScreen({ session, item, startPosition, choices, onBack, onEnded, resolveNextEpisode, onPlayNext, shuffle, onShuffleAdvance, autoAdvanceCount = 0 }: { session: Session; item: SiloItem; startPosition?: number; choices?: PlaybackChoices; onBack: (elapsedSeconds: number) => void; onEnded?: () => void; resolveNextEpisode?: () => Promise<SiloItem | null>; onPlayNext?: (next: SiloItem, autoAdvanceCount: number) => void; shuffle?: { id: string; scopeLabel?: string; next?: SiloItem }; onShuffleAdvance?: (autoAdvanceCount: number) => void; autoAdvanceCount?: number }) {
+  useEffect(() => { interruptThemeMusic(); }, []);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const sidecarTrack = useRef<TextTrack | null>(null);

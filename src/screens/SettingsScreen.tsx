@@ -1,8 +1,10 @@
+import { setTitleArtEnabled } from "../core/titleArt";
+import { setThemeMusicPreferences } from "../core/themeMusic";
 import { ProfileAvatar } from "../components/TopNav";
 import { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { serverRegistry } from "../core/serverRegistry";
-import { clearDeviceSubtitleAppearance, clearScopedSetting, clearSetting, DEFAULT_SUBTITLE_APPEARANCE, getEffectiveSettings, getSettingsContract, isClientLocal, putDeviceSubtitleAppearance, putScopedSetting, putSetting } from "../api/settings";
+import { clearDeviceSubtitleAppearance, clearScopedSetting, clearSetting, DEFAULT_SUBTITLE_APPEARANCE, getAccountRole, getEffectiveSettings, getMetadataAiAvailable, getSettingsContract, supportsTextOpacity, putProfileSubtitleAppearance, isClientLocal, putDeviceSubtitleAppearance, putScopedSetting, putSetting } from "../api/settings";
 import { SUBTITLE_APPEARANCE_CHOICES, settingsAppearanceChoices, subtitleChoiceLabel } from "../core/subtitleStyle";
 import type { SettingDefinition, SettingOption, SettingsContract, SubtitleAppearance } from "../api/settings";
 import { getPlaybackConnection, resetLearnedLimit, runSpeedTest } from "../api/playbackConnection";
@@ -88,6 +90,16 @@ const DEVICE_DEFAULTS: Record<string, unknown> = {
   "player.true_black_bars": false
 };
 
+const UNSET_LANGUAGE_LABELS: Record<string, string> = {
+  "catalog.metadata_language": "Library default",
+  "playback.audio_language": "No preference",
+  "playback.subtitle_language": "None"
+};
+
+function unsetLanguageLabel(key: string) {
+  return UNSET_LANGUAGE_LABELS[key] ?? "Unset";
+}
+
 function languageLabel(code: string) {
   try {
     const name = new Intl.DisplayNames(["en"], { type: "language" }).of(code);
@@ -104,7 +116,9 @@ function choicesFor(definition: SettingDefinition, contract: SettingsContract, c
   }
   if (schema.type === "language_tag") {
     const set = contract.option_sets[languageSetByKey[definition.key] ?? ""]?.options ?? [];
-    return [{ label: "Not set", value: null }, ...set.map(option => ({ label: languageLabel(option.value), value: option.value, detail: option.value }))];
+    const codes = set.map(option => option.value);
+    if (typeof current === "string" && current && !codes.some(code => code.toLowerCase() === current.toLowerCase())) codes.push(current);
+    return [{ label: unsetLanguageLabel(definition.key), value: null }, ...codes.map(code => ({ label: languageLabel(code), value: code }))];
   }
   if (schema.type === "boolean") {
     return [{ label: "On", value: true }, { label: "Off", value: false }];
@@ -133,7 +147,7 @@ function describe(definition: SettingDefinition, value: unknown, contract: Setti
   if (definition.key === "playback.preferred_quality") return resolutionLabel(value);
   if (definition.unit === "kbps") return bitrateLabel(typeof value === "number" ? value : null);
   if (schema.type === "boolean") return value ? "On" : "Off";
-  if (value == null || value === "") return schema.type === "language_tag" ? "Not set" : definition.unit === "kbps" ? "Unlimited" : "Default";
+  if (value == null || value === "") return schema.type === "language_tag" ? unsetLanguageLabel(definition.key) : definition.unit === "kbps" ? "Unlimited" : "Default";
   const match = choicesFor(definition, contract).find(choice => choice.value === value);
   if (match) return match.label;
   if (schema.type === "enum") return (schema.values ?? []).find(option => option.value === value)?.label ?? String(value);
@@ -291,6 +305,14 @@ export function SettingsScreen({
   const [picker, setPicker] = useState<PickerRequest | null>(null);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [diagEligible, setDiagEligible] = useState<boolean | null>(null);
+  const [accountRole, setAccountRole] = useState("");
+  const [metadataAi, setMetadataAi] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void getAccountRole(session).then(role => { if (alive) setAccountRole(role); });
+    void getMetadataAiAvailable(session).then(value => { if (alive) setMetadataAi(value); });
+    return () => { alive = false; };
+  }, [session]);
   const [debugLogging, setDebugLogging] = useState(isDebugLoggingEnabled);
   const [debugLogCount, setDebugLogCount] = useState(getClientLogCount);
   const [debugLogs, setDebugLogs] = useState(getClientLogEntries);
@@ -698,6 +720,7 @@ export function SettingsScreen({
   }
 
   const renderGroups = (groups: KeyGroup[]) => groups.map(group => {
+    if (group.title === "Metadata" && !metadataAi) return null;
     const rows = group.keys.map(key => definitions.get(key)).filter((definition): definition is SettingDefinition => Boolean(definition)).filter(definition => definition.value_schema.type !== "object");
     if (!rows.length) return null;
     return (
@@ -796,11 +819,17 @@ export function SettingsScreen({
     );
   }
 
+  useEffect(() => {
+    if (!contract) return;
+    setThemeMusicPreferences(values.get("ui.theme_music_enabled") === true, values.get("ui.theme_music_loop") === true);
+  }, [contract, values]);
+
   async function writeTitleArt(show: boolean, all: boolean, previousAll: boolean) {
     const key = "ui.title_art";
     const previous = values.get(key);
     const previousSource = sources.get(key);
     setValues(current => new Map(current).set(key, show));
+    setTitleArtEnabled(show);
     setSources(current => new Map(current).set(key, all ? "profile" : "profile_device"));
     try {
       if (all) await putScopedSetting(session, key, "profile", show);
@@ -811,6 +840,7 @@ export function SettingsScreen({
       await refreshPlaybackValue(key);
     } catch (reason) {
       setValues(current => new Map(current).set(key, previous));
+      setTitleArtEnabled(previous !== false);
       setSources(current => new Map(current).set(key, previousSource ?? ""));
       setError(reason instanceof Error ? reason.message : "Could not save title art.");
     }
@@ -879,7 +909,7 @@ export function SettingsScreen({
     setSubtitleAppearance(next);
     try {
       if (subtitleDeviceOnly) await putDeviceSubtitleAppearance(session, next);
-      else if (appearanceDefinition) await putSetting(session, appearanceDefinition, next);
+      else await putProfileSubtitleAppearance(session, next);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not save subtitle appearance.");
     }
@@ -889,7 +919,7 @@ export function SettingsScreen({
     setSubtitleAppearance(DEFAULT_SUBTITLE_APPEARANCE);
     try {
       if (subtitleDeviceOnly) await putDeviceSubtitleAppearance(session, DEFAULT_SUBTITLE_APPEARANCE);
-      else if (appearanceDefinition) await putSetting(session, appearanceDefinition, DEFAULT_SUBTITLE_APPEARANCE);
+      else await putProfileSubtitleAppearance(session, DEFAULT_SUBTITLE_APPEARANCE);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not reset subtitle appearance."); }
   }
 
@@ -918,7 +948,7 @@ export function SettingsScreen({
         {row("fontSize", "Font Size")}
         {row("fontFamily", "Font Family")}
         {row("fontColor", "Font Color")}
-        {row("textOpacity", "Text Opacity")}
+        {supportsTextOpacity() ? row("textOpacity", "Text Opacity") : null}
         {toggleRow("subtitle-appearance-textOutline", "Text Outline", a.textOutline, () => void chooseAppearance("textOutline", !a.textOutline))}
         {row("textOutlineColor", "Outline Color")}
         {row("backgroundStyle", "Background Style")}
@@ -1016,7 +1046,7 @@ export function SettingsScreen({
           <span className="settings-avatar" aria-hidden="true"><ProfileAvatar session={session} /></span>
           <span className="settings-account-text">
             <span className="settings-account-name">{session.username}</span>
-            <small>Signed in</small>
+            <small>{accountRole.toLowerCase() === "admin" ? "Administrator" : session.username ? session.username : "Signed in"}</small>
           </span>
           <SettingsGlyph name="chevron" className="settings-chevron" />
         </button>

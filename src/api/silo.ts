@@ -1,3 +1,5 @@
+import { titleArtEnabled } from "../core/titleArt";
+import type { ThemeSelection } from "../core/themeMusic";
 import type { HomeRail, ItemsResponse, Session, SiloCalendarDay, SiloCalendarItem, SiloCollection, SiloItem, SiloLibrary, SiloMediaRequest, SiloProfile, SiloRequestResult } from "../types";
 import { serverRegistry } from "../core/serverRegistry";
 import { getDeviceId } from "../platform/device";
@@ -983,6 +985,7 @@ export type DetailExtras = {
   showStatus?: string;
   originalLanguage?: string;
   trailers: DetailTrailer[];
+  themes: ThemeSelection | null;
 };
 
 type NativeDetailExtras = {
@@ -994,6 +997,7 @@ type NativeDetailExtras = {
   countries?: string[];
   show_status?: string;
   original_language?: string;
+  themes?: { owner_id?: string; items?: Array<{ id: string }> };
   videos?: Array<{ site?: string; site_key?: string; name?: string; kind?: string }>;
   extras?: Array<{ content_id: string; kind?: string; title?: string; duration_seconds?: number; file_id?: number; still_url?: string }>;
 };
@@ -1024,7 +1028,8 @@ export async function getDetailExtras(session: Session, contentId: string): Prom
     countries: data.countries ?? [],
     showStatus: data.show_status,
     originalLanguage: data.original_language,
-    trailers
+    trailers,
+    themes: data.themes?.owner_id && data.themes.items?.length ? { ownerId: data.themes.owner_id, themes: data.themes.items.map(theme => ({ id: theme.id })) } : null
   };
 }
 
@@ -1109,7 +1114,7 @@ export function backdropUrl(session: Session, item: SiloItem | string): string {
 }
 
 export function mediaLogoUrl(session: Session, item: SiloItem): string {
-  return assetUrl(session, item.LogoUrl);
+  return titleArtEnabled() ? assetUrl(session, item.LogoUrl) : "";
 }
 
 export function requestArtworkUrl(path?: string): string {
