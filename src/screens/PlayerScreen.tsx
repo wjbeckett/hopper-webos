@@ -3,7 +3,7 @@ import type Hls from "hls.js";
 import { bestVersionForDevice, getMarkers, getTrickplay, getWatchDetail, playbackUrl, replanPlaybackV3, reportProgress, saveAudioPreference, saveSubtitlePreference, startPlaybackV3, stopPlayback, stopPlaybackKeepalive, type AudioTrack, type FileMarkers, type MarkerSegment, type PlaybackChoices, type PlaybackPlan, type Quality, type SubtitleInventory, type Trickplay, type WatchDetail } from "../api/playback";
 import type { Session, SiloItem } from "../types";
 import { getEffectiveSettings } from "../api/settings";
-import { localResumeRewindSeconds, resumePositionWithRewind } from "../core/playerSettings";
+import { localResumeRewindSeconds, markerAction, resumePositionWithRewind } from "../core/playerSettings";
 
 type PlaybackState = { plan: PlaybackPlan; playbackAttemptId: string; planAttemptId: string; attemptedKeys: string[] };
 const ACTIVE_PLAYBACK_KEY = "silo-webos-active-playback-v1";
@@ -167,6 +167,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const [trickplay, setTrickplay] = useState<Trickplay | null>(null);
   const [markers, setMarkers] = useState<FileMarkers | null>(null);
   const [introSkipMode, setIntroSkipMode] = useState<"never" | "ask" | "always">("ask");
+  const [autoSkipCredits, setAutoSkipCredits] = useState(false);
   const [playerSettingsLoaded, setPlayerSettingsLoaded] = useState(false);
 
   const scrubberRef = useRef<HTMLDivElement>(null);
@@ -301,13 +302,15 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     setBusy(true);
     setPlayerSettingsLoaded(false);
     setIntroSkipMode("ask");
+    setAutoSkipCredits(false);
     Promise.all([
       getWatchDetail(session, item),
-      getEffectiveSettings(session, ["playback.intro_skip_mode"]).catch(() => new Map()),
+      getEffectiveSettings(session, ["playback.intro_skip_mode", "playback.auto_skip_credits"]).catch(() => new Map()),
     ]).then(async ([watch, settings]) => {
       if (!alive) return;
       const configuredMode = settings.get("playback.intro_skip_mode")?.value;
       if (configuredMode === "never" || configuredMode === "ask" || configuredMode === "always") setIntroSkipMode(configuredMode);
+      setAutoSkipCredits(settings.get("playback.auto_skip_credits")?.value === true);
       setPlayerSettingsLoaded(true);
       const selectedVersion = watch.versions.find(entry => entry.file_id === choices?.fileId)
         ?? bestVersionForDevice(watch.versions, watch.user_data?.last_file_id);
@@ -524,18 +527,28 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     if (pill && key === pill.key) return;
     if (!active || !key || resolvedMarkers.current.has(key) || expiredMarkerKey.current === key) {
       setPill(null);
+    } else if (markerAction(active.kind, introSkipMode, autoSkipCredits) === "ignore") {
+      setPill(null);
+    } else if (markerAction(active.kind, introSkipMode, autoSkipCredits) === "skip") {
+      if (!autoSkippedMarkers.current.has(key)) {
+        autoSkippedMarkers.current.add(key);
+        seekToPosition(active.segment!.end_seconds);
+      }
+      if (active.kind === "intro") setPill({ kind: "intro", key, label: "Watch Intro", secondsRemaining: INTRO_PROMPT_SECONDS, undo: true });
+      else setPill(null);
+    } else if (active.kind === "credits" && autoSkipCredits) {
+      if (!autoSkippedMarkers.current.has(key)) {
+        autoSkippedMarkers.current.add(key);
+        seekToPosition(active.segment!.end_seconds);
+      }
+      setPill(null);
     } else if (active.kind === "intro") {
-      if (introSkipMode === "never") setPill(null);
-      else if (introSkipMode === "always") {
-        if (!autoSkippedMarkers.current.has(key)) {
-          autoSkippedMarkers.current.add(key);
-          seekToPosition(active.segment!.end_seconds);
-        }
-        setPill({ kind: "intro", key, label: "Watch Intro", secondsRemaining: INTRO_PROMPT_SECONDS, undo: true });
-      } else setPill({ kind: "intro", key, label: "Skip Intro", secondsRemaining: INTRO_PROMPT_SECONDS });
-    } else setPill({ kind: active.kind, key, label: active.kind === "credits" ? "Skip Credits" : "Skip Recap", secondsRemaining: null });
+      setPill({ kind: "intro", key, label: "Skip Intro", secondsRemaining: INTRO_PROMPT_SECONDS });
+    } else {
+      setPill({ kind: active.kind, key, label: active.kind === "credits" ? "Skip Credits" : "Skip Recap", secondsRemaining: null });
+    }
     if (expiredMarkerKey.current && expiredMarkerKey.current !== introKey) expiredMarkerKey.current = null;
-  }, [markers, position, scrubPreview, playerSettingsLoaded, introSkipMode, seekToPosition, pill?.key, pill?.undo]);
+  }, [markers, position, scrubPreview, playerSettingsLoaded, introSkipMode, autoSkipCredits, seekToPosition, pill?.key, pill?.undo]);
 
   function selectPill() {
     const current = ui.current.pill;
