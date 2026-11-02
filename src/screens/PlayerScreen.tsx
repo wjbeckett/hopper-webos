@@ -302,13 +302,23 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const ui = useRef<UiSnapshot>({ upNextOpen: false, hud: true, panel: null, hudTab: "Video", audioAvailable: false, subtitlesAvailable: false, scrubPreview: null, autoSeekRate: 0, cleanSeek: null, pill: null, position: 0, duration: 0, playing: false });
   ui.current = { upNextOpen: upNextCard != null, hud, panel, hudTab, audioAvailable: Boolean(version?.audio_tracks?.length), subtitlesAvailable: Boolean(plan?.subtitle.inventory.length), scrubPreview, autoSeekRate, cleanSeek, pill, position, duration, playing };
 
+  const pendingSeekTarget = useRef<number | null>(null);
+  const pendingSeekTimer = useRef<number | undefined>(undefined);
+  const clearPendingSeek = useCallback(() => {
+    pendingSeekTarget.current = null;
+    if (pendingSeekTimer.current) window.clearTimeout(pendingSeekTimer.current);
+    pendingSeekTimer.current = undefined;
+  }, []);
+
   const sourcePosition = useCallback(() => {
+    if (pendingSeekTarget.current != null) return pendingSeekTarget.current;
     const video = videoRef.current;
     const active = stateRef.current?.plan;
     return Math.max(0, (video?.currentTime ?? 0) + (active?.timeline.timeline_offset_seconds ?? 0));
   }, []);
 
   const installPlan = useCallback((next: PlaybackState) => {
+    clearPendingSeek();
     stateRef.current = next;
     localStorage.setItem(ACTIVE_PLAYBACK_KEY, JSON.stringify({ sessionId: next.plan.session_id, serverUrl: session.serverUrl, profileId: session.profileId }));
     setPlan(next.plan);
@@ -694,6 +704,9 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     if (!video || !active) return;
     const offset = active.plan.timeline.timeline_offset_seconds;
     const localTarget = target - offset;
+    pendingSeekTarget.current = target;
+    if (pendingSeekTimer.current) window.clearTimeout(pendingSeekTimer.current);
+    pendingSeekTimer.current = window.setTimeout(clearPendingSeek, 6000);
     if (localTarget < 0 || !active.plan.timeline.can_seek_anywhere) {
       setBusy(true);
       void replanPlaybackV3(session, active, "seek_reanchor", target, qualityRef.current, active.plan.selected_tracks)
@@ -704,7 +717,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       video.currentTime = Math.max(0, localTarget);
     }
     setPosition(target);
-  }, [installPlan, session]);
+  }, [clearPendingSeek, installPlan, session]);
 
   const stopAutoSeek = useCallback(() => {
     if (autoSeekLoop.current) window.clearInterval(autoSeekLoop.current);
@@ -1589,6 +1602,12 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       onPlay={() => { setPlaying(true); revealHud(); }}
       onPause={() => { setPlaying(false); revealHud(); }}
       onEnded={handleMediaEnded}
+      onSeeked={event => {
+        const pending = pendingSeekTarget.current;
+        const offset = stateRef.current?.plan.timeline.timeline_offset_seconds ?? 0;
+        if (pending != null && Math.abs(event.currentTarget.currentTime + offset - pending) < 2) clearPendingSeek();
+        setPosition(sourcePosition());
+      }}
       onTimeUpdate={event => {
         setPosition(sourcePosition());
         const video = event.currentTarget;
@@ -1617,6 +1636,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
             </div> : null}
             {autoSeekRate !== 0 ? <div className="auto-seek-chip"><svg viewBox="0 0 24 24" aria-hidden="true"><path d={autoSeekRate < 0 ? "M20.8 6.4 19.1 9.2 16.2 7.9" : "M3.2 6.4 4.9 9.2 7.8 7.9"} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" /><path d={autoSeekRate < 0 ? "M12 4a8 8 0 1 0 7.4 4.9" : "M12 4a8 8 0 1 1-7.4 4.9"} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" /></svg>{Math.abs(autoSeekRate)}x</div> : null}
           </div> : null}
+          {skipFeedback && !cleanSeek && !panel && !upNextCard && hud && previewSeconds == null ? <div className="skip-feedback-docked" data-nonce={skipFeedback.nonce}><div className="skip-feedback-chip"><strong>{skipFeedback.delta < 0 ? `−${-skipFeedback.delta}s` : `+${skipFeedback.delta}s`}</strong><span>{formatClock(skipFeedback.target)}</span></div></div> : null}
           <div ref={timelineRef} className="scrub-bar" role="slider" aria-label="Playback position" aria-valuemin={0} aria-valuemax={Math.round(duration)} aria-valuenow={Math.round(labelSeconds)} tabIndex={-1}>
             {segments.map(([start, end], index) => {
               const span = end - start;
@@ -1673,7 +1693,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         <div className="hold-seek-hint">← → speed · ◉ play · ↩ cancel</div>
       </div> : null}
 
-      {skipFeedback && !cleanSeek && !panel && !upNextCard ? <div className="skip-feedback" data-nonce={skipFeedback.nonce} data-controls={hud}>
+      {skipFeedback && !cleanSeek && !panel && !upNextCard && !hud ? <div className="skip-feedback" data-nonce={skipFeedback.nonce} data-controls={hud}>
         <div className="skip-feedback-chip"><strong>{skipFeedback.delta < 0 ? `−${-skipFeedback.delta}s` : `+${skipFeedback.delta}s`}</strong><span>{formatClock(skipFeedback.target)}</span></div>
         {!hud && duration > 0 ? <div className="skip-feedback-track"><b style={{ width: `${Math.max(0, Math.min(1, skipFeedback.target / duration)) * 100}%` }} /></div> : null}
       </div> : null}
