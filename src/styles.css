@@ -4438,3 +4438,4 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 .ai-translate-bar { height: 6px; margin: 0 8px; border-radius: 3px; background: rgba(255,255,255,.14); overflow: hidden; }
 .ai-translate-bar div { height: 100%; border-radius: 3px; background: rgba(255,255,255,.92); }
 .ai-translate-message { padding: 0 8px; font-size: 13px; color: rgba(255,255,255,.66); }
+.player-hud-sync { margin: 6px 10px; }

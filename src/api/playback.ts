@@ -11,7 +11,7 @@ export type FileVersion = { file_id: number; resolution?: string; codec_video?: 
 export type WatchDetail = { content_id: string; title: string; overview?: string; series_id?: string; series_title?: string; season_number?: number; episode_number?: number; versions: FileVersion[]; user_data?: { position_seconds?: number; last_file_id?: number } };
 export type PlaybackChoices = { fileId?: number; audioIndex?: number; subtitleIndex?: number; subtitleOff?: boolean };
 export type Quality = { label: string; height?: number; bitrate_kbps?: number; preserves_source: boolean };
-export type SubtitleInventory = { track_id: string; combined_index: number; source: string; codec?: string; language?: string; label?: string; forced: boolean; default: boolean; hearing_impaired: boolean; delivery: string; url?: string };
+export type SubtitleInventory = { track_id: string; combined_index: number; source: string; codec?: string; language?: string; label?: string; forced: boolean; default: boolean; hearing_impaired: boolean; delivery: string; url?: string; sync_key?: string };
 export type TrackIdentity = { id: string; index?: number };
 export type PlaybackPlan = {
   protocol_version: number; plan_id: string; plan_attempt_key: string; session_id: string; delivery: string;

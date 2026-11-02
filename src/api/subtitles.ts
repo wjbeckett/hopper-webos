@@ -55,3 +55,31 @@ export function apiErrorMessage(reason: unknown, fallback: string) {
   return fallback;
 }
 export const apiErrorStatus = (reason: unknown) => reason instanceof Error ? Number(/: (\d{3}) /.exec(reason.message)?.[1] ?? 0) : 0;
+
+export type SubtitleTiming = { offset_ms: number; scale: number };
+export type SubtitleSyncJob = { id?: string; status: string; trigger?: string; phase?: string; progress?: number | null; failure?: string; confidence?: number | null; result?: SubtitleTiming; created_at?: string; finished_at?: string | null };
+export type SubtitleSyncState = { key: string; media_file_id?: string; source: string; stored_subtitle_id?: string; language?: string; format?: string; label?: string; timing: SubtitleTiming; sync?: SubtitleSyncJob | null };
+export type SubtitleSyncCapability = { state: string; auto_sync: boolean; external: boolean; allowed: boolean };
+
+const syncPath = (fileId: number | string, key: string) => `/subtitles/${encodeURIComponent(String(fileId))}/sync/${encodeURIComponent(key)}`;
+export const getSyncCapability = (session: Session) => requestV2<SubtitleSyncCapability>(session, "/subtitles/sync/status");
+export const readSubtitleSync = (session: Session, fileId: number | string, key: string) => requestV2<{ subtitle: SubtitleSyncState }>(session, syncPath(fileId, key)).then(response => response.subtitle);
+export const startSubtitleSync = (session: Session, fileId: number | string, key: string) => requestV2<{ subtitle: SubtitleSyncState }>(session, syncPath(fileId, key), { method: "POST" }).then(response => response.subtitle);
+
+export async function resetSubtitleTiming(session: Session, fileId: number | string, key: string) {
+  const root = session.serverUrl.replace(/\/+$/, "");
+  const headers = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${session.accessToken}`,
+    ...(session.profileId ? { "X-Profile-Id": session.profileId } : {}),
+    ...(session.profileToken ? { "X-Profile-Token": session.profileToken } : {})
+  };
+  const fail = async (response: Response) => new Error(`${syncPath(fileId, key)}: ${response.status} ${response.statusText}: ${await response.text().catch(() => "")}`);
+  const read = await fetch(`${root}/api/v2${syncPath(fileId, key)}`, { headers });
+  if (!read.ok) throw await fail(read);
+  const validator = read.headers.get("ETag");
+  const write = await fetch(`${root}/api/v2${syncPath(fileId, key)}/timing`, { method: "PUT", headers: { ...headers, ...(validator ? { "If-Match": validator } : {}) }, body: JSON.stringify({ offset_ms: 0, scale: 1 }) });
+  if (!write.ok) throw await fail(write);
+  return (await write.json() as { subtitle: SubtitleSyncState }).subtitle;
+}
