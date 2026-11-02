@@ -3,6 +3,7 @@ import type Hls from "hls.js";
 import { bestVersionForDevice, getMarkers, getTrickplay, getWatchDetail, playbackUrl, replanPlaybackV3, reportProgress, saveAudioPreference, saveSubtitlePreference, startPlaybackV3, stopPlayback, stopPlaybackKeepalive, type AudioTrack, type FileMarkers, type MarkerSegment, type PlaybackChoices, type PlaybackPlan, type Quality, type SubtitleInventory, type Trickplay, type WatchDetail } from "../api/playback";
 import type { Session, SiloItem } from "../types";
 import { getEffectiveSettings, putScopedSetting } from "../api/settings";
+import { parseSubtitleAppearance, subtitleCueCss } from "../core/subtitleStyle";
 import { localPassOutThreshold, localResumeRewindSeconds, markerAction, resumePositionWithRewind } from "../core/playerSettings";
 
 type PlaybackState = { plan: PlaybackPlan; playbackAttemptId: string; planAttemptId: string; attemptedKeys: string[] };
@@ -176,6 +177,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const [upNextCountdown, setUpNextCountdown] = useState<{ seconds: number; total: number } | null>(null);
   const upNextPane = useRef<HTMLDivElement>(null);
   const [upNextRect, setUpNextRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const [subtitleCss, setSubtitleCss] = useState("");
   const upNextHandled = useRef(false);
   const upNextPendingEnd = useRef<boolean | null>(null);
   const upNextStartedAtEnd = useRef(false);
@@ -425,13 +427,14 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     setAutoPlayNext(true);
     Promise.all([
       getWatchDetail(session, item),
-      getEffectiveSettings(session, ["playback.intro_skip_mode", "playback.auto_skip_credits", "playback.auto_play_next"]).catch(() => new Map()),
+      getEffectiveSettings(session, ["playback.intro_skip_mode", "playback.auto_skip_credits", "playback.auto_play_next", "playback.subtitle_appearance"]).catch(() => new Map()),
     ]).then(async ([watch, settings]) => {
       if (!alive) return;
       const configuredMode = settings.get("playback.intro_skip_mode")?.value;
       if (configuredMode === "never" || configuredMode === "ask" || configuredMode === "always") setIntroSkipMode(configuredMode);
       setAutoSkipCredits(settings.get("playback.auto_skip_credits")?.value === true);
       setAutoPlayNext(settings.get("playback.auto_play_next")?.value !== false);
+      setSubtitleCss(subtitleCueCss(parseSubtitleAppearance(settings.get("playback.subtitle_appearance")?.value)));
       setPlayerSettingsLoaded(true);
       const selectedVersion = watch.versions.find(entry => entry.file_id === choices?.fileId)
         ?? bestVersionForDevice(watch.versions, watch.user_data?.last_file_id);
@@ -1123,6 +1126,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     .filter((entry): entry is { kind: typeof entry.kind; segment: MarkerSegment } => entry.segment != null && entry.segment.end_seconds > entry.segment.start_seconds);
 
   return <main className="player-shell" onMouseMove={() => revealHud()}>
+    {subtitleCss ? <style>{subtitleCss}</style> : null}
     <video ref={videoRef} className={upNextRect ? "player player-in-next-up" : "player"} style={upNextRect ? { left: upNextRect.left, top: upNextRect.top, width: upNextRect.width, height: upNextRect.height } : undefined} playsInline
       onPlay={() => { setPlaying(true); revealHud(); }}
       onPause={() => { setPlaying(false); revealHud(); }}
