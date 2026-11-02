@@ -28,3 +28,24 @@ export function subtitleCueCss(appearance: SubtitleAppearance) {
   video.player::cue { background-color: transparent; }
   video.player::cue { color: ${rgba(appearance.fontColor, appearance.textOpacity)}; font-family: ${appearance.fontFamily}; font-size: ${SIZE_VH[appearance.fontSize] ?? 5}vh; background-color: ${background}; text-shadow: ${textShadow}; }`;
 }
+
+export type AppearanceChoice = { label: string; value: string | number | boolean; detail?: string };
+
+export const SUBTITLE_APPEARANCE_FIELDS: Array<[keyof SubtitleAppearance, string]> = [["fontSize", "Font size"], ["fontFamily", "Font family"], ["fontColor", "Font color"], ["textOpacity", "Text opacity"], ["backgroundStyle", "Background style"], ["backgroundColor", "Background color"], ["backgroundOpacity", "Background opacity"], ["textOutline", "Text outline"], ["textOutlineColor", "Outline color"], ["position", "Position"]];
+
+export const SUBTITLE_APPEARANCE_CHOICES: Record<keyof SubtitleAppearance, AppearanceChoice[]> = {
+  fontSize: ["small", "medium", "large", "xlarge", "xxlarge"].map(value => ({ label: value, value })),
+  fontFamily: ["sans-serif", "serif", "monospace"].map(value => ({ label: value, value })),
+  fontColor: ["#ffffff", "#ffff00", "#00ffff", "#00ff00"].map(value => ({ label: value, value, detail: value })),
+  textOpacity: [25, 50, 75, 100].map(value => ({ label: `${value}%`, value })),
+  backgroundColor: ["#000000", "#202020", "#000033", "#ffffff"].map(value => ({ label: value, value, detail: value })),
+  backgroundStyle: ["box", "shadow", "outline", "none"].map(value => ({ label: value, value })),
+  backgroundOpacity: [0, 25, 50, 75, 100].map(value => ({ label: `${value}%`, value })),
+  textOutline: [{ label: "On", value: true }, { label: "Off", value: false }],
+  textOutlineColor: ["#000000", "#ffffff", "#ffff00"].map(value => ({ label: value, value })),
+  position: [{ label: "Bottom", value: "bottom" }, { label: "Lower third", value: "lower-third" }, { label: "Top", value: "top" }]
+};
+
+export function subtitleChoiceLabel(key: keyof SubtitleAppearance, value: unknown) {
+  return SUBTITLE_APPEARANCE_CHOICES[key].find(choice => choice.value === value)?.label ?? String(value);
+}

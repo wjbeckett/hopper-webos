@@ -98,6 +98,14 @@ export function putDeviceSubtitleAppearance(session: Session, appearance: Subtit
   });
 }
 
+export function putProfileSubtitleAppearance(session: Session, appearance: SubtitleAppearance) {
+  const params = new URLSearchParams({ scope: "profile" });
+  if (session.profileId) params.set("profile_id", session.profileId);
+  return requestV2<unknown>(session, `/settings/values/playback.subtitle_appearance?${params}`, {
+    method: "PUT", headers: deviceHeaders(), body: JSON.stringify({ value: appearance })
+  });
+}
+
 export function clearDeviceSubtitleAppearance(session: Session) {
   return requestV2<unknown>(session, "/settings/device/subtitle-appearance", {
     method: "DELETE", headers: deviceHeaders()

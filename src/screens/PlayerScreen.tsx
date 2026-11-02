@@ -4,7 +4,8 @@ import { bestVersionForDevice, getMarkers, getTrickplay, getWatchDetail, playbac
 import type { Session, SiloItem } from "../types";
 import { getEffectiveSettings, putScopedSetting } from "../api/settings";
 import { artUrl, getHomeRails, getShuffle, skipShuffle } from "../api/silo";
-import { parseSubtitleAppearance, subtitleCueCss } from "../core/subtitleStyle";
+import { parseSubtitleAppearance, SUBTITLE_APPEARANCE_CHOICES, SUBTITLE_APPEARANCE_FIELDS, subtitleChoiceLabel, subtitleCueCss } from "../core/subtitleStyle";
+import { putDeviceSubtitleAppearance, putProfileSubtitleAppearance, type SubtitleAppearance } from "../api/settings";
 import { attachSidecarSubtitle } from "../core/subtitleSidecar";
 import { localPassOutThreshold, localResumeRewindSeconds, markerAction, resumePositionWithRewind } from "../core/playerSettings";
 
@@ -185,6 +186,12 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const upNextPane = useRef<HTMLDivElement>(null);
   const [upNextRect, setUpNextRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const [subtitleCss, setSubtitleCss] = useState("");
+  const [appearance, setAppearance] = useState<SubtitleAppearance | null>(null);
+  const [appearanceDeviceOnly, setAppearanceDeviceOnly] = useState(false);
+  const [styleView, setStyleView] = useState<null | "list" | keyof SubtitleAppearance>(null);
+  const styleViewRef = useRef(styleView);
+  styleViewRef.current = styleView;
+  useEffect(() => { if (!panel) setStyleView(null); }, [panel]);
   const [onDeckItems, setOnDeckItems] = useState<SiloItem[]>([]);
   const [hideUnwatchedOverview, setHideUnwatchedOverview] = useState(false);
   const [hideUnwatchedImages, setHideUnwatchedImages] = useState(false);
@@ -517,7 +524,11 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       if (configuredMode === "never" || configuredMode === "ask" || configuredMode === "always") setIntroSkipMode(configuredMode);
       setAutoSkipCredits(settings.get("playback.auto_skip_credits")?.value === true);
       setAutoPlayNext(settings.get("playback.auto_play_next")?.value !== false);
-      setSubtitleCss(subtitleCueCss(parseSubtitleAppearance(settings.get("playback.subtitle_appearance")?.value)));
+      const loadedAppearance = parseSubtitleAppearance(settings.get("playback.subtitle_appearance")?.value);
+      const appearanceSource = settings.get("playback.subtitle_appearance")?.source;
+      setAppearance(loadedAppearance);
+      setAppearanceDeviceOnly(appearanceSource === "profile_device" || appearanceSource === "device");
+      setSubtitleCss(subtitleCueCss(loadedAppearance));
       setHideUnwatchedOverview(settings.get("catalog.hide_unwatched_episode_overviews")?.value === true);
       setHideUnwatchedImages(settings.get("catalog.hide_unwatched_episode_images")?.value === true);
       setPlayerSettingsLoaded(true);
@@ -868,6 +879,17 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     setPanel(name);
   }
 
+  function changeAppearance(key: keyof SubtitleAppearance, value: unknown) {
+    if (!appearance) return;
+    const next = { ...appearance, [key]: value } as SubtitleAppearance;
+    setAppearance(next);
+    setSubtitleCss(subtitleCueCss(next));
+    setStyleView("list");
+    const save = appearanceDeviceOnly ? putDeviceSubtitleAppearance(session, next) : putProfileSubtitleAppearance(session, next);
+    void save.catch(() => setError("Could not save subtitle appearance."));
+    requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-style-key='${key}']`)?.focus());
+  }
+
   function exitPlayer() {
     stopAutoSeek();
     stopCleanSeek();
@@ -948,8 +970,16 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       // Playback panels own the keys while open: Up/Down walk the rows, OK
       // presses, Back closes, Left/Right are consumed.
       if (snapshot.panel) {
+        if (isBackKey(event) && styleViewRef.current) {
+          event.preventDefault(); event.stopPropagation();
+          const field = styleViewRef.current;
+          setStyleView(field === "list" ? null : "list");
+          requestAnimationFrame(() => document.querySelector<HTMLElement>(field === "list" ? "[data-style-entry]" : `[data-style-key='${field}']`)?.focus());
+          return;
+        }
         if (isBackKey(event)) {
           event.preventDefault(); event.stopPropagation();
+          setStyleView(null);
           setPanel(null);
           revealHud();
           focusTransport();
@@ -1352,9 +1382,11 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
 
     {panel ? <section className="player-options" data-modal="true">
       <div className="eyebrow">Playback</div>
-      <h2>{panel === "audio" ? "Audio" : panel === "subtitles" ? "Subtitles" : "Quality"}</h2>
+      <h2>{panel === "audio" ? "Audio" : panel === "subtitles" ? (styleView ? "Subtitle appearance" : "Subtitles") : "Quality"}</h2>
       {panel === "audio" && audioTracks.map((track, i) => <button autoFocus={i === 0} data-tv-focusable="true" className="option-row" key={track.index ?? i} onClick={() => selectAudio(track)}><span>{track.title || track.language || `Track ${i + 1}`}</span><small>{[track.codec?.toUpperCase(), track.channels ? `${track.channels} ch` : ""].filter(Boolean).join(" · ")}</small></button>)}
-      {panel === "subtitles" ? <><button autoFocus data-tv-focusable="true" className="option-row" onClick={() => selectSubtitle()}><span>Off</span></button>{subtitles.map(track => <button data-tv-focusable="true" className="option-row" key={track.track_id} onClick={() => selectSubtitle(track)}><span>{subtitleName(track)}</span><small>{subtitleDetail(track)}</small></button>)}</> : null}
+      {panel === "subtitles" && !styleView ? <><button autoFocus data-tv-focusable="true" className="option-row" onClick={() => selectSubtitle()}><span>Off</span></button>{subtitles.map(track => <button data-tv-focusable="true" className="option-row" key={track.track_id} onClick={() => selectSubtitle(track)}><span>{subtitleName(track)}</span><small>{subtitleDetail(track)}</small></button>)}{appearance ? <button data-tv-focusable="true" data-style-entry className="option-row" onClick={() => setStyleView("list")}><span>Appearance</span><small>{subtitleChoiceLabel("fontSize", appearance.fontSize)} · {subtitleChoiceLabel("position", appearance.position)}</small></button> : null}</> : null}
+      {panel === "subtitles" && appearance && styleView === "list" ? <>{SUBTITLE_APPEARANCE_FIELDS.map(([key, label], i) => <button autoFocus={i === 0} key={key} data-tv-focusable="true" data-style-key={key} className="option-row" onClick={() => setStyleView(key)}><span>{label}</span><small>{subtitleChoiceLabel(key, appearance[key])}</small></button>)}<div className="subtitle-settings-preview" style={{ color: appearance.fontColor, opacity: appearance.textOpacity / 100, fontFamily: appearance.fontFamily }}>Subtitle preview</div></> : null}
+      {panel === "subtitles" && appearance && styleView && styleView !== "list" ? SUBTITLE_APPEARANCE_CHOICES[styleView].map(choice => <button autoFocus={choice.value === appearance[styleView]} key={String(choice.value)} data-tv-focusable="true" className="option-row" onClick={() => changeAppearance(styleView, choice.value)}><span>{choice.label}</span>{choice.value === appearance[styleView] ? <small>Current</small> : null}</button>) : null}
       {panel === "quality" && qualities.map((quality, i) => <button autoFocus={i === 0} data-tv-focusable="true" className="option-row" key={quality.label} onClick={() => selectQuality(quality)}><span>{quality.preserves_source ? `Original${quality.height ? ` · ${quality.height}p` : version?.resolution ? ` · ${version.resolution}` : ""}` : quality.label}</span><small>{quality.bitrate_kbps ? `${Math.round(quality.bitrate_kbps / 100) / 10} Mbps` : ""}</small></button>)}
     </section> : null}
   </main>;

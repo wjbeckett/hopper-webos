@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { serverRegistry } from "../core/serverRegistry";
 import { clearDeviceSubtitleAppearance, clearScopedSetting, clearSetting, DEFAULT_SUBTITLE_APPEARANCE, getEffectiveSettings, getSettingsContract, isClientLocal, putDeviceSubtitleAppearance, putScopedSetting, putSetting } from "../api/settings";
+import { SUBTITLE_APPEARANCE_CHOICES } from "../core/subtitleStyle";
 import type { SettingDefinition, SettingOption, SettingsContract, SubtitleAppearance } from "../api/settings";
 import { getPlaybackConnection, resetLearnedLimit, runSpeedTest } from "../api/playbackConnection";
 import type { PlaybackConnection } from "../api/playbackConnection";
@@ -722,16 +723,7 @@ export function SettingsScreen({
   const appearanceDefinition = definitions.get("playback.subtitle_appearance");
   const appearanceOptions: Record<string, Choice[]> = {
     posterSize: [{ label: "Compact", value: "compact" }, { label: "Standard", value: "standard" }, { label: "Large", value: "large" }],
-    fontSize: ["small", "medium", "large", "xlarge", "xxlarge"].map(value => ({ label: value, value })),
-    fontFamily: ["sans-serif", "serif", "monospace"].map(value => ({ label: value, value })),
-    fontColor: ["#ffffff", "#ffff00", "#00ffff", "#00ff00"].map(value => ({ label: value, value, detail: value })),
-    textOpacity: [25, 50, 75, 100].map(value => ({ label: `${value}%`, value })),
-    backgroundColor: ["#000000", "#202020", "#000033", "#ffffff"].map(value => ({ label: value, value, detail: value })),
-    backgroundStyle: ["box", "shadow", "outline", "none"].map(value => ({ label: value, value })),
-    backgroundOpacity: [0, 25, 50, 75, 100].map(value => ({ label: `${value}%`, value })),
-    textOutline: [{ label: "On", value: true }, { label: "Off", value: false }],
-    textOutlineColor: ["#000000", "#ffffff", "#ffff00"].map(value => ({ label: value, value })),
-    position: [{ label: "Bottom", value: "bottom" }, { label: "Lower third", value: "lower-third" }, { label: "Top", value: "top" }]
+    ...SUBTITLE_APPEARANCE_CHOICES
   };
   function changeAppearance(key: keyof SubtitleAppearance) {
     if (!appearanceDefinition) return;
