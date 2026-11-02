@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { downloadSubtitle, searchSubtitles, type SubtitleSearchResult } from "../api/subtitles";
+import { apiErrorMessage, downloadSubtitle, searchSubtitles, type SubtitleSearchResult } from "../api/subtitles";
 import { languageDisplayName, languageOptions } from "../core/languageNames";
 import type { Session } from "../types";
 
@@ -52,7 +52,7 @@ export function SubtitleSearchDialog({ session, mediaFileId, defaultLanguage, on
       setResults(response.results ?? []); setWarnings(response.warnings ?? []); setSearched(true);
     } catch (reason) {
       if (mine !== generation.current) return;
-      setError(reason instanceof Error && reason.message ? reason.message : "Subtitle search failed");
+      setError(apiErrorMessage(reason, "Subtitle search failed"));
     } finally { if (mine === generation.current) setSearching(false); }
   }
 
@@ -70,7 +70,7 @@ export function SubtitleSearchDialog({ session, mediaFileId, defaultLanguage, on
     } catch (reason) {
       if (mine !== generation.current) return;
       setDownloading(null);
-      setError(reason instanceof Error && reason.message ? reason.message : "Subtitle download failed");
+      setError(apiErrorMessage(reason, "Subtitle download failed"));
     }
   }
 
