@@ -97,6 +97,10 @@ function clientDiagnostic(event: string, details: Record<string, unknown>) {
   }
 }
 
+function versionLabel(file: PlayerFileVersion) {
+  return [file.edition_raw, file.resolution, file.codec_video?.toUpperCase(), file.codec_audio?.toUpperCase()].filter(Boolean).join(" · ") || `File ${file.file_id}`;
+}
+
 function formatClock(seconds: number) {
   if (!Number.isFinite(seconds) || seconds <= 0) return "0:00";
   const total = Math.floor(seconds);
@@ -107,6 +111,7 @@ function formatClock(seconds: number) {
 }
 
 type HudTab = "Info" | "Stats" | "Video" | "Audio" | "Subtitles" | "Chapters";
+type PlayerFileVersion = WatchDetail["versions"][number];
 type PillKind = "intro" | "credits" | "recap";
 type Pill = { kind: PillKind; key: string; label: string; secondsRemaining: number | null; undo?: boolean };
 type UiSnapshot = { upNextOpen: boolean; hud: boolean; panel: "audio" | "subtitles" | "quality" | null; hudTab: HudTab; audioAvailable: boolean; scrubPreview: number | null; autoSeekRate: number; cleanSeek: { rate: number; preview: number } | null; pill: Pill | null; position: number; duration: number; playing: boolean };
@@ -927,6 +932,33 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     void replan("quality_change", quality.label, plan?.selected_tracks.audio, plan?.selected_tracks.subtitle);
   }
 
+  async function selectFileVersion(nextVersion: PlayerFileVersion) {
+    if (!detail || !version || nextVersion.file_id === version.file_id || busy) return;
+    const positionNow = sourcePosition();
+    const previousVersion = version;
+    const audioIndex = nextVersion.audio_tracks?.some(track => track.index === selectedAudioTrack?.index)
+      ? selectedAudioTrack?.index
+      : nextVersion.effective_audio_track_index;
+    const matchingSubtitleIndex = activeSubtitle
+      ? nextVersion.subtitle_tracks?.findIndex(track => track.language === activeSubtitle.language && track.forced === activeSubtitle.forced)
+      : undefined;
+    const subtitleIndex = activeSubtitle ? (matchingSubtitleIndex != null && matchingSubtitleIndex >= 0 ? matchingSubtitleIndex : undefined) : -1;
+    setBusy(true);
+    setError("");
+    closePlayback(false);
+    try {
+      const started = await startPlaybackV3(session, detail, nextVersion, qualityRef.current, audioIndex, subtitleIndex != null && subtitleIndex >= 0 ? subtitleIndex : subtitleIndex === -1 ? -1 : undefined, positionNow);
+      setVersion(nextVersion);
+      installPlan({ ...started, attemptedKeys: [] });
+      requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-hud-row="version"]')?.focus());
+    } catch (reason) {
+      setVersion(previousVersion);
+      setError(reason instanceof Error ? reason.message : "Silo could not switch media version.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function togglePlayPause() {
     const video = videoRef.current;
     if (!video) return;
@@ -1544,6 +1576,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         </div> : null}
         {hudTab === "Video" ? <div className="player-hud-video-grid">
           <div><div className="player-hud-eyebrow">Playback</div>
+            {detail && detail.versions.length > 1 ? <button data-tv-focusable="true" data-hud-row="version" className="option-row" onClick={() => presentHudPicker("Version", detail.versions.map(file => ({ label: versionLabel(file), value: String(file.file_id) })), String(version?.file_id ?? ""), "version", value => { const selected = detail.versions.find(file => String(file.file_id) === value); if (selected) void selectFileVersion(selected); })}><span>Version</span><small>{version ? versionLabel(version) : "Auto"}</small></button> : null}
             {qualities.length ? <button data-tv-focusable="true" data-hud-row="quality" className="option-row" onClick={() => presentHudPicker("Quality", [{ label: "Auto", value: "auto" }, ...qualities.map(quality => ({ label: quality.preserves_source ? `Original${quality.height ? ` · ${quality.height}p` : version?.resolution ? ` · ${version.resolution}` : ""}` : quality.label, value: quality.label }))], qualityRef.current, "quality", value => selectQuality({ label: value }))}><span>Quality</span><small>{qualityRef.current === "auto" ? "Auto" : qualityRef.current}</small></button> : null}
             <button data-tv-focusable="true" data-hud-row="speed" className="option-row" onClick={() => presentHudPicker("Playback speed", [0.75, 1, 1.25, 1.5, 2].map(value => ({ label: value === 1 ? "Normal" : `${value}×`, value: String(value) })), String(playbackSpeed), "speed", value => setPlaybackSpeed(Number(value)))}><span>Speed</span><small>{playbackSpeed === 1 ? "Normal" : `${playbackSpeed}×`}</small></button>
             <button data-tv-focusable="true" data-hud-row="aspect" className="option-row" onClick={() => presentHudPicker("Aspect", [{ label: "Letterbox", value: "Fit" }, { label: "Zoom (crop)", value: "Zoom" }, { label: "Stretch", value: "Stretch" }], aspectMode, "aspect", value => setAspectMode(value as typeof aspectMode))}><span>Aspect</span><small>{aspectLabel(aspectMode)}</small></button>
