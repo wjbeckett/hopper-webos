@@ -1318,7 +1318,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const chapters = version?.chapters ?? [];
   const labelSeconds = scrubPreview ?? position;
   const remaining = Math.max(0, duration - labelSeconds);
-  const endsAt = remaining > 0 ? new Date(Date.now() + remaining * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null;
+  const endsAt = remaining > 0 ? new Date(Date.now() + remaining / playbackSpeed * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null;
   const playedFraction = duration > 0 ? Math.max(0, Math.min(1, labelSeconds / duration)) : 0;
   const bufferedFraction = duration > 0 ? Math.max(0, Math.min(1, (position + bufferedAhead) / duration)) : 0;
   const selectedSubtitle = plan?.selected_tracks.subtitle;

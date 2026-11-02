@@ -1701,14 +1701,15 @@ input:focus {
   position: absolute;
   z-index: 5;
   top: 24px;
-  left: 50%;
+  left: 0;
+  right: 0;
   display: flex;
   width: min(81.25vw, 780px);
+  margin: 0 auto;
   max-height: calc(100% - 48px);
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  transform: translateX(-50%);
 }
 .player-hud-tabs {
   display: flex;
