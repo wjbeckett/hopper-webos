@@ -1609,6 +1609,13 @@ input:focus {
   top: 42px;
   color: rgba(255,255,255,.72);
 }
+.player-next-up { position: absolute; inset: 0; z-index: 8; display: grid; place-items: center; padding: 5vh 6vw; background: rgba(0,0,0,.72); }
+.player-next-up-card { width: min(760px, 76vw); padding: 42px 48px; border: 1px solid rgba(255,255,255,.16); border-radius: 28px; background: rgba(24,25,28,.96); box-shadow: 0 24px 90px rgba(0,0,0,.6); }
+.player-next-up-card h2 { margin: 10px 0 6px; font-size: 2.4rem; }
+.player-next-up-card p { margin: 8px 0 24px; color: rgba(255,255,255,.82); font-size: 1.35rem; }
+.player-next-up-card .player-next-up-overview { max-height: 5.2em; overflow: hidden; color: rgba(255,255,255,.65); font-size: 1.05rem; }
+.player-next-up-actions { display: flex; gap: 16px; margin-top: 28px; }
+
 .player-options {
   position: absolute;
   z-index: 5;

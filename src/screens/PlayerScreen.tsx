@@ -119,10 +119,11 @@ function TransportGlyph({ name }: { name: "play" | "pause" | "back10" | "forward
   }
 }
 
-export function PlayerScreen({ session, item, startPosition, choices, onBack, onEnded }: { session: Session; item: SiloItem; startPosition?: number; choices?: PlaybackChoices; onBack: (elapsedSeconds: number) => void; onEnded?: () => void }) {
+export function PlayerScreen({ session, item, startPosition, choices, onBack, onEnded, resolveNextEpisode, onPlayNext }: { session: Session; item: SiloItem; startPosition?: number; choices?: PlaybackChoices; onBack: (elapsedSeconds: number) => void; onEnded?: () => void; resolveNextEpisode?: () => Promise<SiloItem | null>; onPlayNext?: (next: SiloItem) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const closedSessions = useRef(new Set<string>());
+  const endedHandled = useRef(false);
   const stateRef = useRef<PlaybackState | undefined>(undefined);
   const qualityRef = useRef("auto");
   const [detail, setDetail] = useState<WatchDetail>();
@@ -168,6 +169,9 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const [markers, setMarkers] = useState<FileMarkers | null>(null);
   const [introSkipMode, setIntroSkipMode] = useState<"never" | "ask" | "always">("ask");
   const [autoSkipCredits, setAutoSkipCredits] = useState(false);
+  const [autoPlayNext, setAutoPlayNext] = useState(true);
+  const [nextEpisode, setNextEpisode] = useState<SiloItem | null>(null);
+  const [nextCountdown, setNextCountdown] = useState<number | null>(null);
   const [playerSettingsLoaded, setPlayerSettingsLoaded] = useState(false);
 
   const scrubberRef = useRef<HTMLDivElement>(null);
@@ -273,6 +277,38 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     hlsRef.current = null;
   }, [session, sourcePosition]);
 
+  const finishToNext = useCallback((next: SiloItem) => {
+    setNextCountdown(null);
+    closePlayback(false);
+    onPlayNext?.(next);
+  }, [closePlayback, onPlayNext]);
+
+  const handleMediaEnded = useCallback(async () => {
+    if (endedHandled.current) return;
+    endedHandled.current = true;
+    try {
+      const next = await resolveNextEpisode?.();
+      if (next) {
+        setNextEpisode(next);
+        setNextCountdown(autoPlayNext ? 10 : null);
+        setHud(false);
+        return;
+      }
+    } catch { /* A failed next-episode lookup falls back to normal end-of-playback. */ }
+    closePlayback(false);
+    onEnded?.();
+  }, [resolveNextEpisode, autoPlayNext, closePlayback, onEnded]);
+
+  useEffect(() => {
+    if (nextCountdown == null || !nextEpisode) return;
+    if (nextCountdown <= 1) {
+      const timer = window.setTimeout(() => finishToNext(nextEpisode), 1000);
+      return () => window.clearTimeout(timer);
+    }
+    const timer = window.setTimeout(() => setNextCountdown(value => value == null ? null : value - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [nextCountdown, nextEpisode, finishToNext]);
+
   useEffect(() => {
     try {
       const stale = JSON.parse(localStorage.getItem(ACTIVE_PLAYBACK_KEY) ?? "null") as { sessionId?: string; serverUrl?: string; profileId?: string } | null;
@@ -303,14 +339,16 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     setPlayerSettingsLoaded(false);
     setIntroSkipMode("ask");
     setAutoSkipCredits(false);
+    setAutoPlayNext(true);
     Promise.all([
       getWatchDetail(session, item),
-      getEffectiveSettings(session, ["playback.intro_skip_mode", "playback.auto_skip_credits"]).catch(() => new Map()),
+      getEffectiveSettings(session, ["playback.intro_skip_mode", "playback.auto_skip_credits", "playback.auto_play_next"]).catch(() => new Map()),
     ]).then(async ([watch, settings]) => {
       if (!alive) return;
       const configuredMode = settings.get("playback.intro_skip_mode")?.value;
       if (configuredMode === "never" || configuredMode === "ask" || configuredMode === "always") setIntroSkipMode(configuredMode);
       setAutoSkipCredits(settings.get("playback.auto_skip_credits")?.value === true);
+      setAutoPlayNext(settings.get("playback.auto_play_next")?.value !== false);
       setPlayerSettingsLoaded(true);
       const selectedVersion = watch.versions.find(entry => entry.file_id === choices?.fileId)
         ?? bestVersionForDevice(watch.versions, watch.user_data?.last_file_id);
@@ -704,6 +742,28 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
+      if (nextEpisode) {
+        if (isBackKey(event)) {
+          event.preventDefault(); event.stopPropagation();
+          if (!event.repeat) (document.querySelector<HTMLElement>(".player-next-up [data-setting='exit']") ?? document.querySelector<HTMLElement>(".player-next-up [data-tv-focusable='true']"))?.click();
+          return;
+        }
+        if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+          event.preventDefault(); event.stopPropagation();
+          const rows = Array.from(document.querySelectorAll<HTMLElement>(".player-next-up [data-tv-focusable='true']"));
+          const index = rows.indexOf(document.activeElement as HTMLElement);
+          const next = rows[index + (event.key === "ArrowDown" ? 1 : -1)];
+          if (next) next.focus();
+          return;
+        }
+        if (event.key === "Enter" || event.key === "OK" || event.key === " ") {
+          event.preventDefault(); event.stopPropagation();
+          if (!event.repeat) (document.activeElement as HTMLElement | null)?.click();
+          return;
+        }
+        if (event.key === "ArrowLeft" || event.key === "ArrowRight") { event.preventDefault(); event.stopPropagation(); }
+        return;
+      }
       const video = videoRef.current;
       if (!video) return;
       const snapshot = ui.current;
@@ -937,7 +997,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       stopAutoSeek();
       stopCleanSeek();
     };
-  }, [cancelScrub, commitCleanSeek, commitScrub, focusTransport, performRelativeSeek, revealHud, stopAutoSeek, stopCleanSeek]);
+  }, [cancelScrub, commitCleanSeek, commitScrub, focusTransport, nextEpisode, performRelativeSeek, revealHud, stopAutoSeek, stopCleanSeek]);
 
   // First focus lands on the transport's Play/Pause once the shell is
   // interactive, matching the overlay's default focus target.
@@ -983,7 +1043,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     <video ref={videoRef} className="player" playsInline
       onPlay={() => { setPlaying(true); revealHud(); }}
       onPause={() => { setPlaying(false); revealHud(); }}
-      onEnded={() => { if (onEnded) { closePlayback(false); onEnded(); } }}
+      onEnded={() => { void handleMediaEnded(); }}
       onTimeUpdate={event => {
         setPosition(sourcePosition());
         const video = event.currentTarget;
@@ -1073,6 +1133,19 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       {busy ? <div className="player-status">Asking Silo for the best playback route...</div> : null}
       {error ? <div className="player-error">{error}</div> : null}
     </div>
+
+    {nextEpisode ? <section className="player-next-up" data-modal="true" aria-label="Next episode">
+      <div className="player-next-up-card">
+        <div className="eyebrow">{nextCountdown == null ? "Up Next" : `Playing next in ${nextCountdown}`}</div>
+        <h2>{nextEpisode.SeriesName || detail?.series_title || item.SeriesName || "Next Episode"}</h2>
+        <p>{nextEpisode.ParentIndexNumber != null && nextEpisode.IndexNumber != null ? `Season ${nextEpisode.ParentIndexNumber} · Episode ${nextEpisode.IndexNumber} — ` : ""}{nextEpisode.Name}</p>
+        {nextEpisode.Overview ? <p className="player-next-up-overview">{nextEpisode.Overview}</p> : null}
+        <div className="player-next-up-actions">
+          <button autoFocus data-tv-focusable="true" className="tv-button" onClick={() => finishToNext(nextEpisode)}>Play Next</button>
+          <button data-tv-focusable="true" data-setting="exit" className="tv-button secondary" onClick={() => { setNextEpisode(null); setNextCountdown(null); closePlayback(false); onEnded?.(); }}>Exit Playback</button>
+        </div>
+      </div>
+    </section> : null}
 
     {panel ? <section className="player-options" data-modal="true">
       <div className="eyebrow">Playback</div>

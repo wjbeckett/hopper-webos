@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { TopNav, type AppSection, type LibraryLanding } from "./components/TopNav";
-import { advanceShuffle, createShuffle, deleteShuffle, getCatalogItem, getLibraries, getProfileAppearance, getRequestsFeatureStatus, restoreDefaultProfile } from "./api/silo";
+import { advanceShuffle, createShuffle, deleteShuffle, getCatalogItem, getEpisodes, getLibraries, getProfileAppearance, getRequestsFeatureStatus, getSeasons, restoreDefaultProfile } from "./api/silo";
 import { serverRegistry } from "./core/serverRegistry";
 import { focusTopNavigation, installSpatialNavigation } from "./navigation/spatial";
 import { DetailsScreen } from "./screens/DetailsScreen";
@@ -29,6 +29,7 @@ import { SettingsScreen } from "./screens/SettingsScreen";
 import type { AudiobookGroup } from "./api/silo";
 import type { PlaybackChoices } from "./api/playback";
 import { applyResumeState, applyWatchedState, publishWatchState } from "./core/watchState";
+import { firstEpisodeOfSeason, nextEpisodeAfter } from "./core/episodeNavigation";
 import { publishRailsChanged } from "./core/watchState";
 import { connectEventsSocket } from "./api/events";
 import type { Session, SiloCollection, SiloItem, SiloLibrary, SiloProfile } from "./types";
@@ -420,6 +421,21 @@ export default function App() {
     else setRoute({ name: "details", item });
   }
 
+  async function resolveNextEpisode(current: SiloItem): Promise<SiloItem | null> {
+    if (!session || !current.SeriesId || current.ParentIndexNumber == null || current.IndexNumber == null) return null;
+    const currentSeason = current.ParentIndexNumber;
+    const episodes = await getEpisodes(session, current.SeriesId, currentSeason);
+    const nextInSeason = nextEpisodeAfter(episodes, currentSeason, current.IndexNumber);
+    if (nextInSeason) return nextInSeason;
+    const seasons = await getSeasons(session, current.SeriesId);
+    const nextSeason = seasons
+      .filter(season => season.IndexNumber != null && season.IndexNumber > currentSeason)
+      .sort((left, right) => left.IndexNumber! - right.IndexNumber!)[0];
+    if (!nextSeason?.IndexNumber) return null;
+    const nextSeasonEpisodes = await getEpisodes(session, current.SeriesId, nextSeason.IndexNumber);
+    return firstEpisodeOfSeason(nextSeasonEpisodes);
+  }
+
   function requestPlayback(item: SiloItem, returnTo?: { series: SiloItem; selectedEpisode: SiloItem }) {
     const position = (item.UserData?.PlaybackPositionTicks ?? 0) / 10_000_000;
     if (position >= 30) setRoute({ name: "play-choice", item, returnTo });
@@ -529,6 +545,12 @@ export default function App() {
         item={route.item}
         startPosition={route.startPosition}
         choices={route.choices}
+        resolveNextEpisode={() => resolveNextEpisode(route.item)}
+        onPlayNext={next => {
+          publishWatchState(applyWatchedState(route.item, true));
+          const parentSeries = route.returnTo?.series ?? { Id: route.item.SeriesId ?? "", Name: route.item.SeriesName ?? "Series", Type: "Series" };
+          setRoute({ name: "player", item: next, startPosition: 0, returnTo: { series: parentSeries, selectedEpisode: next } });
+        }}
         onBack={(elapsed) => {
           publishWatchState(applyResumeState(route.item, elapsed));
           leavePlayer(route);
