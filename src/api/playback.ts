@@ -1,3 +1,4 @@
+import { displaySupportsHdr, localHdrEnabled } from "../core/playerSettings";
 import { probePlaybackCapabilities } from "../platform/capabilities";
 import type { Session, SiloItem } from "../types";
 import { getDeviceId } from "../platform/device";
@@ -79,7 +80,7 @@ function snapshot() {
   // LG's native HTML player may report a codec as playable while still rejecting
   // its original MKV/WebM container. Do not advertise original-file execution;
   // let Silo remux/transcode to an execution route the TV can reliably open.
-  const client_capabilities = { video_evidence: "declared", audio_evidence: "declared", codecs_video: video, codecs_video_hardware: [], codecs_audio: audio, containers: ["hls", "mpegts", "fmp4", "mp4", "mov", "m4v"], max_resolution: "2160p", hdr: false, video_decode: [] };
+  const client_capabilities = { video_evidence: "declared", audio_evidence: "declared", codecs_video: video, codecs_video_hardware: [], codecs_audio: audio, containers: ["hls", "mpegts", "fmp4", "mp4", "mov", "m4v"], max_resolution: "2160p", hdr: localHdrEnabled() && displaySupportsHdr(), video_decode: [] };
   const client_playback_context = { protocol_version: 3, form_factor: "tv", app_version: "0.2.0", device: { platform: "webos", manufacturer: "LG", platform_details: { user_agent: navigator.userAgent.slice(0, 128) } }, output: {}, deliveries: { original_http: unavailable, progressive: unavailable, hls: delivery(["hls", "mpegts", "fmp4", "mp4"]) } };
   return { client_capabilities, client_playback_context };
 }

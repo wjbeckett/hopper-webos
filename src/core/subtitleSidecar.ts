@@ -25,11 +25,23 @@ export function parseSubtitleCues(input: string): Array<{ start: number; end: nu
   return cues;
 }
 
+const cueBase = new WeakMap<TextTrackCue, [number, number]>();
+
+export function applySubtitleDelay(track: TextTrack, delayMs: number) {
+  const offset = delayMs / 1000;
+  for (const cue of Array.from(track.cues ?? [])) {
+    const base = cueBase.get(cue);
+    if (!base) continue;
+    cue.startTime = Math.max(0, base[0] + offset);
+    cue.endTime = Math.max(cue.startTime, base[1] + offset);
+  }
+}
+
 export function sidecarSubtitleArtifact(plan: PlaybackPlan) {
   return plan.selected_tracks.subtitle && plan.subtitle.artifact?.url ? plan.subtitle.artifact : null;
 }
 
-export async function attachSidecarSubtitle(video: HTMLVideoElement, plan: PlaybackPlan, session: Session, headers: Record<string, string>, previous: TextTrack | null): Promise<TextTrack | null> {
+export async function attachSidecarSubtitle(video: HTMLVideoElement, plan: PlaybackPlan, session: Session, headers: Record<string, string>, previous: TextTrack | null, delayMs = 0): Promise<TextTrack | null> {
   if (previous) previous.mode = "disabled";
   const artifact = sidecarSubtitleArtifact(plan);
   if (!artifact) return null;
@@ -43,7 +55,12 @@ export async function attachSidecarSubtitle(video: HTMLVideoElement, plan: Playb
   const track = video.addTextTrack("subtitles", "Sidecar", "");
   track.mode = "showing";
   for (const cue of parseSubtitleCues(text)) {
-    track.addCue(new VTTCue(Math.max(0, cue.start + origin), Math.max(0, cue.end + origin), cue.text));
+    const start = Math.max(0, cue.start + origin);
+    const end = Math.max(0, cue.end + origin);
+    const vtt = new VTTCue(start, end, cue.text);
+    cueBase.set(vtt, [start, end]);
+    track.addCue(vtt);
   }
+  if (delayMs) applySubtitleDelay(track, delayMs);
   return track;
 }

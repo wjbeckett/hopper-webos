@@ -34,3 +34,45 @@ export function localPassOutThreshold() {
     return 3;
   }
 }
+
+function readLocal(key: string): unknown {
+  try { return JSON.parse(localStorage.getItem(LOCAL_SETTINGS_STORAGE) ?? "{}")?.[key]; } catch { return undefined; }
+}
+
+function writeLocal(key: string, value: unknown) {
+  try {
+    const values = JSON.parse(localStorage.getItem(LOCAL_SETTINGS_STORAGE) ?? "{}");
+    const next = values && typeof values === "object" && !Array.isArray(values) ? values : {};
+    next[key] = value;
+    localStorage.setItem(LOCAL_SETTINGS_STORAGE, JSON.stringify(next));
+  } catch { /* Keep the setting device-local. */ }
+}
+
+export function localHdrEnabled() {
+  const value = readLocal("player.hdr_enabled");
+  return typeof value === "boolean" ? value : true;
+}
+
+export function setLocalHdrEnabled(value: boolean) {
+  writeLocal("player.hdr_enabled", value);
+}
+
+export function displaySupportsHdr() {
+  try { return typeof matchMedia === "function" && matchMedia("(dynamic-range: high)").matches; } catch { return false; }
+}
+
+function clampedMs(key: string, limit: number) {
+  const value = Number(readLocal(key));
+  return Number.isFinite(value) ? Math.max(-limit, Math.min(limit, Math.round(value))) : 0;
+}
+
+export const AUDIO_SYNC_KEY = "player.audio_sync_ms";
+export const SUBTITLE_SYNC_KEY = "player.subtitle_sync_ms";
+export const localAudioSyncMs = () => Math.max(0, clampedMs(AUDIO_SYNC_KEY, 1000));
+export const localSubtitleSyncMs = () => clampedMs(SUBTITLE_SYNC_KEY, 2000);
+export const setLocalAudioSyncMs = (value: number) => writeLocal(AUDIO_SYNC_KEY, value);
+export const setLocalSubtitleSyncMs = (value: number) => writeLocal(SUBTITLE_SYNC_KEY, value);
+
+export function delayLabel(valueMs: number) {
+  return valueMs > 0 ? `+${valueMs} ms` : valueMs < 0 ? `\u2212${-valueMs} ms` : "0 ms";
+}
