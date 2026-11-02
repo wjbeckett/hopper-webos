@@ -1738,6 +1738,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
           </div>
           <div><div className="player-hud-eyebrow">Output</div>
             <div className="player-hud-readonly"><span>Codec</span><strong>{selectedAudioTrack?.codec?.toUpperCase() || version?.codec_audio?.toUpperCase() || "—"}</strong></div>
+            <div className="player-hud-readonly"><span>Mode</span><strong>Browser managed</strong></div>
             <div className="player-hud-readonly"><span>Delivery</span><strong>{plan?.stream.protocol?.toUpperCase() || "—"}</strong></div>
             <div className="player-hud-readonly"><span>Container</span><strong>{plan?.stream.container?.toUpperCase() || version?.container?.toUpperCase() || "—"}</strong></div>
           </div>
