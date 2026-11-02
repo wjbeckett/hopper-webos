@@ -13,7 +13,7 @@ import { hidesEpisodeImage, hidesEpisodeOverview, useEpisodeSpoilerPreferences }
 type Props = {
   session: Session;
   item: SiloItem;
-  onPlay: (startPosition: number, choices: PlaybackChoices) => void;
+  onPlay: (startPosition: number | undefined, choices: PlaybackChoices) => void;
   onOpen: (item: SiloItem) => void;
   restoreCastIndex?: number;
   onOpenPerson: (person: DetailPerson, index: number) => void;
@@ -27,6 +27,14 @@ function clock(seconds: number) {
   const minutes = Math.floor((total % 3600) / 60);
   const rest = String(total % 60).padStart(2, "0");
   return hours ? `${hours}:${String(minutes).padStart(2, "0")}:${rest}` : `${minutes}:${rest}`;
+}
+
+function audiobookDuration(detail: SiloItem) {
+  const seconds = detail.AudiobookDurationSeconds ?? (detail.RunTimeTicks ? detail.RunTimeTicks / 10_000_000 : undefined);
+  if (!seconds || seconds <= 0) return "";
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  return hours ? `${hours}h ${minutes}m` : `${minutes}m`;
 }
 
 function runtimeLabel(minutes?: number) {
@@ -141,6 +149,11 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
   const position = (detail.UserData?.PlaybackPositionTicks ?? 0) / 10_000_000;
   const duration = (detail.RunTimeTicks ?? 0) / 10_000_000;
   const canResume = position > 30 && duration > 0 && position < duration - 5;
+  const audiobook = detail.Type === "AudioBook";
+  const audiobookFinished = audiobook && (detail.UserData?.Played === true || duration > 0 && position > 0 && position >= duration - 5);
+  const audiobookStartPosition = canResume ? position : audiobookFinished ? 0 : undefined;
+  const playPosition = audiobook ? audiobookStartPosition : canResume ? position : 0;
+  const audiobookPlayLabel = canResume ? `Resume ${clock(position)}` : audiobookFinished ? "Play Again" : "Play";
   const logo = mediaLogoUrl(session, detail);
   const [logoFailed, setLogoFailed] = useState(false);
   const [activeButton, setActiveButton] = useState<string | null>(null);
@@ -154,40 +167,45 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
   const hideEpisodeBackdrop = hidesEpisodeImage(detail, spoilerPreferences, detail.BackdropIsEpisodeStill);
 
   return (
-    <main className="details-shell">
+    <main className={`details-shell${audiobook ? " audiobook-detail-shell" : ""}`}>
       <div
         className={`details-backdrop${hideEpisodeBackdrop ? " spoiler-hidden-image" : ""}`}
-        style={{ backgroundImage: `url("${backdropUrl(session, detail)}")` }}
+        style={{ backgroundImage: `url("${audiobook ? imageUrl(session, detail) : backdropUrl(session, detail)}")` }}
       />
       <div className="details-scrim" />
-      <div className="details-content">
-        {logo && !logoFailed ? (
+      <div className={`details-content${audiobook ? " audiobook-detail-content" : ""}`}>
+        {audiobook ? <img className="audiobook-detail-poster" src={imageUrl(session, detail) || ""} alt="" /> : null}
+        <div className={audiobook ? "audiobook-detail-copy" : undefined}>
+        {audiobook ? <div className="audiobook-eyebrow">AUDIOBOOK</div> : null}
+        {audiobook ? <h1>{detail.Name}</h1> : logo && !logoFailed ? (
           <img className="details-logo" src={logo} alt={detail.Name} onError={() => setLogoFailed(true)} />
         ) : <h1>{detail.Name}</h1>}
-        <div className="details-facts">
+        {!audiobook ? <div className="details-facts">
           {detail.ContentRating ? <span className="details-rating-chip">{detail.ContentRating}</span> : null}
           {tokens.map(token => <span key={token}>{token}</span>)}
           {facts.map(fact => <span key={fact}>{fact}</span>)}
-        </div>
-        {extras?.tagline ? <div className="details-tokens">{extras.tagline}</div> : null}
-        {detail.Overview && !hideEpisodeOverview ? <p className="details-overview">{detail.Overview}</p> : null}
-        {detail.Author || detail.Narrator ? (
+        </div> : null}
+        {!audiobook && extras?.tagline ? <div className="details-tokens">{extras.tagline}</div> : null}
+        {audiobook ? <div className="audiobook-detail-metadata">{[detail.AudiobookAuthorNames ?? detail.Author, (detail.AudiobookNarratorNames ?? detail.Narrator) ? `Narrated by ${detail.AudiobookNarratorNames ?? detail.Narrator}` : "", audiobookDuration(detail)].filter(Boolean).join("  ")}</div> : null}
+        {audiobook && detail.Publisher ? <div className="audiobook-detail-publisher">{detail.Publisher}</div> : null}
+        {detail.Overview && !hideEpisodeOverview ? <p className={`details-overview${audiobook ? " audiobook-detail-overview" : ""}`}>{detail.Overview}</p> : null}
+        {!audiobook && (detail.Author || detail.Narrator) ? (
           <div className="details-credit">{[detail.Author, detail.Narrator ? `Narrated by ${detail.Narrator}` : ""].filter(Boolean).join(" · ")}</div>
         ) : null}
         {detail.Type !== "AudioBook" && directorCredit ? <div className="details-credit">{`Directed by ${directorCredit}`}</div> : null}
         {hasPlaybackSummary ? <PlaybackSummary detail={watchDetail} choices={choices} /> : null}
         <div className="details-actions">
-          <button ref={playRef} type="button" data-tv-focusable="true" className={`tv-button ${activeButton === null || activeButton === "play" ? "pin-open" : ""}`} aria-label={canResume ? `Resume ${clock(position)}` : "Play"} onFocus={() => setActiveButton("play")} onClick={() => onPlay(canResume ? position : 0, choices)}>
+          <button ref={playRef} type="button" data-tv-focusable="true" className={`tv-button ${activeButton === null || activeButton === "play" ? "pin-open" : ""}`} aria-label={audiobook ? audiobookPlayLabel : canResume ? `Resume ${clock(position)}` : "Play"} onFocus={() => setActiveButton("play")} onClick={() => onPlay(playPosition, choices)}>
             <PlayIcon />
-            <span className="tv-button-label">{canResume ? `Resume ${clock(position)}` : "Play"}</span>
+            <span className="tv-button-label">{audiobook ? audiobookPlayLabel : canResume ? `Resume ${clock(position)}` : "Play"}</span>
           </button>
-          {canResume ? (
+          {canResume || audiobook ? (
             <button type="button" data-tv-focusable="true" className="tv-button secondary" aria-label="Start Over" onFocus={() => setActiveButton("start")} onClick={() => onPlay(0, choices)}>
               <RestartIcon />
               <span className="tv-button-label">Start Over</span>
             </button>
           ) : null}
-          <button type="button" data-tv-focusable="true" className="tv-button secondary" aria-label={watchlist ? "In Watchlist" : "Watchlist"} onFocus={() => setActiveButton("watchlist")} onClick={() => void toggleWatchlist()}>
+          {!audiobook ? <><button type="button" data-tv-focusable="true" className="tv-button secondary" aria-label={watchlist ? "In Watchlist" : "Watchlist"} onFocus={() => setActiveButton("watchlist")} onClick={() => void toggleWatchlist()}>
             <WatchlistIcon active={watchlist} />
             <span className="tv-button-label">{watchlist ? "In Watchlist" : "Watchlist"}</span>
           </button>
@@ -200,9 +218,10 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
           <button ref={moreRef} type="button" data-tv-focusable="true" className="tv-button secondary" aria-label="More" aria-haspopup="dialog" onFocus={() => setActiveButton("more")} onClick={() => setMoreOpen(true)}>
             <MoreIcon />
             <span className="tv-button-label">More</span>
-          </button>
+          </button> </> : null}
         </div>
         {actionError ? <div className="error">{actionError}</div> : null}
+        </div>
       </div>
       <div className="details-related">
         {detail.Type !== "AudioBook" && extras ? <CastSection cast={extras.cast} restoreIndex={restoreCastIndex} onOpen={onOpenPerson} /> : null}

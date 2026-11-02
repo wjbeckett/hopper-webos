@@ -4,8 +4,8 @@ Status as of 2026-11-02. Compare against `silo-android/androidTvApp/` before imp
 
 ## Next: dedicated audiobook experience
 
-- [ ] Replace generic movie detail for audiobooks with Android's audiobook hero: book artwork, title, author, narrator, publisher, total duration, description, Resume/Play/Start Over semantics.
-- [ ] Implement whole-book resume across multipart audiobooks. Never pin the first part's file when the requested book position belongs to a later part.
+- [x] Replace generic movie detail for audiobooks with Android's audiobook hero: book artwork, title, author, narrator, publisher, total duration, description, Resume/Play/Start Over semantics. Source/build checked; browser/TV visual check pending.
+- [ ] Implement whole-book resume across multipart audiobooks. Never pin the first part's file when the requested book position belongs to a later part. The hero now sends a global resume value/0 for restart/undefined for fresh play (as Android does), but the webOS player has no part timeline/cross-part session orchestration yet.
 - [ ] Add Android's dedicated audio player rather than routing audiobooks through video-player chrome.
 - [ ] Match audiobook transport actions, skip interval settings, speed, sleep timer, chapters, bookmarks, and back/focus behavior.
 - [ ] Report whole-book progress and watched/finished state correctly; verify against Silo native playback contracts and Android's audiobook player/view model.

@@ -107,6 +107,13 @@ type NativeItem = Record<string, unknown> & {
   resolution?: string;
   author?: string;
   narrator?: string;
+  publisher?: string;
+  audiobook?: {
+    authors?: Array<{ name?: string }>;
+    narrators?: Array<{ name?: string }>;
+    publisher?: string;
+    total_duration_seconds?: number;
+  };
   duration?: number;
   duration_seconds?: number;
   series_id?: string | number;
@@ -254,7 +261,8 @@ function itemType(value?: string) {
 
 function toItem(item: NativeItem): SiloItem {
   const runtimeMinutes = item.sort_metrics?.runtime_minutes ?? item.runtime_minutes;
-  const runtimeSeconds = item.duration_seconds
+  const runtimeSeconds = item.audiobook?.total_duration_seconds
+    ?? item.duration_seconds
     ?? item.runtime_seconds
     ?? item.duration
     ?? (typeof runtimeMinutes === "number"
@@ -293,6 +301,10 @@ function toItem(item: NativeItem): SiloItem {
     Resolution: item.sort_metrics?.resolution ?? item.overlay_summary?.resolution ?? item.resolution,
     Author: item.sort_metrics?.author ?? item.author,
     Narrator: item.sort_metrics?.narrator ?? item.narrator,
+    Publisher: item.audiobook?.publisher ?? item.publisher,
+    AudiobookDurationSeconds: item.audiobook?.total_duration_seconds,
+    AudiobookAuthorNames: item.audiobook?.authors?.map(person => person.name).filter((name): name is string => Boolean(name?.trim())).join(", ") || item.sort_metrics?.author || item.author,
+    AudiobookNarratorNames: item.audiobook?.narrators?.map(person => person.name).filter((name): name is string => Boolean(name?.trim())).join(", ") || item.sort_metrics?.narrator || item.narrator,
     Overview: item.overview ?? item.description,
     Genres: item.genres,
     ContentRating: item.content_rating,

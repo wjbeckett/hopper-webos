@@ -28,6 +28,10 @@ export type SiloItem = {
   Resolution?: string;
   Author?: string;
   Narrator?: string;
+  Publisher?: string;
+  AudiobookDurationSeconds?: number;
+  AudiobookAuthorNames?: string;
+  AudiobookNarratorNames?: string;
   Overview?: string;
   Genres?: string[];
   ContentRating?: string;
