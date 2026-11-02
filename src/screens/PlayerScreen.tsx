@@ -9,7 +9,7 @@ import { artUrl, getHomeRails, getShuffle, skipShuffle } from "../api/silo";
 import { parseSubtitleAppearance, SUBTITLE_APPEARANCE_CHOICES, SUBTITLE_APPEARANCE_FIELDS, subtitleChoiceLabel, subtitleCueCss } from "../core/subtitleStyle";
 import { putDeviceSubtitleAppearance, putProfileSubtitleAppearance, type SubtitleAppearance } from "../api/settings";
 import { applySubtitleDelay, attachSidecarSubtitle, sidecarSubtitleArtifact } from "../core/subtitleSidecar";
-import { setAudioDelay } from "../platform/audioDelay";
+import { audioDelaySupported, setAudioDelay } from "../platform/audioDelay";
 import { SubtitleSearchDialog } from "../components/SubtitleSearchDialog";
 import { languageSearchCode } from "../core/languageNames";
 import { AiTranslateDialog, type AiSource } from "../components/AiTranslateDialog";
@@ -1733,7 +1733,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         {hudTab === "Audio" ? <div className="player-hud-columns">
           <div><div className="player-hud-eyebrow">Track</div>
             {audioTracks.length > 1 ? <button data-tv-focusable="true" data-hud-row="audio-track" className="option-row" onClick={() => presentHudPicker("Audio track", audioTracks.map((track, i) => ({ label: audioTrackDescription(track, i), value: String(track.index ?? i) })), String(selectedAudioTrack?.index ?? audioTracks.indexOf(selectedAudioTrack!)), "audio-track", value => { const selectedIndex = Number(value); const chosen = audioTracks.find((track, i) => (track.index ?? i) === selectedIndex); if (chosen) selectAudio(chosen, selectedIndex); })}><span>Audio track</span><small>{audioTrackDescription(selectedAudioTrack, audioTracks.indexOf(selectedAudioTrack))}</small></button> : <div className="player-hud-readonly"><span>Audio track</span><strong>{audioTrackDescription(selectedAudioTrack, audioTracks.indexOf(selectedAudioTrack))}</strong></div>}
-            <button data-tv-focusable="true" data-hud-row="audio-delay" className="option-row" onClick={() => presentHudPicker("Audio delay", delayChoices(0, 1000, 50), String(audioDelayMs), "audio-delay", value => changeAudioDelay(Number(value)))}><span>Delay (PCM only)</span><small>{delayLabel(audioDelayMs)}</small></button>
+            <button data-tv-focusable="true" data-hud-row="audio-delay" className="option-row" disabled={!audioDelaySupported()} onClick={() => presentHudPicker("Audio delay", delayChoices(0, 1000, 50), String(audioDelayMs), "audio-delay", value => changeAudioDelay(Number(value)))}><span>Delay (PCM only)</span><small>{audioDelaySupported() ? delayLabel(audioDelayMs) : "Unavailable"}</small></button>
             <p className="player-hud-note">Track changes are negotiated by Silo for this playback session.</p>
           </div>
           <div><div className="player-hud-eyebrow">Output</div>
