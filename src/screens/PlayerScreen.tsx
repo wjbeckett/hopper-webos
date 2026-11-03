@@ -694,14 +694,14 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     setHud(true);
     if (hideTimer.current) window.clearTimeout(hideTimer.current);
     hideTimer.current = window.setTimeout(() => setHud(false), CONTROLS_AUTO_HIDE_MS);
-    if (focus === "transport") transportRef.current?.querySelector<HTMLElement>("button")?.focus();
+    if (focus === "transport") transportRef.current?.querySelector<HTMLElement>("button.primary")?.focus();
     if (focus === "scrubber") scrubberRef.current?.focus();
   }, []);
 
   const focusTransport = useCallback(() => {
     const current = document.activeElement;
     if (current instanceof HTMLElement && transportRef.current?.contains(current)) return;
-    transportRef.current?.querySelector<HTMLElement>("button")?.focus();
+    transportRef.current?.querySelector<HTMLElement>("button.primary")?.focus();
   }, []);
 
   /** Seek the negotiated stream to a source-timeline position (re-anchors when the server demands it). */
@@ -881,10 +881,14 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     if (expiredMarkerKey.current && expiredMarkerKey.current !== introKey) expiredMarkerKey.current = null;
   }, [markers, position, scrubPreview, playerSettingsLoaded, introSkipMode, autoSkipCredits, seekToPosition, pill?.key, pill?.undo]);
 
+  const markersRef = useRef(markers);
+  markersRef.current = markers;
+
   function selectPill() {
     const current = ui.current.pill;
-    if (!current || !markers) return;
-    const segment = markers[current.kind];
+    const activeMarkers = markersRef.current;
+    if (!current || !activeMarkers) return;
+    const segment = activeMarkers[current.kind];
     resolvedMarkers.current.add(current.key);
     setPill(null);
     if (segment) seekToPosition(current.undo ? segment.start_seconds : segment.end_seconds);
@@ -1405,7 +1409,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         event.preventDefault(); event.stopPropagation();
         if (event.repeat) return;
         if (onScrubber) focusTransport();
-        else if (onTransportButton || onPill) { /* bottom row: stay */ }
+        else if (onPill) revealHud("transport");
+        else if (onTransportButton) { /* bottom row: stay */ }
         else if (snapshot.cleanSeek) stopCleanSeek();
         else if (!snapshot.hud) {
           const tab: HudTab = snapshot.audioAvailable ? "Audio" : snapshot.subtitlesAvailable ? "Subtitles" : "Video";
@@ -1420,6 +1425,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         event.preventDefault(); event.stopPropagation();
         if (event.repeat) return;
         if (onTransportButton) scrubberRef.current?.focus();
+        else if (onScrubber && snapshot.pill) pillRef.current?.focus();
+        else if (!snapshot.hud && !onPill && !snapshot.cleanSeek) revealHud("transport");
         return;
       }
 
@@ -1497,6 +1504,11 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         // A visible pill owns Select when no control does (it is not reliably
         // in the focus tree, so the surface routes for it).
         if (snapshot.pill && !(document.activeElement === scrubberRef.current || transportRef.current?.contains(document.activeElement))) { selectPill(); return; }
+        if (!snapshot.hud) {
+          togglePlayPause();
+          revealHud("transport");
+          return;
+        }
         const onScrubber = document.activeElement === scrubberRef.current;
         if (onScrubber || snapshot.scrubPreview != null) {
           // "Center means here": land any scrub in flight, then flip playback.
@@ -1509,6 +1521,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
           return;
         }
         togglePlayPause();
+        if (!snapshot.hud) revealHud("transport");
         return;
       }
 
