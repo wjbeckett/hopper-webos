@@ -311,6 +311,13 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     pendingSeekTimer.current = undefined;
   }, []);
 
+  const releaseReachedSeek = useCallback((video: HTMLVideoElement) => {
+    const pending = pendingSeekTarget.current;
+    if (pending == null || video.seeking) return;
+    const offset = stateRef.current?.plan.timeline.timeline_offset_seconds ?? 0;
+    if (video.currentTime + offset >= pending - 0.5) clearPendingSeek();
+  }, [clearPendingSeek]);
+
   const sourcePosition = useCallback(() => {
     if (pendingSeekTarget.current != null) return pendingSeekTarget.current;
     const video = videoRef.current;
@@ -319,7 +326,6 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   }, []);
 
   const installPlan = useCallback((next: PlaybackState) => {
-    clearPendingSeek();
     stateRef.current = next;
     localStorage.setItem(ACTIVE_PLAYBACK_KEY, JSON.stringify({ sessionId: next.plan.session_id, serverUrl: session.serverUrl, profileId: session.profileId }));
     setPlan(next.plan);
@@ -1605,12 +1611,11 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       onPause={() => { setPlaying(false); revealHud(); }}
       onEnded={handleMediaEnded}
       onSeeked={event => {
-        const pending = pendingSeekTarget.current;
-        const offset = stateRef.current?.plan.timeline.timeline_offset_seconds ?? 0;
-        if (pending != null && Math.abs(event.currentTarget.currentTime + offset - pending) < 2) clearPendingSeek();
+        releaseReachedSeek(event.currentTarget);
         setPosition(sourcePosition());
       }}
       onTimeUpdate={event => {
+        releaseReachedSeek(event.currentTarget);
         setPosition(sourcePosition());
         const video = event.currentTarget;
         setDuration(version?.duration ?? video.duration ?? 0);
