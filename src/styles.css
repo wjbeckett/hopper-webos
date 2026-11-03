@@ -4512,3 +4512,21 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
   box-shadow: 0 0 0 2px rgba(255,255,255,.88), 0 0 24px rgba(255,255,255,.28) !important;
 }
 .profile-selection-card:focus .profile-avatar-frame { box-shadow: 0 0 0 2px rgba(255,255,255,.88), 0 0 24px rgba(255,255,255,.28); }
+
+.home-backdrop-image.current.loaded.direction-down { animation: home-backdrop-in-from-below 360ms cubic-bezier(.2,.72,.24,1) both; }
+.home-backdrop-image.current.loaded.direction-up { animation: home-backdrop-in-from-above 360ms cubic-bezier(.2,.72,.24,1) both; }
+.home-backdrop-image.previous.transitioning-out.direction-down { animation: home-backdrop-out-to-above 360ms cubic-bezier(.2,.72,.24,1) both; }
+.home-backdrop-image.previous.transitioning-out.direction-up { animation: home-backdrop-out-to-below 360ms cubic-bezier(.2,.72,.24,1) both; }
+.home-backdrop-wash.current.loaded.direction-down { animation: home-wash-in-from-below 360ms cubic-bezier(.2,.72,.24,1) both; }
+.home-backdrop-wash.current.loaded.direction-up { animation: home-wash-in-from-above 360ms cubic-bezier(.2,.72,.24,1) both; }
+.home-backdrop-wash.previous.transitioning-out.direction-down { animation: home-wash-out-to-above 360ms cubic-bezier(.2,.72,.24,1) both; }
+.home-backdrop-wash.previous.transitioning-out.direction-up { animation: home-wash-out-to-below 360ms cubic-bezier(.2,.72,.24,1) both; }
+
+@keyframes home-backdrop-in-from-below { from { opacity: 0; transform: translate3d(0, calc(var(--home-backdrop-offset, 0px) + 18vh), 0); } to { opacity: 1; transform: translate3d(0, var(--home-backdrop-offset, 0px), 0); } }
+@keyframes home-backdrop-in-from-above { from { opacity: 0; transform: translate3d(0, calc(var(--home-backdrop-offset, 0px) - 18vh), 0); } to { opacity: 1; transform: translate3d(0, var(--home-backdrop-offset, 0px), 0); } }
+@keyframes home-backdrop-out-to-above { from { opacity: 1; transform: translate3d(0, var(--home-backdrop-offset, 0px), 0); } to { opacity: 0; transform: translate3d(0, calc(var(--home-backdrop-offset, 0px) - 18vh), 0); } }
+@keyframes home-backdrop-out-to-below { from { opacity: 1; transform: translate3d(0, var(--home-backdrop-offset, 0px), 0); } to { opacity: 0; transform: translate3d(0, calc(var(--home-backdrop-offset, 0px) + 18vh), 0); } }
+@keyframes home-wash-in-from-below { from { opacity: 0; transform: translate3d(0, calc(var(--home-backdrop-offset, 0px) + 18vh), 0) scale(1.18); } to { opacity: .42; transform: translate3d(0, var(--home-backdrop-offset, 0px), 0) scale(1.18); } }
+@keyframes home-wash-in-from-above { from { opacity: 0; transform: translate3d(0, calc(var(--home-backdrop-offset, 0px) - 18vh), 0) scale(1.18); } to { opacity: .42; transform: translate3d(0, var(--home-backdrop-offset, 0px), 0) scale(1.18); } }
+@keyframes home-wash-out-to-above { from { opacity: .42; transform: translate3d(0, var(--home-backdrop-offset, 0px), 0) scale(1.18); } to { opacity: 0; transform: translate3d(0, calc(var(--home-backdrop-offset, 0px) - 18vh), 0) scale(1.18); } }
+@keyframes home-wash-out-to-below { from { opacity: .42; transform: translate3d(0, var(--home-backdrop-offset, 0px), 0) scale(1.18); } to { opacity: 0; transform: translate3d(0, calc(var(--home-backdrop-offset, 0px) + 18vh), 0) scale(1.18); } }

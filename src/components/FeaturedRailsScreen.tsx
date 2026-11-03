@@ -225,7 +225,7 @@ export function FeaturedRailsScreen({
     heroTimer.current = window.setTimeout(() => {
       setPreviousHeroImage("");
       heroTimer.current = undefined;
-    }, 250);
+    }, 380);
   }
 
   function keepFocusedRailInView(card: HTMLElement) {
@@ -269,12 +269,12 @@ export function FeaturedRailsScreen({
         {previousHeroImage ? (
           <>
             <img
-              className={`home-backdrop-image previous ${loadedHeroImage === heroImage ? "transitioning-out" : ""}`}
+              className={`home-backdrop-image previous direction-${marqueeDirection} ${loadedHeroImage === heroImage ? "transitioning-out" : ""}`}
               src={previousHeroImage}
               alt=""
             />
             <div
-              className={`home-backdrop-wash previous ${loadedHeroImage === heroImage ? "transitioning-out" : ""}`}
+              className={`home-backdrop-wash previous direction-${marqueeDirection} ${loadedHeroImage === heroImage ? "transitioning-out" : ""}`}
               style={{ backgroundImage: `url("${previousHeroImage}")` }}
             />
           </>
@@ -282,7 +282,7 @@ export function FeaturedRailsScreen({
         {heroImage && failedHeroImage !== heroImage ? (
           <>
             <img
-              className={`home-backdrop-image current ${loadedHeroImage === heroImage ? "loaded" : ""}`}
+              className={`home-backdrop-image current direction-${marqueeDirection} ${loadedHeroImage === heroImage ? "loaded" : ""}`}
               key={heroImage}
               src={heroImage}
               alt=""
@@ -314,7 +314,7 @@ export function FeaturedRailsScreen({
               }}
             />
             <div
-              className={`home-backdrop-wash current ${loadedHeroImage === heroImage ? "loaded" : ""}`}
+              className={`home-backdrop-wash current direction-${marqueeDirection} ${loadedHeroImage === heroImage ? "loaded" : ""}`}
               key={`wash-${heroImage}`}
               style={{ backgroundImage: `url("${heroImage}")` }}
             />
