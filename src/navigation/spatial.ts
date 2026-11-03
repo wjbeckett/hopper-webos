@@ -141,7 +141,7 @@ function focusElement(element: HTMLElement) {
   const rail = element.closest<HTMLElement>(RAIL_SELECTOR);
   if (rail && rail.scrollWidth > rail.clientWidth + 1) {
     pinRailItem(rail, element);
-    element.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
+    if (!element.closest(".home-rails")) element.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
     return;
   }
 
@@ -150,7 +150,7 @@ function focusElement(element: HTMLElement) {
     document.querySelector<HTMLElement>(".library-results")?.scrollTo({ top: 0, behavior: "smooth" });
     return;
   }
-  if (element.closest(".library-screen")) return;
+  if (element.closest(".library-screen, .home-rails")) return;
   element.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
 }
 

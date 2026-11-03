@@ -275,10 +275,10 @@ export function FeaturedRailsScreen({
     if (!card.isConnected) return;
     const containerRect = container.getBoundingClientRect();
     const railRect = rail.getBoundingClientRect();
-    if (railRect.top >= containerRect.top && railRect.bottom <= containerRect.bottom) return;
     const topPadding = Number.parseFloat(getComputedStyle(container).paddingTop) || 0;
     const railOffset = container.scrollTop + railRect.top - containerRect.top - topPadding;
-    container.scrollTo({ top: railOffset, behavior: "smooth" });
+    if (Math.abs(railOffset - container.scrollTop) < 2) return;
+    container.scrollTo({ top: Math.max(0, railOffset), behavior: "smooth" });
   }
 
   return (
