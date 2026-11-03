@@ -688,11 +688,9 @@ export function installSpatialNavigation() {
 
     if (current.closest(".details-actions") && direction === "down") {
       const screen = current.closest<HTMLElement>(".series-screen");
-      const lastId = screen?.dataset.lastEpisode;
       const rail = screen?.querySelector<HTMLElement>(".episode-rail");
-      const card = lastId && rail ? rail.querySelector<HTMLElement>(`[data-episode-id="${CSS.escape(lastId)}"]`) : undefined;
-      const fallback = screen?.querySelector<HTMLElement>(".season-tab.active") ?? screen?.querySelector<HTMLElement>(".season-tab");
-      const next = card ?? fallback;
+      const tab = screen?.querySelector<HTMLElement>(".season-tab.active") ?? screen?.querySelector<HTMLElement>(".season-tab");
+      const next = tab ?? rail?.querySelector<HTMLElement>("[data-tv-focusable='true']");
       if (next) {
         focusElement(next);
         event.preventDefault();
@@ -711,7 +709,9 @@ export function installSpatialNavigation() {
 
     if (current.matches(".season-tab") && direction === "down") {
       const rail = current.closest<HTMLElement>(".series-body")?.querySelector<HTMLElement>(".episode-rail");
-      const first = rail ? focusables("[data-tv-focusable='true']").find(item => rail.contains(item) && item.offsetParent !== null) : undefined;
+      const lastId = current.closest<HTMLElement>(".series-screen")?.dataset.lastEpisode;
+      const remembered = lastId ? rail?.querySelector<HTMLElement>(`[data-episode-id="${CSS.escape(lastId)}"]`) : null;
+      const first = remembered ?? (rail ? focusables("[data-tv-focusable='true']").find(item => rail.contains(item) && item.offsetParent !== null) : undefined);
       if (first) {
         focusElement(first);
         event.preventDefault();

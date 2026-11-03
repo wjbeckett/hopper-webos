@@ -4478,3 +4478,37 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 .player-on-deck-card:focus { outline: none; transform: scale(1.04); }
 .player-on-deck-card:focus .player-on-deck-art { outline: none; box-shadow: 0 0 0 2px rgba(255,255,255,.88), 0 0 24px rgba(255,255,255,.28), 0 10px 24px rgba(0,0,0,.46); }
 .player-on-deck-row { padding-top: 24px; padding-bottom: 24px; margin: -12px 0; }
+
+/* Android TV focus language for every control: a fine white ring (box-shadow so it follows rounded corners on older webOS Chromium) with the existing glow. Cards draw their own ring on the artwork and the player keeps its Android-matched chrome. */
+.tv-button:focus,
+.season-tab:focus,
+.library-view-tab:focus,
+.library-alpha-button:focus,
+.nav-item:focus,
+.profile-pill:focus,
+.server-row:focus,
+.profile-menu button:focus,
+.nav-callout button:focus,
+.browse-dropdown-trigger:focus,
+.browse-shuffle:focus,
+.browse-dropdown-menu button:focus,
+.browse-panel-row:focus,
+.browse-panel-search:focus,
+.search-input:focus,
+.search-clear:focus,
+.requests-search input:focus,
+.requests-search select:focus,
+.profile-pin-pad button:focus,
+.request-row-title:focus,
+.calendar-day:focus,
+.settings-category:focus,
+.settings-account:focus,
+.home-sections-button:focus,
+.detail-facts-table:focus,
+.person-bio:focus,
+.player-hud .option-row:focus,
+.option-row:focus,
+.player-next-up-toggle:focus {
+  box-shadow: 0 0 0 2px rgba(255,255,255,.88), 0 0 24px rgba(255,255,255,.28) !important;
+}
+.profile-selection-card:focus .profile-avatar-frame { box-shadow: 0 0 0 2px rgba(255,255,255,.88), 0 0 24px rgba(255,255,255,.28); }
