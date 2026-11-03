@@ -4466,3 +4466,15 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 .audiobook-detail-overview { max-width: 1040px; margin: 0; color: rgba(255,255,255,.76); font-size: 30.96px; line-height: 42px; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 .audiobook-detail-copy .details-actions { padding-top: 16px; gap: 24px; }
 @media (max-width: 1100px) { .audiobook-detail-content { gap: 32px; padding: 48px; } .audiobook-detail-poster { width: 260px; height: 260px; flex-basis: 260px; } .audiobook-detail-copy { width: auto; flex: 1; } }
+
+/* Android TV focus language: a fine white ring on the artwork, kept alongside the lift and glow. */
+.media-card:focus .media-card-art { box-shadow: 0 0 0 2px rgba(255,255,255,.88), 0 0 24px rgba(255,255,255,.28), 0 16px 38px rgba(0,0,0,.56); }
+.episode-tile:focus .episode-tile-art { box-shadow: 0 0 0 2px rgba(255,255,255,.88), 0 0 26px rgba(255,255,255,.34), 0 10px 24px rgba(0,0,0,.46); }
+.detail-cast-card:focus .detail-cast-photo,
+.detail-trailer-card:focus .detail-trailer-art { box-shadow: 0 0 0 2px rgba(255,255,255,.88), 0 0 24px rgba(255,255,255,.28); }
+.collection-card:focus .collection-card-art,
+.request-card:focus .request-card-art { box-shadow: 0 0 0 2px rgba(255,255,255,.88), 0 0 24px rgba(255,255,255,.28), 0 16px 38px rgba(0,0,0,.5); }
+.player-on-deck-card { overflow: visible; transition: transform .18s ease-out; }
+.player-on-deck-card:focus { outline: none; transform: scale(1.04); }
+.player-on-deck-card:focus .player-on-deck-art { outline: none; box-shadow: 0 0 0 2px rgba(255,255,255,.88), 0 0 24px rgba(255,255,255,.28), 0 10px 24px rgba(0,0,0,.46); }
+.player-on-deck-row { padding-top: 24px; padding-bottom: 24px; margin: -12px 0; }

@@ -33,6 +33,53 @@ function candidateScore(from: DOMRect, to: DOMRect, direction: Direction) {
   return primary + cross * 2.2;
 }
 
+const RAIL_SELECTOR = ".episode-rail, .detail-cast-track, .detail-trailer-track, .rail-track, .player-on-deck-row";
+const RAIL_PIN_MS = 100;
+const railAnimations = new WeakMap<HTMLElement, number>();
+const railInlineStyles = new WeakMap<HTMLElement, { snap: string; behavior: string }>();
+let railStepUntil = 0;
+
+function easeOut(t: number) {
+  return 1 - (1 - t) * (1 - t);
+}
+
+/** Android's tvRailPinOnFocus: the focused card's leading edge slides to the rail's start padding; the row's ends clamp, which is the only time the selector moves. */
+function pinRailItem(rail: HTMLElement, element: HTMLElement) {
+  const rect = element.getBoundingClientRect();
+  const railRect = rail.getBoundingClientRect();
+  const leading = Number.parseFloat(getComputedStyle(rail).paddingLeft) || 0;
+  const maxScroll = rail.scrollWidth - rail.clientWidth;
+  const target = Math.max(0, Math.min(maxScroll, rail.scrollLeft + rect.left - railRect.left - leading));
+  const start = rail.scrollLeft;
+  const distance = target - start;
+  const running = railAnimations.get(rail);
+  if (running) cancelAnimationFrame(running);
+  if (Math.abs(distance) < 1) return;
+  const began = performance.now();
+  railStepUntil = began + RAIL_PIN_MS;
+  if (!railInlineStyles.has(rail)) railInlineStyles.set(rail, { snap: rail.style.scrollSnapType, behavior: rail.style.scrollBehavior });
+  const original = railInlineStyles.get(rail)!;
+  rail.style.scrollSnapType = "none";
+  rail.style.scrollBehavior = "auto";
+  const tick = (now: number) => {
+    const progress = Math.min(1, (now - began) / RAIL_PIN_MS);
+    rail.scrollLeft = start + distance * easeOut(progress);
+    if (progress < 1) railAnimations.set(rail, requestAnimationFrame(tick));
+    else {
+      railAnimations.delete(rail);
+      rail.style.scrollSnapType = original.snap;
+      rail.style.scrollBehavior = original.behavior;
+      railInlineStyles.delete(rail);
+    }
+  };
+  railAnimations.set(rail, requestAnimationFrame(tick));
+}
+
+export function pinFocusedRailItem(element: HTMLElement) {
+  const rail = element.closest<HTMLElement>(RAIL_SELECTOR);
+  if (rail && rail.scrollWidth > rail.clientWidth + 1) pinRailItem(rail, element);
+}
+
 function focusElement(element: HTMLElement) {
   element.focus({ preventScroll: true });
   const libraryResults = element.closest<HTMLElement>(".library-results");
@@ -91,12 +138,9 @@ function focusElement(element: HTMLElement) {
     window.scrollTo({ top: 0, behavior: "smooth" });
     return;
   }
-  const rail = element.closest<HTMLElement>(".episode-rail, .detail-cast-track, .detail-trailer-track, .rail-track");
+  const rail = element.closest<HTMLElement>(RAIL_SELECTOR);
   if (rail && rail.scrollWidth > rail.clientWidth + 1) {
-    const rect = element.getBoundingClientRect();
-    const railRect = rail.getBoundingClientRect();
-    const left = rect.left - railRect.left + rail.scrollLeft - (rail.clientWidth - rect.width) / 2;
-    rail.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
+    pinRailItem(rail, element);
     element.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
     return;
   }
@@ -467,6 +511,10 @@ export function installSpatialNavigation() {
     // player's); spatial navigation would double-drive its scrubber and
     // transport focus.
     if (document.querySelector(".player-shell")) return;
+    if (event.repeat && (event.key === "ArrowLeft" || event.key === "ArrowRight") && performance.now() < railStepUntil) {
+      event.preventDefault();
+      return;
+    }
     const modal = document.querySelector<HTMLElement>('[data-modal="true"]');
     const modalDirection = directionKeys[event.key];
     if (modal && modalDirection && modal.classList.contains("home-sections-editor")) {

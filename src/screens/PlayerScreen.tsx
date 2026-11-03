@@ -2,6 +2,7 @@ import { deviceCaptioningAppearance, getSubtitleMatchesDevice } from "../platfor
 import { interruptThemeMusic } from "../core/themeMusic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type Hls from "hls.js";
+import { pinFocusedRailItem } from "../navigation/spatial";
 import { bestVersionForDevice, getMarkers, getTrickplay, getWatchDetail, playbackUrl, replanPlaybackV3, reportProgress, saveAudioPreference, saveSubtitlePreference, startPlaybackV3, stopPlayback, stopPlaybackKeepalive, type AudioTrack, type FileMarkers, type MarkerSegment, type PlaybackChoices, type PlaybackPlan, type Quality, type SubtitleInventory, type Trickplay, type WatchDetail } from "../api/playback";
 import type { Session, SiloItem } from "../types";
 import { getEffectiveSettings, putScopedSetting } from "../api/settings";
@@ -1262,7 +1263,13 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
           const p = center(active);
           const dir = event.key.slice(5).toLowerCase();
           const next = rows.filter(el => el !== active).map(el => ({ el, p: center(el) })).filter(x => dir === "left" || dir === "right" ? Math.abs(x.p.y-p.y) < Math.max(active.offsetHeight,x.el.offsetHeight) : dir === "down" ? x.p.y > p.y : x.p.y < p.y).filter(x => dir === "left" ? x.p.x < p.x : dir === "right" ? x.p.x > p.x : true).sort((a,b) => dir === "left" || dir === "right" ? Math.abs(a.p.x-p.x)-Math.abs(b.p.x-p.x) : Math.abs(a.p.y-p.y)*1000+Math.abs(a.p.x-p.x)-Math.abs(b.p.y-p.y)*1000-Math.abs(b.p.x-p.x))[0]?.el;
-          next?.focus();
+          if (next) {
+            next.focus({ preventScroll: true });
+            const rail = next.closest<HTMLElement>(".player-on-deck-row");
+            const railLeft = rail?.scrollLeft ?? 0;
+            next.scrollIntoView({ block: "nearest", inline: "nearest" });
+            if (rail) { rail.scrollLeft = railLeft; pinFocusedRailItem(next); }
+          }
           return;
         }
         if (event.key === "Enter" || event.key === "OK" || event.key === " ") {
