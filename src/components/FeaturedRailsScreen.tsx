@@ -129,6 +129,7 @@ export function FeaturedRailsScreen({
   const mainRef = useRef<HTMLElement>(null);
   const heroImageRef = useRef("");
   const backdropRef = useRef<HTMLDivElement>(null);
+  const lastHeroSwapAt = useRef(0);
   const [watchVersion, setWatchVersion] = useState(0);
   useEffect(() => subscribeWatchState(() => setWatchVersion(version => version + 1)), []);
   const displayRails = useMemo(() => rails.map(rail => {
@@ -174,12 +175,15 @@ export function FeaturedRailsScreen({
     }
     focusedItemRef.current = item;
     focusedRailIndexRef.current = railIndex;
+    lastHeroSwapAt.current = performance.now();
     setFocusedItem(item);
     const nextImage = backdropUrl(session, item);
     if (!nextImage || nextImage === heroImageRef.current) return;
     if (heroImageRef.current) {
       if (heroTimer.current !== undefined) window.clearTimeout(heroTimer.current);
       setPreviousHeroImage(heroImageRef.current);
+      if (ambientTintTimer.current !== undefined) window.clearTimeout(ambientTintTimer.current);
+      ambientTintTimer.current = undefined;
       setPreviousAmbientTint(ambientTint);
     }
     heroImageRef.current = nextImage;
@@ -205,10 +209,15 @@ export function FeaturedRailsScreen({
       showHero(item, railIndex);
       return;
     }
+    const wait = Math.max(0, lastHeroSwapAt.current + 340 - performance.now());
+    if (wait === 0) {
+      showHero(item, railIndex);
+      return;
+    }
     focusTimer.current = window.setTimeout(() => {
       showHero(item, railIndex);
       focusTimer.current = undefined;
-    }, 150);
+    }, wait);
   }
 
   useEffect(() => {
@@ -264,7 +273,7 @@ export function FeaturedRailsScreen({
     heroTimer.current = window.setTimeout(() => {
       setPreviousHeroImage("");
       heroTimer.current = undefined;
-    }, 380);
+    }, 360);
   }
 
   function keepFocusedRailInView(card: HTMLElement) {
@@ -337,7 +346,7 @@ export function FeaturedRailsScreen({
                   ambientTintTimer.current = window.setTimeout(() => {
                     setPreviousAmbientTint("");
                     ambientTintTimer.current = undefined;
-                  }, 260);
+                  }, 320);
                 });
               }}
               onError={() => {
@@ -349,7 +358,7 @@ export function FeaturedRailsScreen({
                 ambientTintTimer.current = window.setTimeout(() => {
                   setPreviousAmbientTint("");
                   ambientTintTimer.current = undefined;
-                }, 260);
+                }, 320);
                 finishBackdropTransition();
               }}
             />
