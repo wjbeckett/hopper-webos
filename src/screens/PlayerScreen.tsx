@@ -304,6 +304,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
 
   const pendingSeekTarget = useRef<number | null>(null);
   const pendingSeekTimer = useRef<number | undefined>(undefined);
+  const seekGeneration = useRef(0);
   const clearPendingSeek = useCallback(() => {
     pendingSeekTarget.current = null;
     if (pendingSeekTimer.current) window.clearTimeout(pendingSeekTimer.current);
@@ -707,12 +708,13 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     pendingSeekTarget.current = target;
     if (pendingSeekTimer.current) window.clearTimeout(pendingSeekTimer.current);
     pendingSeekTimer.current = window.setTimeout(clearPendingSeek, 6000);
+    const generation = ++seekGeneration.current;
     if (localTarget < 0 || !active.plan.timeline.can_seek_anywhere) {
       setBusy(true);
       void replanPlaybackV3(session, active, "seek_reanchor", target, qualityRef.current, active.plan.selected_tracks)
-        .then(installPlan)
-        .catch(reason => setError(reason instanceof Error ? reason.message : "Silo could not seek to that position."))
-        .finally(() => setBusy(false));
+        .then(next => { if (generation === seekGeneration.current) installPlan(next); })
+        .catch(reason => { if (generation === seekGeneration.current) setError(reason instanceof Error ? reason.message : "Silo could not seek to that position."); })
+        .finally(() => { if (generation === seekGeneration.current) setBusy(false); });
     } else {
       video.currentTime = Math.max(0, localTarget);
     }
@@ -1528,7 +1530,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
               setScrubPreview(current => clampSeek((current ?? 0) + step, ui.current.duration));
             } else {
               const delta = direction < 0 ? -skipRef.current.back : skipRef.current.forward;
-              const target = clampSeek(ui.current.position + delta, ui.current.duration);
+              const target = clampSeek(sourcePosition() + delta, ui.current.duration);
               setTapPreview(target);
               if (tapPreviewTimer.current) window.clearTimeout(tapPreviewTimer.current);
               tapPreviewTimer.current = window.setTimeout(() => setTapPreview(null), 1500);
@@ -1636,7 +1638,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
             </div> : null}
             {autoSeekRate !== 0 ? <div className="auto-seek-chip"><svg viewBox="0 0 24 24" aria-hidden="true"><path d={autoSeekRate < 0 ? "M20.8 6.4 19.1 9.2 16.2 7.9" : "M3.2 6.4 4.9 9.2 7.8 7.9"} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" /><path d={autoSeekRate < 0 ? "M12 4a8 8 0 1 0 7.4 4.9" : "M12 4a8 8 0 1 1-7.4 4.9"} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" /></svg>{Math.abs(autoSeekRate)}x</div> : null}
           </div> : null}
-          {skipFeedback && !cleanSeek && !panel && !upNextCard && hud && previewSeconds == null ? <div className="skip-feedback-docked" data-nonce={skipFeedback.nonce}><div className="skip-feedback-chip"><strong>{skipFeedback.delta < 0 ? `−${-skipFeedback.delta}s` : `+${skipFeedback.delta}s`}</strong><span>{formatClock(skipFeedback.target)}</span></div></div> : null}
+          {skipFeedback && !cleanSeek && !panel && !upNextCard && hud ? <div className="skip-feedback-docked" data-raised={previewSeconds != null && previewCard != null} data-nonce={skipFeedback.nonce}><div className="skip-feedback-chip"><strong>{skipFeedback.delta < 0 ? `−${-skipFeedback.delta}s` : `+${skipFeedback.delta}s`}</strong><span>{formatClock(skipFeedback.target)}</span></div></div> : null}
           <div ref={timelineRef} className="scrub-bar" role="slider" aria-label="Playback position" aria-valuemin={0} aria-valuemax={Math.round(duration)} aria-valuenow={Math.round(labelSeconds)} tabIndex={-1}>
             {segments.map(([start, end], index) => {
               const span = end - start;

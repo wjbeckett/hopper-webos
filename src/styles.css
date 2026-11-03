@@ -1596,7 +1596,8 @@ input:focus {
   gap: 16px;
   pointer-events: none;
 }
-.skip-feedback-docked { position: absolute; left: 0; right: 0; bottom: calc(100% + 28px); display: flex; justify-content: center; pointer-events: none; }
+.skip-feedback-docked { position: absolute; left: 0; right: 0; bottom: calc(100% + 28px); display: flex; justify-content: center; pointer-events: none; z-index: 2; }
+.skip-feedback-docked[data-raised="true"] { bottom: calc(100% + 330px); }
 .skip-feedback-chip,
 .hold-seek-chip {
   display: inline-flex;
