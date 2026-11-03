@@ -794,7 +794,9 @@ export function installSpatialNavigation() {
         : undefined;
       focusElement(activeNav ?? target.candidate);
       event.preventDefault();
+      return;
     }
+    if (current.closest(".home-rails")) event.preventDefault();
   };
   const onKeyUp = (event: KeyboardEvent) => {
     if ((event.key === "Enter" || event.key === "OK") && pendingPress.current) {
