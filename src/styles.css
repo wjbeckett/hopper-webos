@@ -4532,3 +4532,13 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 @keyframes home-wash-in-from-above { from { opacity: 0; transform: translate3d(0, calc(var(--home-backdrop-offset, 0px) - 18vh), 0) scale(1.18); } to { opacity: .42; transform: translate3d(0, var(--home-backdrop-offset, 0px), 0) scale(1.18); } }
 @keyframes home-wash-out-to-above { from { opacity: .42; transform: translate3d(0, var(--home-backdrop-offset, 0px), 0) scale(1.18); } to { opacity: 0; transform: translate3d(0, calc(var(--home-backdrop-offset, 0px) - 18vh), 0) scale(1.18); } }
 @keyframes home-wash-out-to-below { from { opacity: .42; transform: translate3d(0, var(--home-backdrop-offset, 0px), 0) scale(1.18); } to { opacity: 0; transform: translate3d(0, calc(var(--home-backdrop-offset, 0px) + 18vh), 0) scale(1.18); } }
+
+.home-backdrop-image.current.loaded.direction-fade { animation: home-fade-in 420ms ease-out both; }
+.home-backdrop-image.previous.transitioning-out.direction-fade { animation: home-fade-out 420ms ease-out both; }
+.home-backdrop-wash.current.loaded.direction-fade { animation: home-wash-fade-in 420ms ease-out both; }
+.home-backdrop-wash.previous.transitioning-out.direction-fade { animation: home-wash-fade-out 420ms ease-out both; }
+
+@keyframes home-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes home-fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes home-wash-fade-in { from { opacity: 0; } to { opacity: .42; } }
+@keyframes home-wash-fade-out { from { opacity: .42; } to { opacity: 0; } }

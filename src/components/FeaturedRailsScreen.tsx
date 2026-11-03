@@ -170,7 +170,7 @@ export function FeaturedRailsScreen({
       marqueeTimer.current = window.setTimeout(() => {
         setPreviousFocusedItem(undefined);
         marqueeTimer.current = undefined;
-      }, 360);
+      }, 420);
     }
     focusedItemRef.current = item;
     focusedRailIndexRef.current = railIndex;
