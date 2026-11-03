@@ -86,6 +86,17 @@ function sampleAmbientTint(url: string): Promise<string | null> {
   });
 }
 
+const warmBackdrops = new Map<string, HTMLImageElement>();
+
+function warmBackdrop(url: string) {
+  if (!url || warmBackdrops.has(url)) return Promise.resolve();
+  const image = new Image();
+  image.decoding = "async";
+  warmBackdrops.set(url, image);
+  image.src = url;
+  return image.decode().catch(() => { warmBackdrops.delete(url); });
+}
+
 export function FeaturedRailsScreen({
   rails,
   session,
@@ -125,6 +136,25 @@ export function FeaturedRailsScreen({
     const kept = rail.items.filter(item => item.UserData?.Played !== true);
     return kept.length === rail.items.length ? rail : { ...rail, items: kept };
   }), [rails, watchVersion]);
+  useEffect(() => {
+    let cancelled = false;
+    const urls: string[] = [];
+    const depth = Math.max(0, ...displayRails.map(rail => rail.items.length));
+    for (let index = 0; index < Math.min(depth, 12); index += 1) {
+      for (const rail of displayRails) {
+        const item = rail.items[index];
+        const url = item ? backdropUrl(session, item) : "";
+        if (url && !urls.includes(url)) urls.push(url);
+      }
+    }
+    (async () => {
+      for (let start = 0; start < urls.length && !cancelled; start += 3) {
+        await Promise.all(urls.slice(start, start + 3).map(warmBackdrop));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [displayRails, session]);
+
   const itemsById = new Map(displayRails.flatMap(rail => rail.items.map(item => [item.Id, item] as const)));
 
   function showHero(item: SiloItem, railIndex: number) {
@@ -153,10 +183,19 @@ export function FeaturedRailsScreen({
       setPreviousAmbientTint(ambientTint);
     }
     heroImageRef.current = nextImage;
-    setLoadedHeroImage("");
+    setLoadedHeroImage(warmBackdrops.has(nextImage) && warmBackdrops.get(nextImage)?.complete ? nextImage : "");
     setFailedHeroImage("");
     setLoadedAmbientTint("");
     setHeroImage(nextImage);
+  }
+
+  function warmNeighbours(card: HTMLElement) {
+    const wrap = card.closest<HTMLElement>(".media-card-wrap");
+    for (const sibling of [wrap?.nextElementSibling, wrap?.previousElementSibling]) {
+      const id = sibling?.querySelector<HTMLElement>("[data-media-id]")?.dataset.mediaId;
+      const neighbour = id ? itemsById.get(id) : undefined;
+      if (neighbour) void warmBackdrop(backdropUrl(session, neighbour));
+    }
   }
 
   function previewFocusedItem(item: SiloItem, railIndex: number) {
@@ -257,6 +296,7 @@ export function FeaturedRailsScreen({
         if (item && card && railIndex >= 0) {
           previewFocusedItem(item, railIndex);
           keepFocusedRailInView(card);
+          warmNeighbours(card);
         }
         const wrap = card?.closest<HTMLElement>(".media-card-wrap");
         const track = card?.closest<HTMLElement>(".rail-track");

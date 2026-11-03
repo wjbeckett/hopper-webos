@@ -2186,11 +2186,13 @@ input:focus {
 }
 
 .home-rails .rail-track {
-  padding-top: 36px;
+  padding-top: 56px;
   padding-bottom: 40px;
   margin-top: -30px;
   margin-bottom: -24px;
 }
+
+.media-rail h2 { position: relative; z-index: 12; }
 
 @keyframes home-marquee-roll-in {
   from {
@@ -2859,7 +2861,7 @@ body {
   grid-auto-columns: clamp(174px, 11vw, 218px);
   gap: clamp(18px, 1.5vw, 28px);
   margin: -26px -22px -20px;
-  padding: 34px 24px 40px;
+  padding: 50px 24px 40px;
   scroll-padding-inline: 24px;
 }
 
