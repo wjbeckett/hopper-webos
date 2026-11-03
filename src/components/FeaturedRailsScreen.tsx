@@ -161,6 +161,11 @@ export function FeaturedRailsScreen({
 
   function previewFocusedItem(item: SiloItem, railIndex: number) {
     if (focusTimer.current !== undefined) window.clearTimeout(focusTimer.current);
+    focusTimer.current = undefined;
+    if (focusedRailIndexRef.current !== railIndex) {
+      showHero(item, railIndex);
+      return;
+    }
     focusTimer.current = window.setTimeout(() => {
       showHero(item, railIndex);
       focusTimer.current = undefined;
@@ -228,15 +233,13 @@ export function FeaturedRailsScreen({
     const container = card.closest<HTMLElement>(".home-rails");
     if (!rail || !container) return;
 
-    requestAnimationFrame(() => {
-      if (!card.isConnected || !card.contains(document.activeElement)) return;
-      const containerRect = container.getBoundingClientRect();
-      const railRect = rail.getBoundingClientRect();
-      if (railRect.top >= containerRect.top && railRect.bottom <= containerRect.bottom) return;
-      const topPadding = Number.parseFloat(getComputedStyle(container).paddingTop) || 0;
-      const railOffset = container.scrollTop + railRect.top - containerRect.top - topPadding;
-      container.scrollTo({ top: railOffset, behavior: "smooth" });
-    });
+    if (!card.isConnected) return;
+    const containerRect = container.getBoundingClientRect();
+    const railRect = rail.getBoundingClientRect();
+    if (railRect.top >= containerRect.top && railRect.bottom <= containerRect.bottom) return;
+    const topPadding = Number.parseFloat(getComputedStyle(container).paddingTop) || 0;
+    const railOffset = container.scrollTop + railRect.top - containerRect.top - topPadding;
+    container.scrollTo({ top: railOffset, behavior: "smooth" });
   }
 
   return (
