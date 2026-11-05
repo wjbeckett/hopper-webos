@@ -7,6 +7,7 @@ This client should feel like a native TV product, not a browser page packaged as
 ### Implemented foundation
 - TV-first top navigation
 - D-pad spatial focus system
+- Android TV-style profile dropdown shell: Switch Profile → Watchlist → Favorites → History → Settings → Switch Server → Sign Out, avatar header, SVG row icons, modal focus trap, and action wiring on the webOS top nav
 - QR/device sign-in as primary authentication
 - password fallback
 - multi-server registry

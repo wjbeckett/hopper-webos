@@ -772,6 +772,8 @@ export default function App() {
         onLibraries={() => { setSection("library"); setRoute({ name: "main" }); }}
         onHistory={() => { setSection("history"); setRoute({ name: "main" }); }}
         onProfiles={() => { setSection("profiles"); setRoute({ name: "main" }); }}
+        onSignOut={signOut}
+        onChangeServer={changeServer}
       />}
       {body}
     </div>
