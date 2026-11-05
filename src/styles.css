@@ -1068,8 +1068,8 @@ input:focus {
 }
 .library-alpha-button:focus {
   outline: none;
-  color: #08090a;
-  background: #fff;
+  color: rgba(255,255,255,.85);
+  background: transparent;
   box-shadow: none;
 }
 
@@ -3523,7 +3523,7 @@ body {
 .library-alpha-button:focus {
   outline: none;
   outline-offset: 1px;
-  box-shadow: none;
+  box-shadow: 0 0 0 2px rgba(255,255,255,.88), 0 0 24px rgba(255,255,255,.28) !important;
 }
 
 .library-screen:not(.has-alpha-rail) {
@@ -4651,7 +4651,10 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 .audiobook-detail-copy .details-actions { padding-top: 16px; gap: 24px; }
 @media (max-width: 1100px) { .audiobook-detail-content { gap: 32px; padding: 48px; } .audiobook-detail-poster { width: 260px; height: 260px; flex-basis: 260px; } .audiobook-detail-copy { width: auto; flex: 1; } }
 
-/* Android TV focus language: a fine white ring on the artwork, kept alongside the lift and glow. */
+/* Android TV focus language: a fine white ring on the artwork, kept alongside the lift and glow. The A–Z rail follows the same ring-only grammar: focus is a ring until selected, then the chip fills. */
+.library-alpha-button:focus {
+  box-shadow: 0 0 0 2px rgba(255,255,255,.88), 0 0 24px rgba(255,255,255,.28) !important;
+}
 .media-card:focus .media-card-art { box-shadow: 0 0 0 2px rgba(255,255,255,.88), 0 0 24px rgba(255,255,255,.28), 0 16px 38px rgba(0,0,0,.56); }
 .episode-tile:focus .episode-tile-art { box-shadow: 0 0 0 2px rgba(255,255,255,.88), 0 0 26px rgba(255,255,255,.34), 0 10px 24px rgba(0,0,0,.46); }
 .detail-cast-card:focus .detail-cast-photo,
