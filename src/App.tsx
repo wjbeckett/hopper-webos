@@ -305,6 +305,13 @@ export default function App() {
         event.preventDefault();
         return;
       }
+      if (document.querySelector(".library-results")) {
+        const cleared = window.dispatchEvent(new CustomEvent("silo:library-back", { cancelable: true }));
+        if (!cleared) {
+          event.preventDefault();
+          return;
+        }
+      }
       const nav = document.querySelector<HTMLElement>(".tv-nav");
       if (nav) {
         const activeElement = document.activeElement;

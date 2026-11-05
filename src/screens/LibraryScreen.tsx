@@ -235,6 +235,7 @@ export function LibraryScreen({
   const [shuffleSupported, setShuffleSupported] = useState(false);
   const [libraryEmpty, setLibraryEmpty] = useState<boolean | null>(null);
   const [namePrefix, setNamePrefix] = useState<string | null>(null);
+  const pendingLetterFocusRef = useRef(false);
   const [reloadNonce, setReloadNonce] = useState(0);
   const browseSentinel = useRef<HTMLDivElement>(null);
   const [openPanel, setOpenPanel] = useState<BrowsePanel>(null);
@@ -407,7 +408,7 @@ export function LibraryScreen({
           });
         }
       })
-      .catch((err) => alive && setError(err instanceof Error ? err.message : "Library failed"))
+      .catch((err) => { if (alive) { setError(err instanceof Error ? err.message : "Library failed"); pendingLetterFocusRef.current = false; } })
       .finally(() => alive && setLoading(false));
     return () => { alive = false; };
   }, [session, browseLibraryKey, browseTypeKey, itemTypesKey, sort, order, filterGroupsKey, matchAll, namePrefix, reloadNonce]);
@@ -482,6 +483,32 @@ export function LibraryScreen({
       pendingDownFocusRef.current = null;
     }
   }, [browseItems, visibleItems, loadingMore, hasMoreBrowseItems]);
+
+  useEffect(() => {
+    if (!pendingLetterFocusRef.current || loading || error) return;
+    if (!browseItems.length) {
+      pendingLetterFocusRef.current = false;
+      return;
+    }
+    if (returnTargetRef.current) return;
+    pendingLetterFocusRef.current = false;
+    focusFirstContentCard();
+  }, [browseItems, loading, error]);
+
+  useEffect(() => {
+    const onBack = (event: Event) => {
+      if (!namePrefix) return;
+      setNamePrefix(null);
+      pendingLetterFocusRef.current = false;
+      event.preventDefault();
+      event.stopPropagation();
+      requestAnimationFrame(() => {
+        document.querySelector<HTMLElement>(".library-alpha-nav .library-alpha-button")?.focus({ preventScroll: true });
+      });
+    };
+    window.addEventListener("silo:library-back", onBack);
+    return () => window.removeEventListener("silo:library-back", onBack);
+  }, [namePrefix]);
 
   useEffect(() => {
     const loadAtGridEdge = (event: Event) => {
@@ -697,7 +724,11 @@ export function LibraryScreen({
                 aria-pressed={selected}
                 className={`library-alpha-button ${selected ? "selected" : ""}`}
                 aria-label={prefix === "" ? "All titles" : prefix === "#" ? "Numbers" : `Titles beginning with ${prefix}`}
-                onClick={() => setNamePrefix(prefix || null)}
+                onClick={() => {
+                  if ((namePrefix ?? "") === prefix) return;
+                  pendingLetterFocusRef.current = true;
+                  setNamePrefix(prefix || null);
+                }}
               >
                 {prefix || "All"}
               </button>
