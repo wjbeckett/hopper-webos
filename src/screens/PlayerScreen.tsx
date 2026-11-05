@@ -152,8 +152,10 @@ function lgMediaKey(event: KeyboardEvent): LgMediaKey | undefined {
     case "MediaPlayPause": return "playpause";
     case "MediaStop": return "stop";
     case "MediaRewind":
+    case "MediaSkipBackward":
     case "MediaTrackPrevious": return "rewind";
     case "MediaFastForward":
+    case "MediaSkipForward":
     case "MediaTrackNext": return "forward";
   }
   switch (event.keyCode) {
@@ -1397,23 +1399,25 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       const mediaKey = lgMediaKey(event);
       if (mediaKey === "rewind") {
         event.preventDefault(); event.stopPropagation();
-        stopCleanSeek();
-        performRelativeSeek(-skipRef.current.back, true);
+        if (!event.repeat) {
+          stopCleanSeek();
+          performRelativeSeek(-skipRef.current.back, true);
+        }
         return;
       }
       if (mediaKey === "forward") {
         event.preventDefault(); event.stopPropagation();
-        stopCleanSeek();
-        performRelativeSeek(skipRef.current.forward, true);
+        if (!event.repeat) {
+          stopCleanSeek();
+          performRelativeSeek(skipRef.current.forward, true);
+        }
         return;
       }
       if (mediaKey === "play" || mediaKey === "pause" || mediaKey === "playpause") {
         event.preventDefault(); event.stopPropagation();
         if (!event.repeat) {
           if (snapshot.cleanSeek) commitCleanSeek();
-          else if (mediaKey === "play" && video.paused) togglePlayPause();
-          else if (mediaKey === "pause" && !video.paused) togglePlayPause();
-          else if (mediaKey === "playpause") togglePlayPause();
+          else togglePlayPause();
         }
         return;
       }
@@ -1531,6 +1535,14 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     };
 
     const onKeyUp = (event: KeyboardEvent) => {
+      // Media keys act on keydown only (TvPlayerRemoteKeyAction.ConsumeOnly on
+      // ACTION_UP); swallow the keyup so the system media-key fallback or the
+      // browser cannot act on it a second time. webOS remotes also emit a
+      // stray Enter keyup that must not bleed through the OK commit below.
+      if (lgMediaKey(event)) {
+        event.preventDefault(); event.stopPropagation();
+        return;
+      }
       const video = videoRef.current;
       if (!video) return;
       const snapshot = ui.current;
