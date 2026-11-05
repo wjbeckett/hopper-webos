@@ -8,7 +8,7 @@ This client should feel like a native TV product, not a browser page packaged as
 - TV-first top navigation
 - D-pad spatial focus system
 - Android TV-style profile dropdown shell: Switch Profile → Watchlist → Favorites → History → Settings → Switch Server → Sign Out, avatar header, SVG row icons, modal focus trap, and action wiring on the webOS top nav
-- Android TV-style profile selection foundation: centered "Who's watching?" layout, signed-in label, centered circular avatar grid with focus ring/scale, and Change server / Sign out actions. PIN verification remains supported; visual and physical-TV checks are pending.
+- Android TV-style profile selection foundation: centered "Who's watching?" layout, signed-in label, centered circular avatar grid with circular focus ring/scale, Change server / Sign out actions, and hidden top navigation during profile switching. PIN verification remains supported; visual and physical-TV checks are pending.
 - QR/device sign-in as primary authentication
 - password fallback
 - multi-server registry

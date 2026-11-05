@@ -767,7 +767,7 @@ export default function App() {
 
   return (
     <div className={`app-shell ${section === "library" || (["movies", "series", "music", "audiobooks"].includes(section) && (libraryLanding === "browse" || libraryLanding === "alphabet" || browseDetail !== null)) ? "app-shell-library" : ""} ${section === "home" && route.name === "main" ? "app-shell-home" : ""}`}>
-      {section !== "settings" && <TopNav
+      {section !== "settings" && section !== "profiles" && <TopNav
         active={section}
         libraries={libraries}
         requestsAvailable={requestsAvailable}

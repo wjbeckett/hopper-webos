@@ -2683,7 +2683,6 @@ input:focus {
 .profile-selection-card:focus {
   outline: none;
   color: var(--foreground);
-  transform: scale(1.08);
 }
 
 .profile-selection-card strong {
@@ -2697,9 +2696,8 @@ input:focus {
 }
 
 .profile-selection-card:focus .profile-avatar-large {
-  outline: 3px solid rgba(255,255,255,.96);
-  outline-offset: 6px;
-  box-shadow: 0 0 30px rgba(255,255,255,.22);
+  transform: scale(1.12);
+  box-shadow: 0 0 0 3px rgba(255,255,255,.96), 0 0 28px rgba(255,255,255,.24);
 }
 
 .profile-avatar-large {
@@ -4377,7 +4375,6 @@ body {
 .requests-search input:focus,
 .requests-search select:focus,
 .profile-pin-pad button:focus,
-.profile-selection-card:focus,
 .request-row-title:focus,
 .calendar-day:focus,
 .option-row:focus,
@@ -4669,8 +4666,6 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 .player-next-up-toggle:focus {
   box-shadow: 0 0 0 2px rgba(255,255,255,.88), 0 0 24px rgba(255,255,255,.28) !important;
 }
-.profile-selection-card:focus .profile-avatar-frame { box-shadow: 0 0 0 2px rgba(255,255,255,.88), 0 0 24px rgba(255,255,255,.28); }
-
 .home-backdrop-image.current.loaded.direction-down { animation: home-backdrop-in-from-below 360ms cubic-bezier(.2,.72,.24,1) both; }
 .home-backdrop-image.current.loaded.direction-up { animation: home-backdrop-in-from-above 360ms cubic-bezier(.2,.72,.24,1) both; }
 .home-backdrop-image.previous.transitioning-out.direction-down { animation: home-backdrop-out-to-above 360ms cubic-bezier(.2,.72,.24,1) both; }
