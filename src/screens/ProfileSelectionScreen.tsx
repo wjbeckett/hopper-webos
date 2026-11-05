@@ -4,9 +4,12 @@ import { focusFirstContentCard } from "../navigation/spatial";
 import type { Session, SiloProfile } from "../types";
 import { LoadingState } from "../components/LoadingState";
 
-export function ProfileSelectionScreen({ session, onSelect }: {
+export function ProfileSelectionScreen({ session, onSelect, onChangeServer, onSignOut, fullScreen = false }: {
   session: Session;
   onSelect: (profile: SiloProfile, profileToken?: string) => void;
+  onChangeServer: () => void;
+  onSignOut: () => void;
+  fullScreen?: boolean;
 }) {
   const [profiles, setProfiles] = useState<SiloProfile[]>([]);
   const [selected, setSelected] = useState<SiloProfile | null>(null);
@@ -57,7 +60,7 @@ export function ProfileSelectionScreen({ session, onSelect }: {
 
   if (selected) {
     return (
-      <main className="content-screen profile-selection-screen">
+      <main className={`content-screen profile-selection-screen${fullScreen ? " profile-selection-screen-full" : ""}`}>
         <button data-tv-focusable="true" className="tv-button secondary" onClick={() => { setSelected(null); setPin(""); setError(""); }}>‹ Profiles</button>
         <section className="profile-pin-panel">
           <ProfileAvatar profile={selected} />
@@ -80,19 +83,35 @@ export function ProfileSelectionScreen({ session, onSelect }: {
   }
 
   return (
-    <main className="content-screen profile-selection-screen">
-      {error ? <div className="error">{error}</div> : null}
-      {loading ? <LoadingState label="Loading profiles" /> : profiles.length ? (
-        <div className="profile-selection-grid">
-          {profiles.map(profile => (
-            <button key={profile.id} data-tv-focusable="true" className="profile-selection-card" onClick={() => chooseProfile(profile)}>
-              <ProfileAvatar profile={profile} />
-              <strong>{profile.name}</strong>
-              {profile.hasPin ? <small>PIN protected</small> : null}
-            </button>
-          ))}
-        </div>
-      ) : !error ? <div className="empty-state"><h2>No profiles available</h2></div> : null}
+    <main className={`content-screen profile-selection-screen${fullScreen ? " profile-selection-screen-full" : ""}`}>
+      <section className="profile-selection-content">
+        <header className="profile-selection-heading">
+          <h1>Who's watching?</h1>
+          <p>Signed in as {session.username}</p>
+        </header>
+        {error ? <div className="error">{error}</div> : null}
+        {loading ? <LoadingState label="Loading profiles" /> : profiles.length ? (
+          <div className="profile-selection-grid">
+            {profiles.map(profile => (
+              <button
+                key={profile.id}
+                type="button"
+                data-tv-focusable="true"
+                className="profile-selection-card"
+                aria-label={`${profile.name}${profile.hasPin ? ", PIN protected" : ""}`}
+                onClick={() => chooseProfile(profile)}
+              >
+                <ProfileAvatar profile={profile} />
+                <strong>{profile.name}</strong>
+              </button>
+            ))}
+          </div>
+        ) : !error ? <div className="empty-state"><h2>No profiles available</h2></div> : null}
+        <footer className="profile-selection-actions">
+          <button type="button" data-tv-focusable="true" className="tv-button secondary compact" onClick={onChangeServer}>Change server</button>
+          <button type="button" data-tv-focusable="true" className="tv-button secondary compact" onClick={onSignOut}>Sign out</button>
+        </footer>
+      </section>
     </main>
   );
 }

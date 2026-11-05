@@ -536,7 +536,15 @@ export default function App() {
   }
 
   if (profileError) {
-    return <ProfileSelectionScreen session={session} onSelect={activateProfile} />;
+    return (
+      <ProfileSelectionScreen
+        session={session}
+        onSelect={activateProfile}
+        onChangeServer={changeServer}
+        onSignOut={signOut}
+        fullScreen
+      />
+    );
   }
 
   if (!session.profileId) {
@@ -656,7 +664,16 @@ export default function App() {
   }
   else if (section === "history") body = <HistoryScreen session={session} onOpen={openItem} />;
   else if (section === "collections") body = <CollectionsScreen session={session} onOpen={openItem} />;
-  else if (section === "profiles") body = <ProfileSelectionScreen session={session} onSelect={activateProfile} />;
+  else if (section === "profiles") {
+    body = (
+      <ProfileSelectionScreen
+        session={session}
+        onSelect={activateProfile}
+        onChangeServer={changeServer}
+        onSignOut={signOut}
+      />
+    );
+  }
   else if (section === "settings") {
     body = <SettingsScreen session={session} onSignOut={signOut} onChangeServer={changeServer} onSwitchProfile={() => setSection("profiles")} />;
   } else if (section === "library") {

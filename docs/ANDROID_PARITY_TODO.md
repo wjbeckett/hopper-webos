@@ -1,10 +1,11 @@
 # Android TV parity TODO
 
-Status as of 2026-11-02. Compare against `silo-android/androidTvApp/` before implementing each item, then update this list and `FIRST_GRADE_ROADMAP.md` with source/build/browser/physical-TV verification status. The Android TV client is the behavior and design reference; do not label work complete from compilation alone.
+Status as of 2026-11-05. Compare against `silo-android/androidTvApp/` before implementing each item, then update this list and `FIRST_GRADE_ROADMAP.md` with source/build/browser/physical-TV verification status. The Android TV client is the behavior and design reference; do not label work complete from compilation alone.
 
 ## Completed this pass
 
 - [x] Profile menu dropdown parity: Android row order and shell behavior (Switch Profile → Watchlist → Favorites → History → Settings → Switch Server → Sign Out), avatar header with server subtitle, SVG icons, modal focus trap, and action wiring. Build-checked; physical-TV visual confirm still pending.
+- [x] Profile selection layout: centered "Who's watching?" and signed-in header, centered round-avatar grid with Android-style focus treatment, and Change server / Sign out actions. PIN flow retained. Build-checked; visual and physical-TV confirmation pending.
 
 ## Next: dedicated audiobook experience
 

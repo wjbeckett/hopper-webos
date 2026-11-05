@@ -2652,31 +2652,54 @@ input:focus {
 
 .profile-selection-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 240px));
-  gap: 24px;
-  padding-top: 40px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 160px));
+  justify-content: center;
+  justify-items: center;
+  align-content: center;
+  gap: 26px 30px;
+  width: 100%;
+  margin: auto;
+  padding: 34px 8px;
 }
 
 .profile-selection-card {
-  min-height: 220px;
-  display: grid;
-  justify-items: center;
-  align-content: center;
-  gap: 12px;
-  border: 1px solid rgba(255,255,255,.1);
-  border-radius: 20px;
-  color: var(--foreground);
-  background: rgba(255,255,255,.05);
+  min-height: 150px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 13px;
+  padding: 8px;
+  border: 0;
+  border-radius: 18px;
+  color: rgba(255,255,255,.68);
+  background: transparent;
   font: inherit;
+  cursor: pointer;
+  transition: color .16s ease, transform .18s ease-out;
 }
 
 .profile-selection-card:focus {
   outline: none;
-  transform: scale(1.035);
+  color: var(--foreground);
+  transform: scale(1.08);
 }
 
-.profile-selection-card small {
-  color: var(--muted-foreground);
+.profile-selection-card strong {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-selection-card:focus .profile-avatar-large {
+  outline: 3px solid rgba(255,255,255,.96);
+  outline-offset: 6px;
+  box-shadow: 0 0 30px rgba(255,255,255,.22);
 }
 
 .profile-avatar-large {
@@ -2889,6 +2912,74 @@ body {
   min-height: calc(100vh - 96px);
   padding: 34px clamp(44px, 4.2vw, 82px) 84px;
   background: var(--background);
+}
+
+.content-screen.profile-selection-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 92px);
+  padding: 22px clamp(28px, 5vw, 72px) 30px;
+  background:
+    radial-gradient(ellipse at 50% 34%, rgba(116, 128, 164, .2), transparent 48%),
+    radial-gradient(ellipse at 18% 82%, rgba(75, 96, 142, .12), transparent 45%),
+    #090b10;
+}
+
+.content-screen.profile-selection-screen-full {
+  min-height: 100vh;
+}
+
+.profile-selection-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(100%, 1120px);
+  min-height: min(680px, calc(100vh - 150px));
+}
+
+.profile-selection-screen-full .profile-selection-content {
+  min-height: min(780px, calc(100vh - 100px));
+}
+
+.profile-selection-heading {
+  text-align: center;
+}
+
+.profile-selection-heading h1 {
+  margin: 0;
+  color: #f5f5f3;
+  font-size: clamp(2rem, 3vw, 2.45rem);
+  font-weight: 800;
+  letter-spacing: -.035em;
+  line-height: 1.15;
+}
+
+.profile-selection-heading p {
+  margin: 8px 0 0;
+  color: rgba(235,238,245,.62);
+  font-size: 1rem;
+}
+
+.profile-selection-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  padding-top: 20px;
+}
+
+.profile-selection-actions .tv-button {
+  min-width: 150px;
+  margin-top: 0;
+  border: 1px solid rgba(255,255,255,.13);
+  background: rgba(255,255,255,.08);
+  backdrop-filter: blur(16px);
+}
+
+.content-screen.profile-selection-screen > .tv-button {
+  align-self: flex-start;
+  margin: 0;
 }
 
 .screen-title {
