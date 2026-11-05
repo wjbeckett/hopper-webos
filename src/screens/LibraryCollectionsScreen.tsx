@@ -84,8 +84,8 @@ export function LibraryCollectionsScreen({ session, libraries, scopeKey, onOpen 
                       <div key={key} className="collection-cell" data-collection-key={key}>
                         <MediaCard
                           session={session}
-                          item={{ Id: collection.id, Name: collection.name, PosterUrl: collection.posterUrl, Type: "Collection" }}
-                          image={imageUrl(session, { Id: collection.id, Name: collection.name, PosterUrl: collection.posterUrl })}
+                          item={{ Id: collection.id, Name: collection.name, PosterUrl: collection.posterUrl, PosterThumbhash: collection.posterThumbhash, Type: "Collection" }}
+                          image={imageUrl(session, { Id: collection.id, Name: collection.name, PosterUrl: collection.posterUrl, PosterThumbhash: collection.posterThumbhash })}
                           caption=""
                           variant="browse"
                           onOpen={() => open(section.library, collection)}

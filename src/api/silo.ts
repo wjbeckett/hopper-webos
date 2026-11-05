@@ -95,6 +95,8 @@ type NativeItem = Record<string, unknown> & {
   media_type?: string;
   poster_url?: string;
   backdrop_url?: string;
+  poster_thumbhash?: string;
+  backdrop_thumbhash?: string;
   poster_is_episode_still?: boolean;
   backdrop_is_episode_still?: boolean;
   overview?: string;
@@ -314,6 +316,8 @@ function toItem(item: NativeItem): SiloItem {
     RunTimeTicks: typeof runtimeSeconds === "number" ? runtimeSeconds * 10_000_000 : undefined,
     PosterUrl: item.poster_url ?? item.still_url,
     BackdropUrl: item.backdrop_url,
+    PosterThumbhash: item.poster_thumbhash,
+    BackdropThumbhash: item.backdrop_thumbhash,
     PosterIsEpisodeStill: item.poster_is_episode_still,
     BackdropIsEpisodeStill: item.backdrop_is_episode_still,
     LogoUrl: item.logo_url,
@@ -873,6 +877,7 @@ type NativeCollection = {
   name?: string;
   item_count?: number;
   poster_url?: string;
+  poster_thumbhash?: string;
   kind?: string;
 };
 
@@ -895,6 +900,7 @@ function toCollection(item: NativeCollection, groupName?: string, groupKind?: st
     name: item.title ?? item.name ?? "Collection",
     itemCount: item.item_count,
     posterUrl: item.poster_url,
+    posterThumbhash: item.poster_thumbhash,
     kind: rawKind === "user_collections" || rawKind === "user_collection" ? "user_collection" : "regular",
     groupName
   };
@@ -1200,7 +1206,7 @@ export async function libraryHasItems(session: Session, libraryId: number | stri
 
 export type CollectionSection = { name: string; kind: "regular" | "user_collection"; collections: SiloCollection[] };
 
-type NativeCollectionCard = { id: string | number; title?: string; poster_url?: string; item_count?: number };
+type NativeCollectionCard = { id: string | number; title?: string; poster_url?: string; poster_thumbhash?: string; item_count?: number };
 type NativeLibraryCollectionTab = {
   collections?: NativeCollectionCard[];
   groups?: Array<{ name?: string; kind?: string; sort_order?: number; collections?: NativeCollectionCard[] }>;
@@ -1214,6 +1220,7 @@ export async function getLibraryCollectionSections(session: Session, libraryId: 
     name: item.title ?? "Collection",
     itemCount: item.item_count,
     posterUrl: item.poster_url || undefined,
+    posterThumbhash: item.poster_thumbhash || undefined,
     kind
   });
   if (!tab.groups?.length && !tab.ungrouped) {

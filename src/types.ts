@@ -43,6 +43,8 @@ export type SiloItem = {
   BackdropImageTags?: string[];
   PosterUrl?: string;
   BackdropUrl?: string;
+  PosterThumbhash?: string;
+  BackdropThumbhash?: string;
   PosterIsEpisodeStill?: boolean;
   BackdropIsEpisodeStill?: boolean;
   LogoUrl?: string;
@@ -136,6 +138,7 @@ export type SiloCollection = {
   name: string;
   itemCount?: number;
   posterUrl?: string;
+  posterThumbhash?: string;
   kind: "regular" | "user_collection";
   groupName?: string;
 };

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getCollectionItemsPage, getCollections, imageUrl } from "../api/silo";
 import { MediaCard } from "../components/MediaCard";
+import { ArtworkImage } from "../components/ArtworkImage";
 import { focusFirstContentCard } from "../navigation/spatial";
 import type { Session, SiloCollection, SiloItem } from "../types";
 import { LoadingState } from "../components/LoadingState";
@@ -126,12 +127,12 @@ export function CollectionsScreen({ session, onOpen }: {
       {loading ? <LoadingState label="Loading collections" /> : collections.length ? (
         <div className="collection-grid">
           {collections.map(collection => {
-            const poster: SiloItem = { Id: collection.id, Name: collection.name, PosterUrl: collection.posterUrl };
+            const poster: SiloItem = { Id: collection.id, Name: collection.name, PosterUrl: collection.posterUrl, PosterThumbhash: collection.posterThumbhash };
             const posterImage = imageUrl(session, poster);
             return (
               <button key={collection.id} type="button" data-tv-focusable="true" className="collection-card" onClick={() => void openCollection(collection)}>
                 <div className="collection-card-art">
-                  {posterImage ? <img src={posterImage} alt="" loading="lazy" /> : <span aria-hidden="true">▦</span>}
+                  <ArtworkImage url={posterImage} thumbhash={poster.PosterThumbhash} kind="Video" width={400} height={600} />
                 </div>
                 <strong>{collection.name}</strong>
                 <small>{collection.itemCount ?? 0} titles{collection.groupName ? ` · ${collection.groupName}` : ""}</small>

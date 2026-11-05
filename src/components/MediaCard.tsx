@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { isFavorite, setFavorite, setWatched } from "../api/silo";
 import { applyWatchedState, publishWatchState, subscribeWatchState } from "../core/watchState";
 import { setWatchlist } from "../api/silo";
+import { ArtworkImage, defaultArtworkKindForType } from "./ArtworkImage";
 import type { Session, SiloItem } from "../types";
 
 function WatchlistCardRow({ session, item, inWatchlist, onDone }: { session: Session; item: SiloItem; inWatchlist: boolean; onDone: () => void }) {
@@ -116,17 +117,13 @@ export function MediaCard({ session, item, image, onOpen, landscape = false, var
       aria-label={item.Name}
     >
       <div className="media-card-art">
-        <div className="media-card-placeholder" aria-hidden="true">
-          {item.Name.slice(0, 1).toUpperCase()}
-        </div>
-        {image ? (
-          <img
-            src={image}
-            alt=""
-            loading="lazy"
-            onError={(event) => { event.currentTarget.hidden = true; }}
-          />
-        ) : null}
+        <ArtworkImage
+          url={image}
+          thumbhash={landscape ? (item.BackdropThumbhash ?? item.PosterThumbhash) : item.PosterThumbhash}
+          kind={defaultArtworkKindForType(item.Type)}
+          width={landscape ? 640 : 400}
+          height={landscape ? 360 : 600}
+        />
         {watched ? (
           browse
             ? <span className="media-card-watched-check" aria-label="Watched">✓</span>

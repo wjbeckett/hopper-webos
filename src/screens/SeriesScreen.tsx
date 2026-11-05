@@ -4,6 +4,7 @@ import { CastSection, FactsSection, TrailersSection, factsFor, useDetailExtras }
 import { PlaybackOptionsDialog, PlaybackSummary, useWatchDetail } from "../components/PlaybackOptions";
 import { GearIcon, MoreIcon, PlayIcon, RestartIcon, WatchlistIcon } from "../components/icons";
 import { MediaRail } from "../components/MediaRail";
+import { ArtworkImage } from "../components/ArtworkImage";
 import type { PlaybackChoices, WatchDetail } from "../api/playback";
 import type { DetailPerson, DetailTrailer } from "../api/silo";
 import type { Session, SiloItem } from "../types";
@@ -486,7 +487,7 @@ function EpisodeCard({ session, episode, current, onFocus, onOpen, onSetWatched,
       onClick={onOpen}
     >
       <div className="episode-tile-art">
-        {image ? <img className={hideImage ? "spoiler-hidden-image" : undefined} src={image} alt="" loading="lazy" onError={event => { event.currentTarget.hidden = true; }} /> : null}
+        <ArtworkImage url={image} thumbhash={episode.BackdropThumbhash ?? episode.PosterThumbhash} kind="Tv" hideImage={hideImage} width={640} height={360} />
         {watched ? <span className="media-card-watched-check" aria-label="Watched">✓</span> : null}
         {!watched && progress > 0 && progress < 100 ? <i><span style={{ width: `${progress}%` }} /></i> : null}
       </div>
