@@ -143,6 +143,30 @@ function TransportGlyph({ name, seconds = 0 }: { name: "play" | "pause" | "back1
   }
 }
 
+type LgMediaKey = "play" | "pause" | "playpause" | "stop" | "rewind" | "forward";
+
+function lgMediaKey(event: KeyboardEvent): LgMediaKey | undefined {
+  switch (event.key) {
+    case "MediaPlay": return "play";
+    case "MediaPause": return "pause";
+    case "MediaPlayPause": return "playpause";
+    case "MediaStop": return "stop";
+    case "MediaRewind":
+    case "MediaTrackPrevious": return "rewind";
+    case "MediaFastForward":
+    case "MediaTrackNext": return "forward";
+  }
+  switch (event.keyCode) {
+    case 415: return "play";
+    case 19: return "pause";
+    case 10252: return "playpause";
+    case 413: return "stop";
+    case 412: return "rewind";
+    case 417: return "forward";
+  }
+  return undefined;
+}
+
 export function PlayerScreen({ session, item, startPosition, choices, onBack, onEnded, resolveNextEpisode, onPlayNext, shuffle, onShuffleAdvance, autoAdvanceCount = 0 }: { session: Session; item: SiloItem; startPosition?: number; choices?: PlaybackChoices; onBack: (elapsedSeconds: number) => void; onEnded?: () => void; resolveNextEpisode?: () => Promise<SiloItem | null>; onPlayNext?: (next: SiloItem, autoAdvanceCount: number) => void; shuffle?: { id: string; scopeLabel?: string; next?: SiloItem }; onShuffleAdvance?: (autoAdvanceCount: number) => void; autoAdvanceCount?: number }) {
   useEffect(() => { interruptThemeMusic(); }, []);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -1286,7 +1310,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
 
       // Playback panels own the keys while open: Up/Down walk the rows, OK
       // presses, Back closes, Left/Right are consumed.
-      if (snapshot.panel) {
+      if (snapshot.panel && !lgMediaKey(event)) {
         if (isBackKey(event) && hudPickerRef.current) {
           event.preventDefault(); event.stopPropagation();
           const returnKey = hudPickerRef.current.returnKey;
@@ -1370,24 +1394,32 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       if (snapshot.hud) revealHud();
 
       // Dedicated transport seek keys skip in every surface state.
-      if (event.key === "MediaRewind" || event.key === "MediaTrackPrevious") {
+      const mediaKey = lgMediaKey(event);
+      if (mediaKey === "rewind") {
         event.preventDefault(); event.stopPropagation();
         stopCleanSeek();
         performRelativeSeek(-skipRef.current.back, true);
         return;
       }
-      if (event.key === "MediaFastForward" || event.key === "MediaTrackNext") {
+      if (mediaKey === "forward") {
         event.preventDefault(); event.stopPropagation();
         stopCleanSeek();
         performRelativeSeek(skipRef.current.forward, true);
         return;
       }
-      if (/^Media(Pause|Play|PlayPause)$/.test(event.key)) {
+      if (mediaKey === "play" || mediaKey === "pause" || mediaKey === "playpause") {
         event.preventDefault(); event.stopPropagation();
         if (!event.repeat) {
           if (snapshot.cleanSeek) commitCleanSeek();
-          else togglePlayPause();
+          else if (mediaKey === "play" && video.paused) togglePlayPause();
+          else if (mediaKey === "pause" && !video.paused) togglePlayPause();
+          else if (mediaKey === "playpause") togglePlayPause();
         }
+        return;
+      }
+      if (mediaKey === "stop") {
+        event.preventDefault(); event.stopPropagation();
+        if (!event.repeat) exitPlayer();
         return;
       }
 
