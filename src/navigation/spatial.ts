@@ -463,7 +463,8 @@ function navigateLibrary(current: HTMLElement, direction: Direction) {
     if (direction === "left" || direction === "right") {
       if (focusAdjacent(current, sameRow, direction)) return true;
       if (direction === "right" && jumpItems[0]) {
-        focusElement(jumpItems[0]);
+        const selected = jumpItems.find(item => item.classList.contains("selected")) ?? jumpItems[0];
+        focusElement(selected);
         return true;
       }
       return true;
