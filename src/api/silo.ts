@@ -388,6 +388,98 @@ export async function verifyProfilePin(session: Session, profileId: string, pin:
   return result.profile_token;
 }
 
+/** A household profile as the create/edit form reads it (v2 `ProfileV2`). */
+export type EditableProfile = SiloProfile & {
+  isChild: boolean;
+  maxContentRating: string | null;
+  qualityPreference: string | null;
+  subtitleMode: string | null;
+  libraryRestrictionsEnabled: boolean;
+  allowedLibraryIds: number[];
+};
+
+export type AssignableLibrary = { id: number; name: string; type: string; sortOrder: number };
+
+/**
+ * Household management acts as the primary profile (Android HouseholdManager):
+ * only this request's profile headers change, never the device's selection.
+ */
+export type HouseholdManager = { profileId: string; profileToken?: string };
+
+function managerHeaders(manager: HouseholdManager): Record<string, string> {
+  return {
+    "X-Profile-Id": manager.profileId,
+    ...(manager.profileToken ? { "X-Profile-Token": manager.profileToken } : {})
+  };
+}
+
+export async function getEditableProfiles(session: Session): Promise<EditableProfile[]> {
+  const data = await requestApi<{ items?: Array<NativeProfile & {
+    is_child?: boolean;
+    max_content_rating?: string;
+    quality_preference?: string;
+    subtitle_mode?: string;
+    library_restrictions_enabled?: boolean;
+    allowed_library_ids?: Array<string | number>;
+  }> }>(session, "/profiles", {}, "v2", false);
+  return (data.items ?? []).map(profile => ({
+    id: String(profile.id),
+    name: profile.name ?? "Profile",
+    avatarEmoji: profile.avatar ?? profile.avatar_emoji,
+    avatarUrl: profile.avatar_url,
+    hasPin: Boolean(profile.has_pin),
+    isPrimary: Boolean(profile.is_primary),
+    isChild: Boolean(profile.is_child),
+    maxContentRating: profile.max_content_rating || null,
+    qualityPreference: profile.quality_preference || null,
+    subtitleMode: profile.subtitle_mode || null,
+    libraryRestrictionsEnabled: Boolean(profile.library_restrictions_enabled),
+    allowedLibraryIds: (profile.allowed_library_ids ?? []).map(Number).filter(id => Number.isFinite(id) && id > 0)
+  }));
+}
+
+/** Android listAssignableLibraries: the account's libraries, read with no profile headers. */
+export async function getAssignableLibraries(session: Session): Promise<AssignableLibrary[]> {
+  const data = await requestApi<{ items?: Array<{ id: string | number; name: string; type: string; sort_order?: number }> }>(
+    session, "/user/libraries", {}, "v2", false
+  );
+  return (data.items ?? [])
+    .map(library => ({ id: Number(library.id), name: library.name, type: library.type, sortOrder: library.sort_order ?? 0 }))
+    .filter(library => Number.isFinite(library.id) && library.id > 0)
+    .sort((left, right) => left.sortOrder - right.sortOrder);
+}
+
+/** `POST /api/v2/profiles` (201). Create never sends nulls. */
+export async function createProfile(session: Session, manager: HouseholdManager, body: Record<string, unknown>): Promise<void> {
+  const fields = Object.fromEntries(Object.entries(body).filter(([, value]) => value !== null && value !== undefined));
+  await requestApi(session, "/profiles", { method: "POST", body: JSON.stringify(fields), headers: managerHeaders(manager) }, "v2", false);
+}
+
+/** `PATCH /api/v2/profiles/{id}`: omitted members are unchanged, null clears. */
+export async function updateProfile(session: Session, manager: HouseholdManager, id: string, patch: Record<string, unknown>): Promise<void> {
+  await requestApi(
+    session,
+    `/profiles/${encodeURIComponent(id)}`,
+    { method: "PATCH", body: JSON.stringify(patch), headers: managerHeaders(manager) },
+    "v2",
+    false
+  );
+}
+
+/** Server error text for a failed profile mutation, else the fallback (Android surfaces the server's message). */
+export function profileErrorMessage(cause: unknown, fallback: string): string {
+  if (!(cause instanceof Error)) return fallback;
+  const match = cause.message.match(/: \d{3} [^:]*: (.*)$/s);
+  if (!match) return cause.message === "AUTH_EXPIRED" ? "Your session expired. Sign in again." : fallback;
+  try {
+    const parsed = JSON.parse(match[1]) as { message?: string; error?: string | { message?: string } };
+    const text = parsed.message ?? (typeof parsed.error === "string" ? parsed.error : parsed.error?.message);
+    return text?.trim() || fallback;
+  } catch {
+    return match[1].trim() || fallback;
+  }
+}
+
 export async function restoreDefaultProfile(session: Session): Promise<Session> {
   const profiles = await getProfiles(session);
   const profile = profiles.find((candidate) => candidate.id === session.profileId)
