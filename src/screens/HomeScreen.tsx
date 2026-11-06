@@ -9,10 +9,12 @@ import { LoadingState } from "../components/LoadingState";
 
 export function HomeScreen({
   session,
-  onOpen
+  onOpen,
+  onExplore
 }: {
   session: Session;
   onOpen: (item: SiloItem) => void;
+  onExplore?: (rail: HomeRail) => void;
 }) {
   const [rails, setRails] = useState<HomeRail[]>([]);
   const [error, setError] = useState("");
@@ -48,6 +50,7 @@ export function HomeScreen({
       rails={arranged}
       session={session}
       onOpen={onOpen}
+      onExplore={onExplore}
       error={error}
       emptyTitle="Your library will show up here"
       emptyDescription="Connect a library on your Silo server to get started."

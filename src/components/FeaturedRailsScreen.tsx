@@ -10,6 +10,8 @@ type Props = {
   rails: HomeRail[];
   session: Session;
   onOpen: (item: SiloItem) => void;
+  /** Opens a row's full page; enables the trailing "Explore all" card. */
+  onExplore?: (rail: HomeRail) => void;
   error?: string;
   emptyTitle: string;
   emptyDescription: string;
@@ -17,6 +19,11 @@ type Props = {
 };
 
 const ambientTintCache = new Map<string, string | null>();
+
+// The screen unmounts while a row's full page is open, so the row to return
+// focus to lives at module level (Android arms an explore-all return the same
+// way). Consumed once by the next mount that finds the row's Explore card.
+let pendingExploreReturn: string | null = null;
 
 function sampleAmbientTint(url: string): Promise<string | null> {
   if (ambientTintCache.has(url)) return Promise.resolve(ambientTintCache.get(url) ?? null);
@@ -101,6 +108,7 @@ export function FeaturedRailsScreen({
   rails,
   session,
   onOpen,
+  onExplore,
   error,
   emptyTitle,
   emptyDescription,
@@ -228,6 +236,19 @@ export function FeaturedRailsScreen({
     const firstItem = displayRails[0]?.items[0];
     if (firstItem && (!focusedItem || !itemsById.has(focusedItem.Id))) showHero(firstItem, 0);
   }, [displayRails, session, focusedItem]);
+
+  // Back from a row's full page: land on that row's "Explore all" card.
+  useLayoutEffect(() => {
+    if (!pendingExploreReturn || !displayRails.length) return;
+    const railId = pendingExploreReturn;
+    const card = Array.from(mainRef.current?.querySelectorAll<HTMLElement>("[data-explore-rail]") ?? [])
+      .find(element => element.dataset.exploreRail === railId);
+    pendingExploreReturn = null;
+    if (!card) return;
+    restoredFocusRef.current = true;
+    focusNavigationTarget(card);
+    keepFocusedRailInView(card);
+  }, [displayRails]);
 
   useLayoutEffect(() => {
     const record = focusedCardRef.current;
@@ -410,7 +431,13 @@ export function FeaturedRailsScreen({
       {error ? <div className="error">{error}</div> : null}
       <div className="home-rails" onScroll={syncBackdropScroll}>
         {displayRails.map(rail => (
-          <MediaRail key={rail.id} rail={rail} session={session} onOpen={onOpen} />
+          <MediaRail
+            key={rail.id}
+            rail={rail}
+            session={session}
+            onOpen={onOpen}
+            onExplore={onExplore ? target => { pendingExploreReturn = target.id; onExplore(target); } : undefined}
+          />
         ))}
         {!displayRails.length && !error ? (
           <div className="empty-state">

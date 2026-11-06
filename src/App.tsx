@@ -29,13 +29,14 @@ import { SearchScreen } from "./screens/SearchScreen";
 import { SeriesScreen } from "./screens/SeriesScreen";
 import { ServerSetupScreen } from "./screens/ServerSetupScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
+import { SectionBrowseScreen, type SectionBrowseArgs } from "./screens/SectionBrowseScreen";
 import type { AudiobookGroup } from "./api/silo";
 import type { PlaybackChoices } from "./api/playback";
 import { applyResumeState, applyWatchedState, publishWatchState } from "./core/watchState";
 import { firstEpisodeOfSeason, nextEpisodeAfter } from "./core/episodeNavigation";
 import { publishRailsChanged } from "./core/watchState";
 import { connectEventsSocket } from "./api/events";
-import type { Session, SiloCollection, SiloItem, SiloLibrary, SiloProfile } from "./types";
+import type { HomeRail, Session, SiloCollection, SiloItem, SiloLibrary, SiloProfile } from "./types";
 import { LoadingState } from "./components/LoadingState";
 import { installClientLogCapture } from "./core/clientLogs";
 
@@ -129,6 +130,8 @@ export default function App() {
   const [selectedSeriesLibraryId, setSelectedSeriesLibraryId] = useState<number | null>(null);
   const [libraryLanding, setLibraryLanding] = useState<LibraryLanding>("recommended");
   const [browseDetail, setBrowseDetail] = useState<BrowseDetail | null>(null);
+  // A row's full page ("Explore all"), shown inside the shell so the top nav stays.
+  const [sectionBrowse, setSectionBrowse] = useState<SectionBrowseArgs | null>(null);
   const [libraries, setLibraries] = useState<SiloLibrary[]>([]);
   const [librariesLoaded, setLibrariesLoaded] = useState(false);
   const [requestsAvailable, setRequestsAvailable] = useState<boolean | undefined>();
@@ -328,6 +331,11 @@ export default function App() {
           event.preventDefault();
           return;
         }
+        if (route.name === "main" && sectionBrowse && !(activeElement instanceof HTMLElement && activeElement.closest(".tv-nav"))) {
+          setSectionBrowse(null);
+          event.preventDefault();
+          return;
+        }
         if (route.name === "main" && browseDetail && !(activeElement instanceof HTMLElement && activeElement.closest(".tv-nav"))) {
           setBrowseDetail(null);
           event.preventDefault();
@@ -370,7 +378,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onBack);
     return () => window.removeEventListener("keydown", onBack);
-  }, [session, route.name, section, browseDetail]);
+  }, [session, route.name, section, browseDetail, sectionBrowse]);
 
   useEffect(() => {
     const onVisibility = () => {
@@ -440,6 +448,16 @@ export default function App() {
       });
     }
     else setRoute({ name: "details", item });
+  }
+
+  // Android openHomeSection / openLibrarySection: a library row on a mixed
+  // library keeps the Movies/Series view's media scope on its full page.
+  function openSectionBrowse(rail: HomeRail) {
+    if (!rail.sectionId) return;
+    const library = rail.libraryId != null ? libraries.find(candidate => candidate.id === rail.libraryId) : undefined;
+    const mixed = library?.type.trim().toLowerCase() === "mixed";
+    const mediaScope = mixed ? (section === "movies" ? "movie" : section === "series" ? "series" : null) : null;
+    setSectionBrowse({ sectionId: rail.sectionId, title: rail.title, libraryId: rail.libraryId ?? null, mediaScope });
   }
 
   async function resolveNextEpisode(current: SiloItem): Promise<SiloItem | null> {
@@ -663,7 +681,10 @@ export default function App() {
   }
 
   let body;
-  if (section === "home") body = <HomeScreen session={session} onOpen={openItem} />;
+  if (sectionBrowse && (section === "home" || section === "movies" || section === "series" || section === "music" || section === "audiobooks")) {
+    body = <SectionBrowseScreen key={`${sectionBrowse.libraryId ?? "home"}-${sectionBrowse.sectionId}`} session={session} args={sectionBrowse} onOpen={openItem} />;
+  }
+  else if (section === "home") body = <HomeScreen session={session} onOpen={openItem} onExplore={openSectionBrowse} />;
   else if (section === "forYou") body = <ForYouScreen session={session} onOpen={openItem} />;
   else if (section === "search") body = <SearchScreen session={session} onOpen={openItem} />;
   else if (section === "favorites" || section === "watchlist") {
@@ -754,6 +775,7 @@ export default function App() {
           title={section === "series" ? matchingLibraries[0].name : sectionTitle(section)}
           libraries={matchingLibraries}
           onOpen={openItem}
+          onExplore={openSectionBrowse}
         />
       );
     } else {
@@ -773,7 +795,7 @@ export default function App() {
   }
 
   return (
-    <div className={`app-shell ${section === "library" || (["movies", "series", "music", "audiobooks"].includes(section) && (libraryLanding === "browse" || libraryLanding === "alphabet" || browseDetail !== null)) ? "app-shell-library" : ""} ${section === "home" && route.name === "main" ? "app-shell-home" : ""}`}>
+    <div className={`app-shell ${section === "library" || (["movies", "series", "music", "audiobooks"].includes(section) && (libraryLanding === "browse" || libraryLanding === "alphabet" || browseDetail !== null)) ? "app-shell-library" : ""} ${section === "home" && route.name === "main" && !sectionBrowse ? "app-shell-home" : ""}`}>
       {section !== "settings" && section !== "profiles" && <TopNav
         active={section}
         libraries={libraries}
@@ -787,6 +809,7 @@ export default function App() {
           }
           setLibraryLanding(landing);
           setBrowseDetail(null);
+          setSectionBrowse(null);
           setSection(next);
           setRoute({ name: "main" });
         }}

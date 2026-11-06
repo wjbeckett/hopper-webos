@@ -10,12 +10,14 @@ export function LibraryRecommendationsScreen({
   session,
   title,
   libraries,
-  onOpen
+  onOpen,
+  onExplore
 }: {
   session: Session;
   title: string;
   libraries: SiloLibrary[];
   onOpen: (item: SiloItem) => void;
+  onExplore?: (rail: HomeRail) => void;
 }) {
   const [rails, setRails] = useState<HomeRail[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,6 +55,7 @@ export function LibraryRecommendationsScreen({
       rails={rails}
       session={session}
       onOpen={onOpen}
+      onExplore={onExplore}
       error={error}
       emptyMark="✦"
       emptyTitle={`No ${title} recommendations yet`}

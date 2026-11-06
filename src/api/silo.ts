@@ -460,6 +460,8 @@ export async function getHomeRails(session: Session): Promise<HomeRail[]> {
       id: String(section.id),
       title: section.title ?? section.section_type ?? "Silo",
       featured: section.featured,
+      sectionId: String(section.id),
+      libraryId: null,
       items: nativeItems.map(toItem).filter((item) => item.Id)
     };
   }).filter((rail) => rail.items.length > 0);
@@ -703,6 +705,8 @@ export async function getLibraryRails(session: Session, library: SiloLibrary): P
       id: `${library.id}-${section.id}`,
       title: section.title ?? section.section_type ?? library.name,
       featured: section.featured,
+      sectionId: String(section.id),
+      libraryId: library.id,
       items: items.map(toItem).filter((item) => item.Id)
     };
   }).filter((rail) => rail.items.length > 0);
@@ -826,6 +830,158 @@ export async function getLibraryItemsPage(
   };
 }
 
+function catalogFilterOptionsFromWire(response: {
+  genres?: string[];
+  studios?: string[];
+  networks?: string[];
+  countries?: string[];
+  original_languages?: string[];
+  content_ratings?: string[];
+  authors?: string[];
+  narrators?: string[];
+  series?: string[];
+  technical?: {
+    resolutions?: string[];
+    audio_languages?: string[];
+    subtitle_languages?: string[];
+  };
+}): CatalogFilterOptions {
+  return {
+    genres: response.genres ?? [],
+    studios: response.studios ?? [],
+    networks: response.networks ?? [],
+    countries: response.countries ?? [],
+    originalLanguages: response.original_languages ?? [],
+    contentRatings: response.content_ratings ?? [],
+    authors: response.authors ?? [],
+    narrators: response.narrators ?? [],
+    series: response.series ?? [],
+    resolutions: response.technical?.resolutions ?? [],
+    audioLanguages: response.technical?.audio_languages ?? [],
+    subtitleLanguages: response.technical?.subtitle_languages ?? []
+  };
+}
+
+/**
+ * Android TV `TvBrowseViewModel` global browse read: cross-library
+ * `source=query` catalog page with genre + content-rating filters, sort
+ * and order, paged by cursor. `libraryId` stays null for global browse.
+ */
+export async function getBrowseCatalogPage(
+  session: Session,
+  options: {
+    cursor?: string;
+    limit?: number;
+    genre?: string | null;
+    contentRating?: string | null;
+    sort?: string;
+    order?: "asc" | "desc";
+  } = {}
+): Promise<{ items: SiloItem[]; nextCursor?: string }> {
+  const {
+    cursor,
+    limit = 100,
+    genre,
+    contentRating,
+    sort = "added_at",
+    order = "desc",
+  } = options;
+  const groups: CatalogQueryGroup[] = [];
+  if (genre) groups.push({ match: "all", rules: [{ field: "genre", op: "contains", value: genre }] });
+  if (contentRating) groups.push({ match: "all", rules: [{ field: "content_rating", op: "is", value: contentRating }] });
+
+  if (groups.length) {
+    const page = await requestV2<NativeCatalogPage>(session, "/catalog/query", {
+      method: "POST",
+      body: JSON.stringify({
+        source: "query",
+        sort,
+        order,
+        match: "all",
+        groups,
+        limit,
+        ...(cursor ? { cursor } : {})
+      })
+    });
+    if (page.page?.has_more && !page.page.next_cursor) {
+      throw new Error("Silo returned another browse page without a continuation cursor.");
+    }
+    return {
+      items: (page.items ?? []).map(toItem).filter((item) => item.Id),
+      nextCursor: page.page?.has_more ? page.page.next_cursor : undefined
+    };
+  }
+
+  const params = new URLSearchParams({
+    source: "query",
+    limit: String(limit),
+    sort: order === "desc" ? `-${sort}` : sort
+  });
+  if (cursor) params.set("cursor", cursor);
+  const page = await requestV2<NativeCatalogPage>(session, `/catalog?${params}`);
+  if (page.page?.has_more && !page.page.next_cursor) {
+    throw new Error("Silo returned another browse page without a continuation cursor.");
+  }
+  return {
+    items: (page.items ?? []).map(toItem).filter((item) => item.Id),
+    nextCursor: page.page?.has_more ? page.page.next_cursor : undefined
+  };
+}
+
+/** Cross-library filter options for global browse (`libraryId = null` on Android). */
+export async function getBrowseFilterOptions(session: Session): Promise<CatalogFilterOptions> {
+  const params = new URLSearchParams({ skip_technical: "true" });
+  const response = await requestV2<{
+    genres?: string[];
+    studios?: string[];
+    networks?: string[];
+    countries?: string[];
+    original_languages?: string[];
+    content_ratings?: string[];
+    authors?: string[];
+    narrators?: string[];
+    series?: string[];
+    technical?: {
+      resolutions?: string[];
+      audio_languages?: string[];
+      subtitle_languages?: string[];
+    };
+  }>(session, `/catalog/filters?${params}`);
+  return catalogFilterOptionsFromWire(response);
+}
+
+/**
+ * Android `SectionBrowseViewModel` full-row page: `GET /api/v2/catalog?source=section`.
+ * The Home row passes `libraryId = null` (scope `home`); a library row passes
+ * its library id (scope `library`). A row the profile can no longer see
+ * answers 404 (surfaced to the caller as `unavailable`).
+ */
+export async function getSectionBrowsePage(
+  session: Session,
+  args: { libraryId: number | string | null; sectionId: string },
+  cursor?: string,
+  limit = 50
+): Promise<{ items: SiloItem[]; nextCursor?: string }> {
+  if (!args.sectionId) throw new Error("Invalid section.");
+  if (args.libraryId !== null && Number(args.libraryId) <= 0) throw new Error("Invalid section.");
+  const params = new URLSearchParams({
+    source: "section",
+    scope: args.libraryId === null ? "home" : "library",
+    section_id: args.sectionId,
+    limit: String(limit)
+  });
+  if (args.libraryId !== null) params.set("library_id", String(args.libraryId));
+  if (cursor) params.set("cursor", cursor);
+  const page = await requestV2<NativeCatalogPage>(session, `/catalog?${params}`);
+  if (page.page?.has_more && !page.page.next_cursor) {
+    throw new Error("Silo returned another section page without a continuation cursor.");
+  }
+  return {
+    items: (page.items ?? []).map(toItem).filter((item) => item.Id),
+    nextCursor: page.page?.has_more ? page.page.next_cursor : undefined
+  };
+}
+
 export async function getCatalogFilterOptions(
   session: Session,
   libraryId: number | string,
@@ -855,20 +1011,7 @@ export async function getCatalogFilterOptions(
       subtitle_languages?: string[];
     };
   }>(session, `/catalog/filters?${params}`);
-  return {
-    genres: response.genres ?? [],
-    studios: response.studios ?? [],
-    networks: response.networks ?? [],
-    countries: response.countries ?? [],
-    originalLanguages: response.original_languages ?? [],
-    contentRatings: response.content_ratings ?? [],
-    authors: response.authors ?? [],
-    narrators: response.narrators ?? [],
-    series: response.series ?? [],
-    resolutions: response.technical?.resolutions ?? [],
-    audioLanguages: response.technical?.audio_languages ?? [],
-    subtitleLanguages: response.technical?.subtitle_languages ?? []
-  };
+  return catalogFilterOptionsFromWire(response);
 }
 
 type NativeCollection = {

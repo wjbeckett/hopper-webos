@@ -66,6 +66,10 @@ export type HomeRail = {
   id: string;
   title: string;
   featured?: boolean;
+  /** Server section id; with `libraryId` it addresses the row's full page. */
+  sectionId?: string;
+  /** Owning library for library rows; null for Home rows. */
+  libraryId?: number | null;
   items: SiloItem[];
 };
 

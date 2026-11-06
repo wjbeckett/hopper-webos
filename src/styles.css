@@ -4728,3 +4728,29 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 
 @keyframes home-fade-out-late { 0%, 40% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes home-wash-fade-out-late { 0%, 40% { opacity: .42; } 100% { opacity: 0; } }
+
+/* Row "Explore all" card (Android TvExploreAllCard): takes the row's card size, a tinted tile with an arrow disc. */
+.explore-all-card { display: block; }
+.explore-all-art.media-card-art {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(255,255,255,.08);
+  box-shadow: none;
+  transition: background .18s ease-out, box-shadow .18s ease-out;
+}
+.explore-all-card:focus .explore-all-art.media-card-art { background: rgba(255,255,255,.16); }
+.explore-all-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.14);
+}
+.explore-all-card:focus .explore-all-icon { background: rgba(255,255,255,.24); }
+.explore-all-icon svg { width: 24px; height: 24px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.explore-all-label { color: #fff; font-size: .95rem; font-weight: 600; }
+
