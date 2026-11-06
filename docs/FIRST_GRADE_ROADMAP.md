@@ -44,7 +44,7 @@ This client should feel like a native TV product, not a browser page packaged as
 1. Validate the implemented Silo protocol-v3 planner/replan contract against a live server and official client behavior.
 2. Token refresh with the exact Silo refresh endpoint and single-flight retry.
 3. Validate the Silo-native catalog endpoints and response models against the live server.
-4. Household profile creation/editing and full profile-management parity.
+4. Household profile creation/editing and full profile-management parity. Create/Edit (Manage mode, Add Profile, shared Android-style form, native v2 POST/PATCH acting as the household primary) is implemented and build-checked (2026-11-06); still outstanding: profile delete, live-server validation, and TV verification.
 5. Validate playback progress/stop reporting and watched-state thresholds against the live server.
 6. Subtitle styling plus intro/credits controls; validate the implemented audio/subtitle picker and chapters.
 7. Validate codec/container matrix on at least one older and one current LG webOS generation.
