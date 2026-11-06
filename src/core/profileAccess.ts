@@ -2,9 +2,8 @@
 // allowlist. Child only fills kid-safe defaults for limits not yet touched in
 // this form; turning Child off clears them.
 
+// Android's TV form shows no quality/subtitle controls, so only ratings are ported.
 export const TV_CONTENT_RATINGS = ["G", "PG", "PG-13", "R", "NC-17"];
-export const TV_QUALITY_OPTIONS = ["Auto", "4K", "1080p", "720p", "480p"];
-export const TV_SUBTITLE_MODES = ["Off", "Default", "Always", "Forced Only"];
 export const DEFAULT_CHILD_CONTENT_RATING = "PG";
 export const CHOOSE_A_LIBRARY_MESSAGE = "Select at least one library for this profile.";
 
@@ -92,27 +91,6 @@ export function updateAccessFields(limits: AccessLimits, loaded: AccessLimits, a
       : [];
   }
   return fields;
-}
-
-/** Android canonical subtitle wire value: "Off" is the explicit "off". */
-export function subtitleModeWire(label: string): string {
-  return label === "Off" ? "off" : label.toLowerCase().replace(/ /g, "_");
-}
-
-/** Android canonicalProfileQualityPreference: Auto (and synonyms) is null, i.e. omitted. */
-export function canonicalQuality(label: string | null): string | null {
-  const value = (label ?? "").trim().toLowerCase();
-  if (["", "auto", "original", "source", "max"].includes(value)) return null;
-  if (value === "4k" || value === "2160p") return "2160p";
-  return value;
-}
-
-/** Form label for a stored quality preference. */
-export function qualityLabel(wire: string | null): string {
-  const canonical = canonicalQuality(wire);
-  if (canonical === null) return "Auto";
-  if (canonical === "2160p") return "4K";
-  return canonical;
 }
 
 export function ratingCeilingCaption(ceiling: string | null): string {

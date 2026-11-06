@@ -742,7 +742,10 @@ export function installSpatialNavigation() {
       }
     }
 
-    if (current instanceof HTMLInputElement && current.type !== "button") {
+    // Profile form fields: Left/Right stay in the text; Up/Down move between
+    // fields by geometry (below) instead of jumping to the nav or a card.
+    if (current instanceof HTMLInputElement && current.closest(".profile-form") && (direction === "left" || direction === "right")) return;
+    if (current instanceof HTMLInputElement && current.type !== "button" && !current.closest(".profile-form")) {
       if (direction === "left" || direction === "right") return;
       if (direction === "down") {
         const firstCard = focusables(".content-screen .media-card, .content-screen .request-card, .content-screen .collection-card")[0];

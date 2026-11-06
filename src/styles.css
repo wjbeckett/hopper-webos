@@ -4754,3 +4754,165 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 .explore-all-icon svg { width: 24px; height: 24px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .explore-all-label { color: #fff; font-size: .95rem; font-weight: 600; }
 
+
+/* Profile management (Android TvProfileSelectionScreen manage mode + TvProfileForm). */
+.profile-selection-card { position: relative; }
+.profile-edit-badge {
+  position: absolute;
+  top: 74px;
+  left: calc(50% + 24px);
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(0,0,0,.72);
+  border: 2px solid rgba(255,255,255,.85);
+  font-size: 16px;
+}
+.profile-add-card .profile-avatar-large {
+  color: rgba(255,255,255,.8);
+  background: rgba(255,255,255,.08);
+  border: 2px dashed rgba(255,255,255,.28);
+  font-size: 2.6rem;
+}
+
+.content-screen.profile-form-screen {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 44px 64px 0;
+  overflow: hidden;
+}
+.profile-form-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+.profile-form-header h1 { margin: 0; font-size: 2.25rem; line-height: 1.1; }
+.profile-form-header p { margin: 6px 0 0; color: rgba(255,255,255,.6); }
+.profile-form-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 640px);
+  justify-content: center;
+  gap: 64px;
+}
+.profile-form-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding-top: 24px;
+  text-align: center;
+}
+.profile-form-preview .profile-avatar-large { width: 160px; height: 160px; font-size: 3.4rem; }
+.profile-form-preview strong { font-size: 1.35rem; }
+.profile-form-preview small { color: rgba(255,255,255,.5); }
+.profile-form-badges { display: flex; gap: 8px; min-height: 24px; }
+.profile-form-badges span {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.1);
+  font-size: .8rem;
+}
+/* One scroll for the whole column, as Android's form. */
+.profile-form {
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 8px 12px 72px;
+}
+.profile-form::-webkit-scrollbar { display: none; }
+.profile-form-section h2 {
+  margin: 0 0 10px;
+  color: rgba(255,255,255,.6);
+  font-size: .85rem;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.profile-form-section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.profile-form-section-head h2 { margin: 0; }
+.profile-form-chips { display: flex; flex-wrap: wrap; gap: 10px; }
+.profile-form-avatar-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+.profile-form-avatar {
+  aspect-ratio: 1;
+  padding: 0;
+  overflow: hidden;
+  border: 3px solid transparent;
+  border-radius: 50%;
+  background: rgba(255,255,255,.06);
+  transition: transform .16s ease-out;
+}
+.profile-form-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.profile-form-avatar.selected { border-color: var(--primary); }
+.profile-form-avatar:focus {
+  outline: none;
+  transform: scale(1.1);
+  box-shadow: 0 0 0 3px rgba(255,255,255,.96), 0 0 24px rgba(255,255,255,.28);
+}
+.profile-form-hint { display: grid; gap: 4px; margin: 0; padding: 16px; border-radius: 14px; background: rgba(255,255,255,.05); color: rgba(255,255,255,.6); }
+.profile-form-hint strong { color: #fff; }
+.profile-form-input {
+  width: 100%;
+  min-height: 52px;
+  padding: 0 18px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 12px;
+  color: #fff;
+  background: rgba(255,255,255,.06);
+  font: inherit;
+  font-size: 1.1rem;
+}
+.profile-form-input:focus { outline: none; border-color: #fff; box-shadow: 0 0 22px rgba(255,255,255,.22); }
+.profile-form-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 16px 18px;
+  border: 0;
+  border-radius: 14px;
+  color: #fff;
+  background: rgba(255,255,255,.06);
+  text-align: left;
+  font: inherit;
+}
+.profile-form-switch > span:first-child { display: grid; gap: 4px; }
+.profile-form-switch small { color: rgba(255,255,255,.6); }
+.profile-form-switch:focus { outline: none; color: #111214; background: #f4f4f2; }
+.profile-form-switch:focus small { color: rgba(0,0,0,.6); }
+.profile-form-toggle { position: relative; flex: 0 0 48px; height: 28px; border-radius: 999px; background: rgba(255,255,255,.22); transition: background .16s ease; }
+.profile-form-toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: transform .16s ease; }
+.profile-form-toggle.on { background: var(--primary); }
+.profile-form-toggle.on::after { transform: translateX(20px); }
+.profile-form-panel { display: grid; gap: 10px; padding: 18px; border-radius: 16px; background: rgba(255,255,255,.04); }
+.profile-form-panel h3 { margin: 6px 0 0; color: rgba(255,255,255,.6); font-size: .85rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.profile-form-ladder { display: flex; gap: 2px; }
+.profile-form-segment {
+  flex: 1 1 0;
+  min-height: 46px;
+  border: 0;
+  color: rgba(255,255,255,.75);
+  background: rgba(255,255,255,.07);
+  font: inherit;
+  font-weight: 600;
+}
+.profile-form-segment:first-child { border-radius: 12px 0 0 12px; }
+.profile-form-segment:last-child { border-radius: 0 12px 12px 0; }
+.profile-form-segment.selected { color: var(--primary-foreground); background: var(--primary); }
+.profile-form-segment:focus { position: relative; z-index: 1; outline: none; color: #111214; background: #f4f4f2; box-shadow: 0 0 20px rgba(255,255,255,.25); }
+.profile-form-caption { color: rgba(255,255,255,.55); }
+.profile-form-libraries { display: grid; gap: 4px; }
+.profile-form-retry { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.profile-form-submit { align-self: flex-start; }
+
