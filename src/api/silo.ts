@@ -466,6 +466,11 @@ export async function updateProfile(session: Session, manager: HouseholdManager,
   );
 }
 
+/** `DELETE /api/v2/profiles/{id}` (204). The server refuses the primary (409). */
+export async function deleteProfile(session: Session, manager: HouseholdManager, id: string): Promise<void> {
+  await requestApi(session, `/profiles/${encodeURIComponent(id)}`, { method: "DELETE", headers: managerHeaders(manager) }, "v2", false);
+}
+
 /** Server error text for a failed profile mutation, else the fallback (Android surfaces the server's message). */
 export function profileErrorMessage(cause: unknown, fallback: string): string {
   if (!(cause instanceof Error)) return fallback;

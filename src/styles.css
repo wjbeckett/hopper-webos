@@ -4757,6 +4757,9 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 
 /* Profile management (Android TvProfileSelectionScreen manage mode + TvProfileForm). */
 .profile-selection-card { position: relative; }
+/* A profile tile plus its manage-mode Delete button (Android TvProfileTile). */
+.profile-selection-cell { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; }
+.profile-delete-button { min-height: 0; padding: 6px 14px; font-size: .85rem; }
 .profile-edit-badge {
   position: absolute;
   top: 74px;

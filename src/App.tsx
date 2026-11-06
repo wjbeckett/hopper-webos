@@ -524,6 +524,19 @@ export default function App() {
       : { name: "details", item: current.item });
   }
 
+  /**
+   * Android clearProfile after deleting the active profile: its token is dead
+   * server-side, so drop the selection and require a fresh pick.
+   */
+  function clearDeletedProfile() {
+    if (!session) return;
+    const cleared: Session = { ...session, profileId: undefined, profileToken: undefined, profileAvatar: undefined };
+    serverRegistry.saveSession(cleared);
+    localStorage.removeItem(NAVIGATION_KEY);
+    setSession(cleared);
+    setProfileError("Choose who is watching.");
+  }
+
   function activateProfile(profile: SiloProfile, profileToken?: string) {
     if (!session) return;
     const nextSession: Session = {
@@ -579,6 +592,7 @@ export default function App() {
         onSelect={activateProfile}
         onChangeServer={changeServer}
         onSignOut={signOut}
+        onActiveProfileDeleted={clearDeletedProfile}
         fullScreen
       />
     );
@@ -711,6 +725,7 @@ export default function App() {
         onSelect={activateProfile}
         onChangeServer={changeServer}
         onSignOut={signOut}
+        onActiveProfileDeleted={clearDeletedProfile}
       />
     );
   }

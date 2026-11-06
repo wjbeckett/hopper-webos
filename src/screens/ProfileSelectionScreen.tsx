@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getHouseholdProfiles, verifyProfilePin, type HouseholdManager } from "../api/silo";
+import { deleteProfile, getHouseholdProfiles, profileErrorMessage, verifyProfilePin, type HouseholdManager } from "../api/silo";
 import { focusFirstContentCard } from "../navigation/spatial";
 import type { Session, SiloProfile } from "../types";
 import { LoadingState } from "../components/LoadingState";
@@ -13,7 +13,9 @@ function householdPrimary(profiles: SiloProfile[]): SiloProfile | undefined {
 const isBackKey = (event: KeyboardEvent) =>
   ["Escape", "Backspace", "Back", "GoBack", "BrowserBack"].includes(event.key) || event.keyCode === 461 || event.keyCode === 10009;
 
-export function ProfileSelectionScreen({ session, onSelect, onChangeServer, onSignOut, fullScreen = false }: {
+export function ProfileSelectionScreen({ session, onSelect, onChangeServer, onSignOut, onActiveProfileDeleted, fullScreen = false }: {
+  /** The deleted profile was this device's selection; its token is now dead server-side. */
+  onActiveProfileDeleted?: () => void;
   session: Session;
   onSelect: (profile: SiloProfile, profileToken?: string) => void;
   onChangeServer: () => void;
@@ -34,6 +36,8 @@ export function ProfileSelectionScreen({ session, onSelect, onChangeServer, onSi
   const [addAfterUnlock, setAddAfterUnlock] = useState(false);
   // Open editor: `{}` = create, `{ profileId }` = edit.
   const [editor, setEditor] = useState<{ profileId?: string } | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<SiloProfile | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const primary = householdPrimary(profiles);
   const canManage = primary !== undefined;
 
@@ -52,7 +56,7 @@ export function ProfileSelectionScreen({ session, onSelect, onChangeServer, onSi
     return () => cancelAnimationFrame(frame);
   }, [loading, selected, editor, profiles]);
 
-  // Back closes the editor, then the PIN pad, then leaves manage mode, before the app's Back.
+  // Back closes the delete prompt, the editor, then the PIN pad, then leaves manage mode, before the app's Back.
   useEffect(() => {
     if (!editor && !selected && !manager) return;
     const onKey = (event: KeyboardEvent) => {
@@ -64,13 +68,14 @@ export function ProfileSelectionScreen({ session, onSelect, onChangeServer, onSi
       }
       event.preventDefault();
       event.stopImmediatePropagation();
-      if (editor) setEditor(null);
+      if (deleteCandidate) dismissDelete();
+      else if (editor) setEditor(null);
       else if (selected) closePin();
       else setManager(null);
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [editor, selected, manager]);
+  }, [editor, selected, manager, deleteCandidate, deleting]);
 
   function closePin() {
     setSelected(null);
@@ -100,6 +105,32 @@ export function ProfileSelectionScreen({ session, onSelect, onChangeServer, onSi
       return;
     }
     startManaging({ profileId: primary.id }, thenAdd);
+  }
+
+  /** Closing the prompt hands focus back to the profile's Delete button. */
+  function dismissDelete() {
+    if (deleting) return;
+    const id = deleteCandidate?.id;
+    setDeleteCandidate(null);
+    if (id) requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-profile-delete="${CSS.escape(id)}"]`)?.focus());
+  }
+
+  /** Android confirmDelete: delete, drop a deleted active selection, reload. */
+  async function confirmDelete() {
+    const profile = deleteCandidate;
+    if (!profile || !manager || deleting) return;
+    setDeleting(true);
+    setError("");
+    try {
+      await deleteProfile(session, manager, profile.id);
+      if (profile.id === session.profileId) onActiveProfileDeleted?.();
+      setReloadToken(token => token + 1);
+    } catch (cause) {
+      setError(profileErrorMessage(cause, "Failed to delete profile"));
+    } finally {
+      setDeleting(false);
+      setDeleteCandidate(null);
+    }
   }
 
   function requestAddProfile() {
@@ -194,18 +225,33 @@ export function ProfileSelectionScreen({ session, onSelect, onChangeServer, onSi
         {loading ? <LoadingState label="Loading profiles" /> : profiles.length ? (
           <div className="profile-selection-grid">
             {profiles.map(profile => (
-              <button
-                key={profile.id}
-                type="button"
-                data-tv-focusable="true"
-                className={`profile-selection-card ${manager ? "managing" : ""}`}
-                aria-label={manager ? `Edit ${profile.name}` : `${profile.name}${profile.hasPin ? ", PIN protected" : ""}`}
-                onClick={() => chooseProfile(profile)}
-              >
-                <ProfileAvatar profile={profile} />
-                {manager ? <span className="profile-edit-badge" aria-hidden="true">✎</span> : null}
-                <strong>{profile.name}</strong>
-              </button>
+              <div key={profile.id} className="profile-selection-cell">
+                <button
+                  type="button"
+                  data-tv-focusable="true"
+                  data-profile-id={profile.id}
+                  className={`profile-selection-card ${manager ? "managing" : ""}`}
+                  aria-label={manager ? `Edit ${profile.name}` : `${profile.name}${profile.hasPin ? ", PIN protected" : ""}`}
+                  onClick={() => chooseProfile(profile)}
+                >
+                  <ProfileAvatar profile={profile} />
+                  {manager ? <span className="profile-edit-badge" aria-hidden="true">✎</span> : null}
+                  <strong>{profile.name}</strong>
+                </button>
+                {/* The server never deletes the primary (409 primary_profile_protected), so it isn't offered. */}
+                {manager && !profile.isPrimary ? (
+                  <button
+                    type="button"
+                    data-tv-focusable="true"
+                    data-profile-delete={profile.id}
+                    className="tv-button secondary compact profile-delete-button"
+                    aria-label={`Delete ${profile.name}`}
+                    onClick={() => setDeleteCandidate(profile)}
+                  >
+                    🗑 Delete
+                  </button>
+                ) : null}
+              </div>
             ))}
             {canManage ? (
               <button
@@ -236,6 +282,30 @@ export function ProfileSelectionScreen({ session, onSelect, onChangeServer, onSi
           <button type="button" data-tv-focusable="true" className="tv-button secondary compact" onClick={onSignOut}>Sign out</button>
         </footer>
       </section>
+      {deleteCandidate ? (
+        // Android TvOptionDialog: Delete profile / Cancel; Back dismisses.
+        <div className="details-more-scrim" data-modal="true" onClick={() => dismissDelete()}>
+          <div className="details-more" role="dialog" aria-label={`Delete ${deleteCandidate.name}`} onClick={event => event.stopPropagation()}>
+            <h2>Delete {deleteCandidate.name}?</h2>
+            <button
+              type="button"
+              data-tv-focusable="true"
+              autoFocus
+              className="browse-panel-row"
+              disabled={deleting}
+              onClick={() => void confirmDelete()}
+            >
+              <span className="browse-panel-row-copy">
+                {deleting ? "Deleting…" : "Delete profile"}
+                <small>This cannot be undone.</small>
+              </span>
+            </button>
+            <button type="button" data-tv-focusable="true" className="browse-panel-row" disabled={deleting} onClick={() => dismissDelete()}>
+              <span>Cancel</span>
+            </button>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
