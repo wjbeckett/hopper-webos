@@ -3,7 +3,7 @@ import { hydrateTitleArt } from "./core/titleArt";
 import { setThemeMusicPreferences, setThemeMusicSession } from "./core/themeMusic";
 import { useCallback, useEffect, useState } from "react";
 import { TopNav, type AppSection, type LibraryLanding } from "./components/TopNav";
-import { advanceShuffle, createShuffle, deleteShuffle, getCatalogItem, getEpisodes, getLibraries, getProfileAppearance, getRequestsFeatureStatus, getSeasons, restoreDefaultProfile } from "./api/silo";
+import { advanceShuffle, createShuffle, deleteShuffle, getCatalogItem, getEpisodes, getLibraries, getProfileAppearance, getRequestsFeatureStatus, getSeasons, getSetupStatus, restoreDefaultProfile } from "./api/silo";
 import { serverRegistry } from "./core/serverRegistry";
 import { focusTopNavigation, installSpatialNavigation } from "./navigation/spatial";
 import { DetailsScreen } from "./screens/DetailsScreen";
@@ -28,6 +28,7 @@ import { RequestsScreen } from "./screens/RequestsScreen";
 import { SearchScreen } from "./screens/SearchScreen";
 import { SeriesScreen } from "./screens/SeriesScreen";
 import { ServerSetupScreen } from "./screens/ServerSetupScreen";
+import { FirstRunSetupScreen } from "./screens/FirstRunSetupScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { SectionBrowseScreen, type SectionBrowseArgs } from "./screens/SectionBrowseScreen";
 import type { AudiobookGroup } from "./api/silo";
@@ -42,7 +43,7 @@ import { installClientLogCapture } from "./core/clientLogs";
 
 installClientLogCapture();
 
-type AuthRoute = "server-setup" | "device-login" | "password-login";
+type AuthRoute = "server-setup" | "first-run-setup" | "device-login" | "password-login";
 type DetailRoute =
   | { name: "main" }
   | { name: "details"; item: SiloItem; castIndex?: number }
@@ -420,6 +421,14 @@ export default function App() {
       setRoute({ name: "main" });
     } else {
       setAuthRoute("device-login");
+      // Android TvServerSetupViewModel: a fresh server (needs_setup) goes to
+      // first-run setup instead of sign-in. A failed probe keeps sign-in.
+      const url = entry.url;
+      getSetupStatus(url)
+        .then(needsSetup => {
+          if (needsSetup) setAuthRoute(current => (current === "device-login" && serverRegistry.active()?.url === url ? "first-run-setup" : current));
+        })
+        .catch(() => undefined);
     }
   }
 
@@ -540,6 +549,9 @@ export default function App() {
 
   if (!session) {
     if (authRoute === "server-setup") return <ServerSetupScreen onContinue={chooseServer} />;
+    if (authRoute === "first-run-setup") {
+      return <FirstRunSetupScreen serverUrl={serverUrl} onComplete={login} onChangeServer={() => setAuthRoute("server-setup")} />;
+    }
     if (authRoute === "password-login") {
       return (
         <LoginScreen

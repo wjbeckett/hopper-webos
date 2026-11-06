@@ -503,8 +503,12 @@ export async function authenticate(serverUrl: string, username: string, password
     body: JSON.stringify({ username, password })
   });
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-  const data = await response.json() as NativeAuth;
-  if (!data.access_token) throw new Error("Silo login did not return an access token.");
+  return sessionFromAuth(serverUrl, await response.json() as NativeAuth, username);
+}
+
+/** Login and first-run setup answer with the same token pair. */
+function sessionFromAuth(serverUrl: string, data: NativeAuth, username: string): Session {
+  if (!data.access_token) throw new Error("Silo did not return an access token.");
   return {
     serverUrl: normalizeServerUrl(serverUrl),
     accessToken: data.access_token,
@@ -514,6 +518,38 @@ export async function authenticate(serverUrl: string, username: string, password
     userId: String(data.user?.id ?? data.profile_id ?? ""),
     username: data.user?.username ?? data.user?.name ?? username
   };
+}
+
+/** Public `GET /api/v2/system/setup`: true on a fresh server with no accounts yet. */
+export async function getSetupStatus(serverUrl: string): Promise<boolean> {
+  const response = await fetch(apiUrl(serverUrl, "/system/setup", "v2"), { headers: { Accept: "application/json" } });
+  if (!response.ok) throw new Error(`Could not reach server: ${response.status} ${response.statusText}`);
+  const data = await response.json() as { needs_setup?: boolean };
+  return data.needs_setup === true;
+}
+
+/**
+ * First-run `POST /api/v2/auth/setup` (201): creates the admin account and
+ * signs in (Android TvSetupViewModel). Single attempt, never retried.
+ */
+export async function setupServer(serverUrl: string, username: string, email: string, password: string): Promise<Session> {
+  const response = await fetch(apiUrl(serverUrl, "/auth/setup", "v2"), {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({ username, email, password })
+  });
+  if (response.status !== 201) {
+    const body = await response.text().catch(() => "");
+    let message = "";
+    try {
+      const parsed = JSON.parse(body) as { message?: string; error?: string | { message?: string } };
+      message = parsed.message ?? (typeof parsed.error === "string" ? parsed.error : parsed.error?.message) ?? "";
+    } catch {
+      message = body;
+    }
+    throw new Error(message.trim() || "Setup failed");
+  }
+  return sessionFromAuth(serverUrl, await response.json() as NativeAuth, username);
 }
 
 function catalogPath(type: string, limit = 60, q?: string) {
