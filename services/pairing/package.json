@@ -1,0 +1,6 @@
+{
+  "name": "org.siloserver.webos.pairing",
+  "version": "1.0.0",
+  "description": "Silo companion pairing service",
+  "main": "service.js"
+}
