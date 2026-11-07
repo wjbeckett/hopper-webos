@@ -132,7 +132,7 @@ export function TopNav({
       }}
     >
       <div className="brand-mark" role="img" aria-label="Silo">
-        <img src="/silo-wordmark-white.svg" alt="" />
+        <img src={`${import.meta.env.BASE_URL}silo-wordmark-white.svg`} alt="" />
       </div>
       <nav aria-label="Primary navigation">
         {navItems.map((item) => {

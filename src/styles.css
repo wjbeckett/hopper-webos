@@ -4919,3 +4919,25 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 .profile-form-retry { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .profile-form-submit { align-self: flex-start; }
 
+
+/* Chrome 87 (webOS 22) lacks CSS aspect-ratio (added in 88): without it every
+   artwork box collapses to 0 height. Give the boxes their height with the
+   padding-top technique where aspect-ratio is unsupported. */
+@supports not (aspect-ratio: 1 / 1) {
+  .media-card-art::before,
+  .collection-card-art::before,
+  .episode-tile-art::before,
+  .detail-trailer-art::before,
+  .player-on-deck-art::before {
+    content: "";
+    display: block;
+    padding-top: 150%;
+  }
+  .media-card.landscape .media-card-art::before { padding-top: 56.25%; }
+  .media-card.browse.square .media-card-art::before { padding-top: 100%; }
+  .collection-card-art::before { padding-top: 62.5%; }
+  .episode-tile-art::before,
+  .detail-trailer-art::before,
+  .player-on-deck-art::before { padding-top: 56.25%; }
+  .detail-trailer-art { position: relative; display: block; }
+}
