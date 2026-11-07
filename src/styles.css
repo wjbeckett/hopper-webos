@@ -4941,3 +4941,10 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
   .player-on-deck-art::before { padding-top: 56.25%; }
   .detail-trailer-art { position: relative; display: block; }
 }
+
+/* webOS TV paint budget: full-screen radial gradients repaint on every rail scroll
+   and cost ~130ms/frame on a webOS 22 panel. Keep one linear scrim, drop the radials. */
+.webos .home-hero-backdrop { background: var(--background); }
+.webos .home-backdrop-scrim {
+  background: linear-gradient(180deg, rgba(7,8,9,.08) 0%, transparent 28%, rgba(7,8,9,.46) 43%, rgba(7,8,9,.78) 58%, var(--background) 82%);
+}

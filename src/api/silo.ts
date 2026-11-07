@@ -563,15 +563,49 @@ function catalogPath(type: string, limit = 60, q?: string) {
   return `/catalog?${params}`;
 }
 
+const imageWidthSlots = new Map<string, Promise<Set<string>>>();
+
+/**
+ * Android `ArtworkSizing`: the per-slot width parameters are sent only to a
+ * server that advertises them in `GET /images/capabilities`; an older server
+ * rejects unknown parameters. The answer is cached per server.
+ */
+async function acceptedWidthSlots(session: Session): Promise<Set<string>> {
+  const key = normalizeServerUrl(session.serverUrl);
+  let pending = imageWidthSlots.get(key);
+  if (!pending) {
+    pending = requestV2<{ state?: string; slot_width_params?: Record<string, string> }>(session, "/images/capabilities")
+      .then(caps => new Set(caps.state === "available" ? Object.keys(caps.slot_width_params ?? {}) : []))
+      .catch(() => new Set<string>());
+    imageWidthSlots.set(key, pending);
+  }
+  return pending;
+}
+
+/**
+ * Query string asking for artwork at the size the TV draws it, in CSS pixels
+ * on the 1920×1080 canvas: rail posters ~211, the hero/landscape backdrop
+ * 64% of the width, the title logo ~880. Empty when the server doesn't take widths.
+ */
+async function homeArtworkQuery(session: Session): Promise<string> {
+  const slots = await acceptedWidthSlots(session);
+  const widths: Array<[string, number]> = [["poster", 220], ["backdrop", 1230], ["logo", 880]];
+  const params = widths.filter(([slot]) => slots.has(slot)).map(([slot, px]) => `${slot}_width=${px}`);
+  return params.length ? `?${params.join("&")}` : "";
+}
+
 export async function getHomeRails(session: Session): Promise<HomeRail[]> {
-  const layout = await requestV2<NativeHomeLayout>(session, "/home/layout");
+  const [layout, artwork] = await Promise.all([
+    requestV2<NativeHomeLayout>(session, "/home/layout"),
+    homeArtworkQuery(session)
+  ]);
   const sections = layout.sections ?? [];
 
   const results = await Promise.allSettled(
     sections.map((section) =>
       requestV2<NativeHomeSectionResponse>(
         session,
-        `/home/sections/${encodeURIComponent(String(section.id))}/items`
+        `/home/sections/${encodeURIComponent(String(section.id))}/items${artwork}`
       )
     )
   );
@@ -822,12 +856,15 @@ export async function getLibraries(session: Session): Promise<SiloLibrary[]> {
 }
 
 export async function getLibraryRails(session: Session, library: SiloLibrary): Promise<HomeRail[]> {
-  const layout = await requestV2<NativeHomeLayout>(session, `/library/${library.id}/layout`);
+  const [layout, artwork] = await Promise.all([
+    requestV2<NativeHomeLayout>(session, `/library/${library.id}/layout`),
+    homeArtworkQuery(session)
+  ]);
   const sections = layout.sections ?? [];
   const results = await Promise.allSettled(sections.map((section) =>
     requestV2<NativeHomeSectionResponse>(
       session,
-      `/library/${library.id}/sections/${encodeURIComponent(String(section.id))}/items`
+      `/library/${library.id}/sections/${encodeURIComponent(String(section.id))}/items${artwork}`
     )
   ));
 
