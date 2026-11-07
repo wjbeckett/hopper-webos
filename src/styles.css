@@ -4944,6 +4944,26 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 
 /* webOS TV paint budget: full-screen radial gradients repaint on every rail scroll
    and cost ~130ms/frame on a webOS 22 panel. Keep one linear scrim, drop the radials. */
+/* TV lite mode, chosen from remote-key frame timing on a real webOS 22 TV:
+   - the blurred wash (blur(92px)) repaints a full-screen layer on every focus change;
+   - slide-in/out keyframes on the hero layer animate position over a huge surface.
+   Keep the look (hero art with its soft mask, tint, scrim) but crossfade with opacity only. */
+.webos .home-backdrop-wash { display: none; }
+.webos .home-backdrop-image {
+  animation: none !important;
+  transform: none;
+  will-change: opacity;
+}
+.webos .home-backdrop-image.current { opacity: 0; transition: opacity 220ms linear; }
+.webos .home-backdrop-image.current.loaded { opacity: 1; }
+.webos .home-backdrop-image.previous { opacity: 1; transition: opacity 220ms linear; }
+.webos .home-backdrop-image.previous.transitioning-out { opacity: 0; }
+.webos .home-backdrop-tint { transition: opacity 220ms linear; }
+/* Focus: a crisp ring plus a small lift. No blurred glow or drop shadow. */
+.webos .media-card:focus { transform: scale(1.06); }
+.webos .media-card:focus .media-card-art { box-shadow: 0 0 0 3px rgba(255,255,255,.92); }
+.webos .media-card:focus .artwork-full { transform: none; }
+.webos .artwork-revealed { animation: none; }
 .webos .home-hero-backdrop { background: var(--background); }
 .webos .home-backdrop-scrim {
   background: linear-gradient(180deg, rgba(7,8,9,.08) 0%, transparent 28%, rgba(7,8,9,.46) 43%, rgba(7,8,9,.78) 58%, var(--background) 82%);
