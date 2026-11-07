@@ -7,7 +7,8 @@ cd "$ROOT"
 npm run build
 mkdir -p release
 rm -f release/*.ipk
-ares-package -o release dist
+# The second path bundles the companion-pairing JS service into the IPK.
+ares-package -o release dist services/pairing
 
 echo
 echo "Created:"
