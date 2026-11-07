@@ -27,7 +27,9 @@ import { ProfileSelectionScreen } from "./screens/ProfileSelectionScreen";
 import { RequestsScreen } from "./screens/RequestsScreen";
 import { SearchScreen } from "./screens/SearchScreen";
 import { SeriesScreen } from "./screens/SeriesScreen";
+import { PhoneSetupScreen } from "./screens/PhoneSetupScreen";
 import { ServerSetupScreen } from "./screens/ServerSetupScreen";
+import { pairingAvailable } from "./platform/pairing";
 import { FirstRunSetupScreen } from "./screens/FirstRunSetupScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { SectionBrowseScreen, type SectionBrowseArgs } from "./screens/SectionBrowseScreen";
@@ -43,7 +45,7 @@ import { installClientLogCapture } from "./core/clientLogs";
 
 installClientLogCapture();
 
-type AuthRoute = "server-setup" | "first-run-setup" | "device-login" | "password-login";
+type AuthRoute = "phone-setup" | "server-setup" | "first-run-setup" | "device-login" | "password-login";
 type DetailRoute =
   | { name: "main" }
   | { name: "details"; item: SiloItem; castIndex?: number }
@@ -117,7 +119,9 @@ function initialState() {
   if (import.meta.env.DEV) {
     return { session: null, serverUrl: DEV_SERVER_URL, auth: "device-login" as AuthRoute };
   }
-  return { session: null, serverUrl: "", auth: "server-setup" as AuthRoute };
+  // No server yet: lead with phone pairing (Android's phone-first setup), but
+  // only where the pairing service exists. Browsers keep manual entry.
+  return { session: null, serverUrl: "", auth: (pairingAvailable() ? "phone-setup" : "server-setup") as AuthRoute };
 }
 
 let launchSelectionRequired = requiresSelectionAtLaunch();
@@ -561,6 +565,7 @@ export default function App() {
   }
 
   if (!session) {
+    if (authRoute === "phone-setup") return <PhoneSetupScreen onPaired={login} onManual={() => setAuthRoute("server-setup")} />;
     if (authRoute === "server-setup") return <ServerSetupScreen onContinue={chooseServer} />;
     if (authRoute === "first-run-setup") {
       return <FirstRunSetupScreen serverUrl={serverUrl} onComplete={login} onChangeServer={() => setAuthRoute("server-setup")} />;
