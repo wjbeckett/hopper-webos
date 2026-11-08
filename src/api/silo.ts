@@ -594,6 +594,15 @@ async function homeArtworkQuery(session: Session): Promise<string> {
   return params.length ? `?${params.join("&")}` : "";
 }
 
+/**
+ * Android `ArtworkSurface.BROWSE`: grid posters are requested at the size drawn
+ * (first page only; cursors carry the sizing). Empty when the server doesn't take widths.
+ */
+async function browseArtworkParams(session: Session): Promise<Array<[string, string]>> {
+  const slots = await acceptedWidthSlots(session);
+  return slots.has("poster") ? [["poster_width", "260"]] : [];
+}
+
 export async function getHomeRails(session: Session): Promise<HomeRail[]> {
   const [layout, artwork] = await Promise.all([
     requestV2<NativeHomeLayout>(session, "/home/layout"),
@@ -954,8 +963,11 @@ export async function getLibraryItemsPage(
 ): Promise<{ items: SiloItem[]; nextCursor?: string }> {
   const collectionOrder = sort === "collection";
   const includeLibrary = !scope || Boolean(type);
+  // Sized posters on the first page only, as Android does; cursors carry the sizing.
+  const sizing = cursor ? [] : await browseArtworkParams(session);
   if (groups.length) {
-    const page = await requestV2<NativeCatalogPage>(session, "/catalog/query", {
+    const sizedQuery = sizing.length ? `?${new URLSearchParams(sizing)}` : "";
+    const page = await requestV2<NativeCatalogPage>(session, `/catalog/query${sizedQuery}`, {
       method: "POST",
       body: JSON.stringify({
         source: scope?.source ?? "query",
@@ -986,6 +998,7 @@ export async function getLibraryItemsPage(
   if (scope) params.set("collection_id", scope.collectionId);
   if (includeLibrary) params.set("library_id", String(libraryId));
   if (cursor) params.set("cursor", cursor);
+  for (const [name, value] of sizing) params.set(name, value);
   if (type) params.set("type", type.toLowerCase());
   if (namePrefix) params.set("name_prefix", namePrefix);
   if (!collectionOrder) params.set("sort", order === "desc" ? `-${sort}` : sort);
@@ -1060,8 +1073,10 @@ export async function getBrowseCatalogPage(
   if (genre) groups.push({ match: "all", rules: [{ field: "genre", op: "contains", value: genre }] });
   if (contentRating) groups.push({ match: "all", rules: [{ field: "content_rating", op: "is", value: contentRating }] });
 
+  const sizing = cursor ? [] : await browseArtworkParams(session);
   if (groups.length) {
-    const page = await requestV2<NativeCatalogPage>(session, "/catalog/query", {
+    const sizedQuery = sizing.length ? `?${new URLSearchParams(sizing)}` : "";
+    const page = await requestV2<NativeCatalogPage>(session, `/catalog/query${sizedQuery}`, {
       method: "POST",
       body: JSON.stringify({
         source: "query",
@@ -1088,6 +1103,7 @@ export async function getBrowseCatalogPage(
     sort: order === "desc" ? `-${sort}` : sort
   });
   if (cursor) params.set("cursor", cursor);
+  for (const [name, value] of sizing) params.set(name, value);
   const page = await requestV2<NativeCatalogPage>(session, `/catalog?${params}`);
   if (page.page?.has_more && !page.page.next_cursor) {
     throw new Error("Silo returned another browse page without a continuation cursor.");
@@ -1142,6 +1158,7 @@ export async function getSectionBrowsePage(
   });
   if (args.libraryId !== null) params.set("library_id", String(args.libraryId));
   if (cursor) params.set("cursor", cursor);
+  else for (const [name, value] of await browseArtworkParams(session)) params.set(name, value);
   const page = await requestV2<NativeCatalogPage>(session, `/catalog?${params}`);
   if (page.page?.has_more && !page.page.next_cursor) {
     throw new Error("Silo returned another section page without a continuation cursor.");

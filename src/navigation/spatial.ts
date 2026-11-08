@@ -38,6 +38,9 @@ const RAIL_PIN_MS = 100;
 const railAnimations = new WeakMap<HTMLElement, number>();
 const railInlineStyles = new WeakMap<HTMLElement, { snap: string; behavior: string }>();
 let railStepUntil = 0;
+/** Presses closer together than this skip the row slide. */
+const RAIL_RAPID_MS = 150;
+let lastRailPinAt = 0;
 
 function easeOut(t: number) {
   return 1 - (1 - t) * (1 - t);
@@ -62,6 +65,18 @@ function pinRailItem(rail: HTMLElement, element: HTMLElement) {
   if (running) cancelAnimationFrame(running);
   if (Math.abs(distance) < 1) return;
   const began = performance.now();
+  // Rapid presses (or a held key) jump the row with no slide: animating every step is what janks on the TV.
+  const rapid = began - lastRailPinAt < RAIL_RAPID_MS;
+  lastRailPinAt = began;
+  if (rapid) {
+    const inline = railInlineStyles.get(rail);
+    const previousBehavior = rail.style.scrollBehavior;
+    rail.style.scrollBehavior = "auto";
+    rail.scrollLeft = target;
+    rail.style.scrollBehavior = inline ? inline.behavior : previousBehavior;
+    railStepUntil = 0;
+    return;
+  }
   railStepUntil = began + RAIL_PIN_MS;
   if (!railInlineStyles.has(rail)) railInlineStyles.set(rail, { snap: rail.style.scrollSnapType, behavior: rail.style.scrollBehavior });
   const original = railInlineStyles.get(rail)!;
