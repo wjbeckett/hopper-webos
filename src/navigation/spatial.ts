@@ -70,7 +70,9 @@ function pinRailItem(rail: HTMLElement, element: HTMLElement) {
   rail.style.scrollSnapType = "none";
   rail.style.scrollBehavior = "auto";
   const tick = (now: number) => {
-    const progress = Math.min(1, (now - began) / RAIL_PIN_MS);
+    // The frame timestamp can predate `began` (the key was handled mid-frame); a negative
+    // progress would overshoot backwards, so clamp both ends.
+    const progress = Math.max(0, Math.min(1, (now - began) / RAIL_PIN_MS));
     rail.scrollLeft = start + distance * easeOut(progress);
     if (progress < 1) railAnimations.set(rail, requestAnimationFrame(tick));
     else {
