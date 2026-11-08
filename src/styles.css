@@ -4980,6 +4980,9 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
   overflow: hidden;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+  /* Room for descenders (y, g, p): line-height 1 plus overflow:hidden clipped their tails. */
+  line-height: 1.12;
+  padding-bottom: .08em;
 }
 
 /* Cold-launch splash: opaque cover over the app while Home loads underneath. */

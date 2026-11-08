@@ -683,6 +683,23 @@ export function installSpatialNavigation() {
       return;
     }
 
+    // Home rails: Up/Down always lands in the neighbouring rail (its first card), whatever the
+    // sideways offset. Distance scoring skips sparse rows (wide Continue Watching cards) once the
+    // middle lock has scrolled the focused card away from the left edge.
+    if (mediaRail && mediaRail.closest(".home-rails") && (direction === "up" || direction === "down")) {
+      const rails = Array.from(mediaRail.closest<HTMLElement>(".home-rails")!.querySelectorAll<HTMLElement>(".media-rail"))
+        .filter(rail => rail.offsetParent !== null);
+      const neighbour = rails[rails.indexOf(mediaRail) + (direction === "down" ? 1 : -1)];
+      if (neighbour) {
+        const firstCard = focusables(".media-card").find(card => neighbour.contains(card));
+        if (firstCard) {
+          focusElement(firstCard);
+          event.preventDefault();
+          return;
+        }
+      }
+    }
+
     const detailRow = current.closest<HTMLElement>(".detail-cast-track, .detail-trailer-track, .episode-rail");
     if (detailRow && (direction === "left" || direction === "right")) {
       const rowItems = focusables("[data-tv-focusable='true']").filter(item => item.closest(".detail-cast-track, .detail-trailer-track, .episode-rail") === detailRow);
