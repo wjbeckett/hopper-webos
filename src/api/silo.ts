@@ -609,7 +609,6 @@ export async function getHomeRails(session: Session): Promise<HomeRail[]> {
     homeArtworkQuery(session)
   ]);
   const sections = layout.sections ?? [];
-  const cardArtwork = await wideCardArtworkQuery(session);
 
   const results = await Promise.allSettled(
     sections.map((section) =>
@@ -618,16 +617,6 @@ export async function getHomeRails(session: Session): Promise<HomeRail[]> {
         `/home/sections/${encodeURIComponent(String(section.id))}/items${artwork}`
       )
     )
-  );
-  // Wide rails draw 410px cards but share a URL sized for the 1230px hero: ask for a second,
-  // card-sized copy so each card decodes a fraction of the pixels. Best effort.
-  const cardResults = await Promise.allSettled(
-    sections.map((section) => cardArtwork && isWideSection(section)
-      ? requestV2<NativeHomeSectionResponse>(
-        session,
-        `/home/sections/${encodeURIComponent(String(section.id))}/items${cardArtwork}`
-      )
-      : Promise.resolve<NativeHomeSectionResponse | null>(null))
   );
 
   const failed = results.filter((result) => result.status === "rejected");
@@ -643,14 +632,6 @@ export async function getHomeRails(session: Session): Promise<HomeRail[]> {
     const nativeItems = result.status === "fulfilled"
       ? result.value.items ?? []
       : [];
-    const cardResult = cardResults[index];
-    const small = new Map<string, string>();
-    if (cardResult.status === "fulfilled" && cardResult.value) {
-      for (const raw of cardResult.value.items ?? []) {
-        const item = toItem(raw);
-        if (item.Id && item.BackdropUrl) small.set(item.Id, item.BackdropUrl);
-      }
-    }
     return {
       id: String(section.id),
       title: section.title ?? section.section_type ?? "Silo",
@@ -658,26 +639,8 @@ export async function getHomeRails(session: Session): Promise<HomeRail[]> {
       sectionId: String(section.id),
       libraryId: null,
       items: nativeItems.map(toItem).filter((item) => item.Id)
-        .map((item) => small.has(item.Id) ? { ...item, CardBackdropUrl: small.get(item.Id) } : item)
     };
   }).filter((rail) => rail.items.length > 0);
-}
-
-/** Rails MediaRail draws as wide 16:9 cards (Continue Watching and featured rows). */
-function isWideSection(section: { title?: string; section_type?: string; featured?: boolean }) {
-  const type = section.section_type ?? "";
-  return Boolean(section.featured)
-    || type === "continue_watching" || type === "in_progress"
-    || (section.title ?? "").toLocaleLowerCase().includes("continue watching");
-}
-
-/** Card-sized backdrop query (410 CSS px wide cards); empty when the server takes no widths. */
-async function wideCardArtworkQuery(session: Session): Promise<string> {
-  const slots = await acceptedWidthSlots(session);
-  const params: string[] = [];
-  if (slots.has("poster")) params.push("poster_width=220");
-  if (slots.has("backdrop")) params.push("backdrop_width=640");
-  return params.length ? `?${params.join("&")}` : "";
 }
 
 export async function getForYouRails(session: Session): Promise<HomeRail[]> {
@@ -1500,11 +1463,6 @@ export function artUrl(session: Session, item: SiloItem): string {
 
 export function backdropUrl(session: Session, item: SiloItem | string): string {
   return typeof item === "string" ? "" : assetUrl(session, item.BackdropUrl ?? item.PosterUrl);
-}
-
-/** Backdrop for a wide rail card: the card-sized copy when the server returned one. */
-export function cardBackdropUrl(session: Session, item: SiloItem): string {
-  return item.CardBackdropUrl ? assetUrl(session, item.CardBackdropUrl) : backdropUrl(session, item);
 }
 
 export function mediaLogoUrl(session: Session, item: SiloItem): string {
