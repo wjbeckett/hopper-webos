@@ -671,12 +671,12 @@ function isWideSection(section: { title?: string; section_type?: string; feature
     || (section.title ?? "").toLocaleLowerCase().includes("continue watching");
 }
 
-/** Card-sized backdrop query (410 CSS px wide cards); empty when the server takes no widths. */
+/** Card-sized backdrop query (w300 is the only smaller bucket the server has); empty when the server takes no widths. */
 async function wideCardArtworkQuery(session: Session): Promise<string> {
   const slots = await acceptedWidthSlots(session);
   const params: string[] = [];
   if (slots.has("poster")) params.push("poster_width=220");
-  if (slots.has("backdrop")) params.push("backdrop_width=640");
+  if (slots.has("backdrop")) params.push("backdrop_width=300");
   return params.length ? `?${params.join("&")}` : "";
 }
 
