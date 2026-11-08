@@ -1,4 +1,4 @@
-import { backdropUrl, imageUrl } from "../api/silo";
+import { cardBackdropUrl, imageUrl } from "../api/silo";
 import type { HomeRail, Session, SiloItem } from "../types";
 import { MediaCard } from "./MediaCard";
 
@@ -33,7 +33,7 @@ export function MediaRail({
             key={`${rail.id}-${item.Id}`}
             session={session}
             item={item}
-            image={landscape ? backdropUrl(session, item) : imageUrl(session, item)}
+            image={landscape ? cardBackdropUrl(session, item) : imageUrl(session, item)}
             landscape={landscape}
             onOpen={() => onOpen(item)}
           />
