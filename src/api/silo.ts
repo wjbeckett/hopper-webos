@@ -963,8 +963,8 @@ export async function getLibraryItemsPage(
 ): Promise<{ items: SiloItem[]; nextCursor?: string }> {
   const collectionOrder = sort === "collection";
   const includeLibrary = !scope || Boolean(type);
-  // Sized posters on the first page only, as Android does; cursors carry the sizing.
-  const sizing = cursor ? [] : await browseArtworkParams(session);
+  // The server binds a listing's cursors to the widths it started with, so every page resends them.
+  const sizing = await browseArtworkParams(session);
   if (groups.length) {
     const sizedQuery = sizing.length ? `?${new URLSearchParams(sizing)}` : "";
     const page = await requestV2<NativeCatalogPage>(session, `/catalog/query${sizedQuery}`, {
@@ -1073,7 +1073,7 @@ export async function getBrowseCatalogPage(
   if (genre) groups.push({ match: "all", rules: [{ field: "genre", op: "contains", value: genre }] });
   if (contentRating) groups.push({ match: "all", rules: [{ field: "content_rating", op: "is", value: contentRating }] });
 
-  const sizing = cursor ? [] : await browseArtworkParams(session);
+  const sizing = await browseArtworkParams(session);
   if (groups.length) {
     const sizedQuery = sizing.length ? `?${new URLSearchParams(sizing)}` : "";
     const page = await requestV2<NativeCatalogPage>(session, `/catalog/query${sizedQuery}`, {
@@ -1158,7 +1158,7 @@ export async function getSectionBrowsePage(
   });
   if (args.libraryId !== null) params.set("library_id", String(args.libraryId));
   if (cursor) params.set("cursor", cursor);
-  else for (const [name, value] of await browseArtworkParams(session)) params.set(name, value);
+  for (const [name, value] of await browseArtworkParams(session)) params.set(name, value);
   const page = await requestV2<NativeCatalogPage>(session, `/catalog?${params}`);
   if (page.page?.has_more && !page.page.next_cursor) {
     throw new Error("Silo returned another section page without a continuation cursor.");
