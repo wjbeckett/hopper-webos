@@ -41,6 +41,10 @@ import { publishRailsChanged } from "./core/watchState";
 import { connectEventsSocket } from "./api/events";
 import type { HomeRail, Session, SiloCollection, SiloItem, SiloLibrary, SiloProfile } from "./types";
 import { LoadingState } from "./components/LoadingState";
+import { StartupSplash } from "./components/StartupSplash";
+
+// Plays once per launch (a cold start), like Android TV's startup splash.
+let splashPending = true;
 import { installClientLogCapture } from "./core/clientLogs";
 
 installClientLogCapture();
@@ -144,6 +148,11 @@ export default function App() {
   const [profileHydrated, setProfileHydrated] = useState(false);
   const [route, setRoute] = useState<DetailRoute>({ name: "main" });
   const [navigationRestored, setNavigationRestored] = useState(false);
+  // Cold launches with a saved session only; a first login never plays it.
+  const [splashVisible, setSplashVisible] = useState(() => {
+    if (!initial.session) splashPending = false;
+    return splashPending;
+  });
 
   useEffect(() => installSpatialNavigation(), [route.name, authRoute, session]);
 
@@ -855,6 +864,7 @@ export default function App() {
         onChangeServer={changeServer}
       />}
       {body}
+      {splashVisible ? <StartupSplash onDone={() => { splashPending = false; setSplashVisible(false); }} /> : null}
     </div>
   );
 }
