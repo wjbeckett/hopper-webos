@@ -183,7 +183,8 @@ export function FeaturedRailsScreen({
   function showHero(item: SiloItem, railIndex: number) {
     const previousItem = focusedItemRef.current;
     const previousRailIndex = focusedRailIndexRef.current;
-    if (previousItem && (previousItem.Id !== item.Id || previousRailIndex !== railIndex)) {
+    // TV: swap the hero copy in place; mounting and animating an outgoing copy per focus change costs frames.
+    if (!isTv() && previousItem && (previousItem.Id !== item.Id || previousRailIndex !== railIndex)) {
       const direction = previousRailIndex !== undefined && railIndex !== previousRailIndex
         ? railIndex > previousRailIndex ? "down" : "up"
         : "fade";

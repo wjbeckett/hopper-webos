@@ -4967,6 +4967,12 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 .webos .home-hero-backdrop { background: var(--background); }
 /* Plex-style settle: while focus is moving the backdrop sits washed out (gradient and copy stay);
    it fades back in once focus rests. Opacity on an already-composited layer only. */
+/* Hero copy (title, metadata, overview) swaps in place: no roll animation, no text blur shadow,
+   and its own paint scope so a text change never repaints the rows. */
+.webos .home-featured { contain: layout paint style; }
+.webos .home-featured-copy,
+.webos .home-featured-copy * { animation: none !important; transition: none !important; text-shadow: none; }
+.webos .home-featured-copy { text-shadow: none; }
 /* The row slide is driven from script; native smooth scrolling would fight it. */
 .webos .rail-track { scroll-behavior: auto; scroll-snap-type: none; }
 .webos .home-backdrop-image.previous { display: none; }
