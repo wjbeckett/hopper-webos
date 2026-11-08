@@ -207,6 +207,11 @@ export function isScrolling(): boolean {
 }
 
 export function onScrollSettled(listener: () => void): () => void {
+  // Tracking is lazy; a listener alone must also start it or it never fires.
+  if (!trackingInstalled) {
+    trackingInstalled = true;
+    installScrollTracking();
+  }
   settleListeners.add(listener);
   return () => {
     settleListeners.delete(listener);

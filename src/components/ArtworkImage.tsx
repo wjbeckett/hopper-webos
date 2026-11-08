@@ -72,15 +72,21 @@ export function ArtworkImage({ url, thumbhash, kind, className, hideImage, onErr
   const requestedAtRef = useRef(0);
   const imgRef = useRef<HTMLImageElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const loadedRef = useRef(false);
   // TV: the file is requested only for cards near the screen, and only while the remote is quiet.
   const [wanted, setWanted] = useState(() => !isTvDevice());
 
   useEffect(() => {
-    if (wanted) return;
+    if (!isTvDevice()) return;
     let prefetchTimer: ReturnType<typeof setTimeout> | undefined;
+    const clearTimer = () => {
+      if (prefetchTimer) clearTimeout(prefetchTimer);
+      prefetchTimer = undefined;
+    };
     const check = () => {
       const el = wrapRef.current;
-      if (!el || isNavigating()) return false;
+      if (!el || isNavigating()) return;
+      if (loadedRef.current) return; // already loaded: keep it
       const r = el.getBoundingClientRect();
       const visible = r.right > 0 && r.left < window.innerWidth
         && r.bottom > 0 && r.top < window.innerHeight;
@@ -88,29 +94,34 @@ export function ArtworkImage({ url, thumbhash, kind, className, hideImage, onErr
         && r.bottom > -NEAR_Y && r.top < window.innerHeight + NEAR_Y;
       if (visible) {
         // On screen: request now, ahead of everything else.
-        if (prefetchTimer) clearTimeout(prefetchTimer);
+        clearTimer();
         setWanted(true);
-      } else if (near && !prefetchTimer) {
+      } else if (near) {
         // Just off screen: wait so the visible cards get the connection and decoder first.
-        prefetchTimer = setTimeout(() => setWanted(true), PREFETCH_DELAY_MS);
+        if (!prefetchTimer) prefetchTimer = setTimeout(() => { prefetchTimer = undefined; setWanted(true); }, PREFETCH_DELAY_MS);
+      } else {
+        // Scrolled far away before it loaded: drop the request so it stops
+        // queueing ahead of the cards that are on screen now.
+        clearTimer();
+        setWanted(false);
       }
-      return visible || near;
     };
     const frame = requestAnimationFrame(check);
     const offNav = onNavigationSettled(check);
     const offScroll = onScrollSettled(check);
     return () => {
       cancelAnimationFrame(frame);
-      if (prefetchTimer) clearTimeout(prefetchTimer);
+      clearTimer();
       offNav();
       offScroll();
     };
-  }, [wanted]);
+  }, []);
   const presentedRef = useRef(false);
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
 
   useEffect(() => {
+    loadedRef.current = false;
     setFailed(false);
     setReady(false);
     setPresented(false);
@@ -170,6 +181,7 @@ export function ArtworkImage({ url, thumbhash, kind, className, hideImage, onErr
           height={height}
           draggable={false}
           onLoad={() => {
+            loadedRef.current = true;
             const img = imgRef.current;
             const cached = Boolean(img && img.complete && img.naturalWidth > 0);
             if (cached || !isScrolling()) present();

@@ -7,6 +7,9 @@
   "title": "Silo",
   "icon": "icon.png",
   "largeIcon": "largeIcon.png",
+  "splashBackground": "splash.png",
+  "bgImage": "splash.png",
+  "bgColor": "#000000",
   "requiredACG": [],
   "resolution": "1920x1080",
   "disableBackHistoryAPI": true
