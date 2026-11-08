@@ -43,6 +43,8 @@ export type SiloItem = {
   BackdropImageTags?: string[];
   PosterUrl?: string;
   BackdropUrl?: string;
+  /** Smaller backdrop for wide rail cards (the hero keeps BackdropUrl). */
+  CardBackdropUrl?: string;
   PosterThumbhash?: string;
   BackdropThumbhash?: string;
   PosterIsEpisodeStill?: boolean;
