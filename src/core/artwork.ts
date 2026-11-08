@@ -213,6 +213,46 @@ export function onScrollSettled(listener: () => void): () => void {
   };
 }
 
+/** LG webOS TV panels: decode and composite budget is far below a desktop browser. */
+export const isTvDevice = (): boolean =>
+  typeof navigator !== "undefined" && /Web0S|webOS/i.test(navigator.userAgent);
+
+/**
+ * Remote navigation tracker (TV only use): true from an arrow key until it has been
+ * quiet for NAV_IDLE_MS. Posters hold their file load while it is true, then come in
+ * together once the user stops, as Plex does.
+ */
+const NAV_IDLE_MS = 180;
+let navigating = false;
+let navIdleTimer: ReturnType<typeof setTimeout> | null = null;
+let navTrackingInstalled = false;
+const navSettledListeners = new Set<() => void>();
+
+function installNavTracking() {
+  if (navTrackingInstalled || typeof window === "undefined") return;
+  navTrackingInstalled = true;
+  window.addEventListener("keydown", (event) => {
+    if (!event.key.startsWith("Arrow")) return;
+    navigating = true;
+    if (navIdleTimer) clearTimeout(navIdleTimer);
+    navIdleTimer = setTimeout(() => {
+      navigating = false;
+      for (const listener of [...navSettledListeners]) listener();
+    }, NAV_IDLE_MS);
+  }, { capture: true, passive: true });
+}
+
+export function isNavigating(): boolean {
+  installNavTracking();
+  return navigating;
+}
+
+export function onNavigationSettled(listener: () => void): () => void {
+  installNavTracking();
+  navSettledListeners.add(listener);
+  return () => { navSettledListeners.delete(listener); };
+}
+
 /** Milliseconds of wait that still present instantly (Android: 100ms). */
 export const INSTANT_REVEAL_MS = 100;
 /** Fade the full image in over this long once presented (Android: 300ms). */

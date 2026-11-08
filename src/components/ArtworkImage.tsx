@@ -2,10 +2,17 @@ import { useEffect, useRef, useState } from "react";
 import {
   INSTANT_REVEAL_MS,
   REVEAL_CROSSFADE_MS,
+  isNavigating,
   isScrolling,
+  isTvDevice,
+  onNavigationSettled,
   onScrollSettled,
   thumbhashToDataURL,
 } from "../core/artwork";
+
+/** How far past the screen edge (px) a card still counts as near enough to load on the TV. */
+const NEAR_X = 520;
+const NEAR_Y = 420;
 
 export type DefaultArtworkKind = "Video" | "Tv" | "Audiobook" | "Book";
 
@@ -62,6 +69,26 @@ export function ArtworkImage({ url, thumbhash, kind, className, hideImage, onErr
   const [instant, setInstant] = useState(false);
   const requestedAtRef = useRef(0);
   const imgRef = useRef<HTMLImageElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  // TV: the file is requested only for cards near the screen, and only while the remote is quiet.
+  const [wanted, setWanted] = useState(() => !isTvDevice());
+
+  useEffect(() => {
+    if (wanted) return;
+    const check = () => {
+      const el = wrapRef.current;
+      if (!el || isNavigating()) return false;
+      const r = el.getBoundingClientRect();
+      const near = r.right > -NEAR_X && r.left < window.innerWidth + NEAR_X
+        && r.bottom > -NEAR_Y && r.top < window.innerHeight + NEAR_Y;
+      if (near) setWanted(true);
+      return near;
+    };
+    const frame = requestAnimationFrame(check);
+    const offNav = onNavigationSettled(check);
+    const offScroll = onScrollSettled(check);
+    return () => { cancelAnimationFrame(frame); offNav(); offScroll(); };
+  }, [wanted]);
   const presentedRef = useRef(false);
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
@@ -100,10 +127,10 @@ export function ArtworkImage({ url, thumbhash, kind, className, hideImage, onErr
 
   const hasUrl = Boolean(url && url.trim());
   const failedArtwork = failed && !hasUsableThumbhash;
-  const showCover = hasUrl && !failed;
+  const showCover = hasUrl && !failed && wanted;
 
   return (
-    <div className={`artwork-image ${className ?? ""}`}>
+    <div ref={wrapRef} className={`artwork-image ${className ?? ""}`}>
       {placeholder ? (
         <img className="artwork-placeholder" src={placeholder} alt="" aria-hidden="true" draggable={false} />
       ) : null}

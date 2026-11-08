@@ -508,7 +508,8 @@ function FeaturedCopy({
   onLogoLoad?: () => void;
   onLogoError?: () => void;
 }) {
-  const logo = mediaLogoUrl(session, item);
+  // TV (like Plex): a plain text title. No logo fetch or decode per focus change.
+  const logo = isTv() ? "" : mediaLogoUrl(session, item);
   const hasLogo = Boolean(logo && failedLogoFor !== item.Id);
   const isEpisode = item.Type?.toLowerCase() === "episode";
   const title = isEpisode ? item.SeriesName ?? item.Name : item.Name;
