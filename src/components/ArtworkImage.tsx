@@ -13,6 +13,8 @@ import {
 /** How far past the screen edge (px) a card still counts as near enough to load on the TV. */
 const NEAR_X = 520;
 const NEAR_Y = 420;
+/** Off-screen (but near) cards wait this long after the remote settles, so visible posters load first. */
+const PREFETCH_DELAY_MS = 450;
 
 export type DefaultArtworkKind = "Video" | "Tv" | "Audiobook" | "Book";
 
@@ -75,19 +77,34 @@ export function ArtworkImage({ url, thumbhash, kind, className, hideImage, onErr
 
   useEffect(() => {
     if (wanted) return;
+    let prefetchTimer: ReturnType<typeof setTimeout> | undefined;
     const check = () => {
       const el = wrapRef.current;
       if (!el || isNavigating()) return false;
       const r = el.getBoundingClientRect();
+      const visible = r.right > 0 && r.left < window.innerWidth
+        && r.bottom > 0 && r.top < window.innerHeight;
       const near = r.right > -NEAR_X && r.left < window.innerWidth + NEAR_X
         && r.bottom > -NEAR_Y && r.top < window.innerHeight + NEAR_Y;
-      if (near) setWanted(true);
-      return near;
+      if (visible) {
+        // On screen: request now, ahead of everything else.
+        if (prefetchTimer) clearTimeout(prefetchTimer);
+        setWanted(true);
+      } else if (near && !prefetchTimer) {
+        // Just off screen: wait so the visible cards get the connection and decoder first.
+        prefetchTimer = setTimeout(() => setWanted(true), PREFETCH_DELAY_MS);
+      }
+      return visible || near;
     };
     const frame = requestAnimationFrame(check);
     const offNav = onNavigationSettled(check);
     const offScroll = onScrollSettled(check);
-    return () => { cancelAnimationFrame(frame); offNav(); offScroll(); };
+    return () => {
+      cancelAnimationFrame(frame);
+      if (prefetchTimer) clearTimeout(prefetchTimer);
+      offNav();
+      offScroll();
+    };
   }, [wanted]);
   const presentedRef = useRef(false);
   const onErrorRef = useRef(onError);

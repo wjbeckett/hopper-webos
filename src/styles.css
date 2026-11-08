@@ -4973,6 +4973,15 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 .webos .home-featured-copy,
 .webos .home-featured-copy * { animation: none !important; transition: none !important; text-shadow: none; }
 .webos .home-featured-copy { text-shadow: none; }
+/* Fixed hero layout: the title keeps one position; a short overview just leaves space below. */
+.home-featured-copy { height: 260px; justify-content: flex-start; }
+.home-featured-title {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
 /* The row slide is driven from script; native smooth scrolling would fight it. */
 .webos .rail-track { scroll-behavior: auto; scroll-snap-type: none; }
 .webos .home-backdrop-image.previous { display: none; }
