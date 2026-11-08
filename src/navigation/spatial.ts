@@ -49,7 +49,13 @@ function pinRailItem(rail: HTMLElement, element: HTMLElement) {
   const railRect = rail.getBoundingClientRect();
   const leading = Number.parseFloat(getComputedStyle(rail).paddingLeft) || 0;
   const maxScroll = rail.scrollWidth - rail.clientWidth;
-  const target = Math.max(0, Math.min(maxScroll, rail.scrollLeft + rect.left - railRect.left - leading));
+  // Media rails use a Plex-style middle lock: the selector travels until its card is centred,
+  // the row then scrolls under it, and the clamp at either end lets the selector move on.
+  const middleLock = rail.classList.contains("rail-track");
+  const wanted = middleLock
+    ? rail.scrollLeft + (rect.left + rect.width / 2) - (railRect.left + railRect.width / 2)
+    : rail.scrollLeft + rect.left - railRect.left - leading;
+  const target = Math.max(0, Math.min(maxScroll, wanted));
   const start = rail.scrollLeft;
   const distance = target - start;
   const running = railAnimations.get(rail);

@@ -220,7 +220,8 @@ export function FeaturedRailsScreen({
   }
 
   function applyHeroImage(nextImage: string) {
-    if (heroImageRef.current) {
+    // TV: the outgoing backdrop is hidden at once while focus moves, so no "previous" layer lingers.
+    if (heroImageRef.current && !isTv()) {
       if (heroTimer.current !== undefined) window.clearTimeout(heroTimer.current);
       setPreviousHeroImage(heroImageRef.current);
       if (ambientTintTimer.current !== undefined) window.clearTimeout(ambientTintTimer.current);
@@ -437,6 +438,7 @@ export function FeaturedRailsScreen({
           />
         ) : null}
         <div className="home-backdrop-scrim" />
+        <div className="home-backdrop-vignette" />
       </div>
       {focusedItem ? (
         <section className="home-featured" aria-live="off" aria-label={`${focusedItem.Name} details`}>
