@@ -58,6 +58,8 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
   const [moreOpen, setMoreOpen] = useState(false);
   const [similar, setSimilar] = useState<SiloItem[]>([]);
   const [actionError, setActionError] = useState("");
+  const [positionCleared, setPositionCleared] = useState(false);
+  useEffect(() => setPositionCleared(false), [item.Id]);
   const extras = useDetailExtras(session, item.Id);
   const spoilerPreferences = useEpisodeSpoilerPreferences(session);
   const watchDetail = useWatchDetail(session, item.Type === "Movie" || item.Type === "Episode" ? item : undefined);
@@ -73,7 +75,13 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
   useEffect(() => {
     let alive = true;
     setDetail(item);
-    getCatalogItem(session, item.Id).then(next => { if (alive) setDetail({ ...item, ...next }); }).catch(() => undefined);
+    getCatalogItem(session, item.Id).then(next => {
+      if (!alive) return;
+      // Catalog items carry an explicit `UserData: undefined` when they have no user state;
+      // spreading that over the rail item would wipe its resume position.
+      const defined = Object.fromEntries(Object.entries(next).filter(([, value]) => value !== undefined));
+      setDetail({ ...item, ...defined, UserData: { ...item.UserData, ...next.UserData } });
+    }).catch(() => undefined);
     Promise.all([isFavorite(session, item.Id), isInWatchlist(session, item.Id)])
       .then(([nextFavorite, nextWatchlist]) => {
         if (!alive) return;
@@ -137,6 +145,7 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
     closeMore();
     try {
       await setWatched(session, detail.Id, next);
+      if (next) setPositionCleared(true);
       setDetail(current => ({
         ...current,
         UserData: { ...current.UserData, Played: next, PlaybackPositionTicks: next ? 0 : current.UserData?.PlaybackPositionTicks, PlayedPercentage: next ? 0 : current.UserData?.PlayedPercentage }
@@ -146,8 +155,14 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
     }
   }
 
-  const position = (detail.UserData?.PlaybackPositionTicks ?? 0) / 10_000_000;
-  const duration = (detail.RunTimeTicks ?? 0) / 10_000_000;
+  // /watch is the authoritative resume position (the player starts from it), so prefer it over
+  // whatever the rail or catalog item happened to carry. Marking watched clears it locally.
+  const watchPosition = watchDetail?.user_data?.position_seconds;
+  const position = positionCleared
+    ? 0
+    : watchPosition ?? (detail.UserData?.PlaybackPositionTicks ?? 0) / 10_000_000;
+  const duration = (detail.RunTimeTicks ?? 0) / 10_000_000
+    || (watchDetail?.versions.find(version => version.duration)?.duration ?? 0);
   const canResume = position > 30 && duration > 0 && position < duration - 5;
   const audiobook = detail.Type === "AudioBook";
   const audiobookFinished = audiobook && (detail.UserData?.Played === true || duration > 0 && position > 0 && position >= duration - 5);

@@ -195,6 +195,9 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const [hudTab, setHudTab] = useState<HudTab>("Video");
   const hudTabsRef = useRef<HudTab[]>(["Info", "Video", "Subtitles"]);
   const [busy, setBusy] = useState(true);
+  // True from load until the video is actually rendering frames. `busy` ends when the plan is
+  // installed, but the manifest fetch and first buffer still leave a black screen after that.
+  const [buffering, setBuffering] = useState(true);
   const [error, setError] = useState("");
   const [position, setPosition] = useState(0);
   const [bufferedAhead, setBufferedAhead] = useState(0);
@@ -1673,6 +1676,10 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     <video ref={videoRef} className={upNextRect ? "player player-in-next-up" : "player"} style={{ objectFit: aspectMode === "Stretch" ? "fill" : aspectMode === "Zoom" ? "cover" : "contain", ...(upNextRect ? { left: upNextRect.left, top: upNextRect.top, width: upNextRect.width, height: upNextRect.height } : {}) }} playsInline
       onPlay={() => { setPlaying(true); revealHud(); }}
       onPause={() => { setPlaying(false); revealHud(); }}
+      onLoadStart={() => setBuffering(true)}
+      onWaiting={() => setBuffering(true)}
+      onPlaying={() => setBuffering(false)}
+      onCanPlay={() => setBuffering(false)}
       onEnded={handleMediaEnded}
       onSeeked={event => {
         releaseReachedSeek(event.currentTarget);
@@ -1769,7 +1776,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         {!hud && duration > 0 ? <div className="skip-feedback-track"><b style={{ width: `${Math.max(0, Math.min(1, skipFeedback.target / duration)) * 100}%` }} /></div> : null}
       </div> : null}
 
-      {busy ? <div className="player-loading" role="status" aria-label="Loading"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="28" /></svg></div> : null}
+      {busy || (buffering && !error) ? <div className="player-loading" role="status" aria-label="Loading"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="28" /></svg></div> : null}
       {error ? <div className="player-error" role="alert">{error}</div> : null}
     </div>
 

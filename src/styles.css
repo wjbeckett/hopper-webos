@@ -4990,12 +4990,16 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: #010D9F;
+  /* Android/tvOS parity: a small centred 16:9 video on black, not full-bleed
+     (full-bleed rendered the logo about 4x too large). min(25% of width, 440). */
+  display: grid;
+  place-items: center;
+  background: #000;
   opacity: 1;
   transition: opacity 400ms ease-out;
 }
 .startup-splash.leaving { opacity: 0; }
-.startup-splash video { width: 100%; height: 100%; object-fit: cover; }
+.startup-splash video { width: min(25vw, 440px); aspect-ratio: 16 / 9; object-fit: contain; }
 
 /* The row slide is driven from script; native smooth scrolling would fight it. */
 .webos .rail-track { scroll-behavior: auto; scroll-snap-type: none; }
