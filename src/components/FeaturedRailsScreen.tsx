@@ -27,6 +27,8 @@ let pendingExploreReturn: string | null = null;
 
 function sampleAmbientTint(url: string): Promise<string | null> {
   if (ambientTintCache.has(url)) return Promise.resolve(ambientTintCache.get(url) ?? null);
+  // TV: a second CORS fetch, a canvas decode and a pixel read per backdrop cost more than the tint adds.
+  if (/Web0S|webOS/i.test(navigator.userAgent)) return Promise.resolve(null);
 
   return new Promise(resolve => {
     const cacheFailure = (message: string) => {
@@ -95,8 +97,18 @@ function sampleAmbientTint(url: string): Promise<string | null> {
 
 const warmBackdrops = new Map<string, HTMLImageElement>();
 
+/** LG webOS TV panels: decode, raster and composite budget is far below a desktop browser. */
+const isTv = () => /Web0S|webOS/i.test(navigator.userAgent);
+
+/**
+ * TV only (Plex-style): the hero backdrop waits until focus has rested this long,
+ * while the title/logo copy still follows focus immediately. Rapid scrolling then
+ * never decodes or paints a backdrop it is about to leave.
+ */
+const TV_BACKDROP_SETTLE_MS = 450;
+
 function warmBackdrop(url: string) {
-  if (!url || warmBackdrops.has(url)) return Promise.resolve();
+  if (!url || warmBackdrops.has(url) || isTv()) return Promise.resolve();
   const image = new Image();
   image.decoding = "async";
   warmBackdrops.set(url, image);
@@ -130,6 +142,8 @@ export function FeaturedRailsScreen({
   const focusTimer = useRef<number | undefined>(undefined);
   const marqueeTimer = useRef<number | undefined>(undefined);
   const ambientTintTimer = useRef<number | undefined>(undefined);
+  const backdropTimer = useRef<number | undefined>(undefined);
+  const [backdropSettling, setBackdropSettling] = useState(false);
   const focusedItemRef = useRef<SiloItem | undefined>(undefined);
   const focusedRailIndexRef = useRef<number | undefined>(undefined);
   const focusedCardRef = useRef<{ element: HTMLElement; railId: string; index: number } | undefined>(undefined);
@@ -186,7 +200,26 @@ export function FeaturedRailsScreen({
     lastHeroSwapAt.current = performance.now();
     setFocusedItem(item);
     const nextImage = backdropUrl(session, item);
-    if (!nextImage || nextImage === heroImageRef.current) return;
+    if (backdropTimer.current !== undefined) window.clearTimeout(backdropTimer.current);
+    backdropTimer.current = undefined;
+    if (!nextImage || nextImage === heroImageRef.current) {
+      setBackdropSettling(false);
+      return;
+    }
+    // First backdrop shows at once; later ones wait for focus to settle on a TV.
+    if (heroImageRef.current && isTv()) {
+      setBackdropSettling(true);
+      backdropTimer.current = window.setTimeout(() => {
+        backdropTimer.current = undefined;
+        setBackdropSettling(false);
+        applyHeroImage(nextImage);
+      }, TV_BACKDROP_SETTLE_MS);
+      return;
+    }
+    applyHeroImage(nextImage);
+  }
+
+  function applyHeroImage(nextImage: string) {
     if (heroImageRef.current) {
       if (heroTimer.current !== undefined) window.clearTimeout(heroTimer.current);
       setPreviousHeroImage(heroImageRef.current);
@@ -281,6 +314,7 @@ export function FeaturedRailsScreen({
     if (focusTimer.current !== undefined) window.clearTimeout(focusTimer.current);
     if (marqueeTimer.current !== undefined) window.clearTimeout(marqueeTimer.current);
     if (ambientTintTimer.current !== undefined) window.clearTimeout(ambientTintTimer.current);
+    if (backdropTimer.current !== undefined) window.clearTimeout(backdropTimer.current);
   }, []);
 
   function syncBackdropScroll(event: UIEvent<HTMLDivElement>) {
@@ -335,7 +369,7 @@ export function FeaturedRailsScreen({
         if (card && railId && slot >= 0) focusedCardRef.current = { element: card, railId, index: slot };
       }}
     >
-      <div ref={backdropRef} className="home-hero-backdrop" aria-hidden="true">
+      <div ref={backdropRef} className={`home-hero-backdrop ${backdropSettling ? "settling" : ""}`} aria-hidden="true">
         {previousHeroImage ? (
           <>
             <img

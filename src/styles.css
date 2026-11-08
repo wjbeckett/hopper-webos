@@ -4965,6 +4965,11 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 .webos .media-card:focus .artwork-full { transform: none; }
 .webos .artwork-revealed { animation: none; }
 .webos .home-hero-backdrop { background: var(--background); }
+/* Plex-style settle: while focus is moving the backdrop sits washed out (gradient and copy stay);
+   it fades back in once focus rests. Opacity on an already-composited layer only. */
+.webos .home-backdrop-image.current.loaded,
+.webos .home-backdrop-image.previous { transition: opacity 300ms ease-out; }
+.webos .home-hero-backdrop.settling .home-backdrop-image.current.loaded { opacity: .18; transition-duration: 120ms; }
 .webos .home-backdrop-scrim {
   background: linear-gradient(180deg, rgba(7,8,9,.08) 0%, transparent 28%, rgba(7,8,9,.46) 43%, rgba(7,8,9,.78) 58%, var(--background) 82%);
 }
