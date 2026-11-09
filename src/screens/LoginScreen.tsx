@@ -40,7 +40,7 @@ export function LoginScreen({
     <main className="login-shell">
       <section className="login-card">
         <div className="eyebrow">Password sign-in</div>
-        <h1>Silo</h1>
+        <h1>Hopper</h1>
         <p>{serverUrl}</p>
 
         <label>

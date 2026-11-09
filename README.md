@@ -1,6 +1,6 @@
-# Silo for LG webOS
+# Hopper for LG webOS
 
-An early, community-built LG webOS TV client for the [Silo](https://silo.tv/) self-hosted media server. It is designed as a 10-foot interface: every primary action is usable with a TV remote, while mouse and keyboard support make browser development convenient.
+Hopper is an independent, community-built LG webOS TV client for the [Silo](https://silo.tv/) self-hosted media server. It is not affiliated with or endorsed by the Silo project; "Silo" and the Silo logo are trademarks of their owners and are used here only to describe compatibility. It is designed as a 10-foot interface: every primary action is usable with a TV remote, while mouse and keyboard support make browser development convenient.
 
 > [!IMPORTANT]
 > This project is under active development and is not store-ready. Native Silo authentication, catalog, and playback contracts still need validation against a live server, and playback needs testing across multiple LG webOS generations.
@@ -148,7 +148,7 @@ Build, package, install, and launch in one command:
 WEBOS_DEVICE=livingroom npm run webos:deploy
 ```
 
-`WEBOS_DEVICE` defaults to `livingroom`. The application ID defaults to `org.siloserver.webos`; override it for launch and inspection with `WEBOS_APP_ID` if you change `public/appinfo.json`.
+`WEBOS_DEVICE` defaults to `livingroom`. The application ID defaults to `com.hopperapp.hopper`; override it for launch and inspection with `WEBOS_APP_ID` if you change `public/appinfo.json`.
 
 To open LG's Web Inspector for the installed application:
 

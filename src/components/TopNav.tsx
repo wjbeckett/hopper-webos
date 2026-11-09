@@ -1,6 +1,8 @@
 export type AppSection = "home" | "forYou" | "calendar" | "requests" | "library" | "collections" | "movies" | "series" | "music" | "audiobooks" | "search" | "favorites" | "watchlist" | "history" | "profiles" | "settings";
 export type LibraryLanding = "recommended" | "browse" | "collections" | "authors" | "series" | "alphabet";
 
+import { HopperLockup } from "./HopperMark";
+
 type PrimaryNavId = "home" | "movies" | "series" | "music" | "audiobooks" | "forYou" | "calendar" | "requests" | "search";
 
 export function TopNav({
@@ -131,8 +133,8 @@ export function TopNav({
         }
       }}
     >
-      <div className="brand-mark" role="img" aria-label="Silo">
-        <img src={`${import.meta.env.BASE_URL}silo-wordmark-white.svg`} alt="" />
+      <div className="brand-mark" role="img" aria-label="Hopper">
+        <HopperLockup />
       </div>
       <nav aria-label="Primary navigation">
         {navItems.map((item) => {

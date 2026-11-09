@@ -5,7 +5,7 @@
  * login, codes, results) are made by the caller.
  */
 
-const SERVICE = "luna://org.siloserver.webos.pairing";
+const SERVICE = "luna://com.hopperapp.hopper.service";
 
 /** Pairing messages as sent on the wire (see Android `PairingMessage`). */
 export type PairingMessage =

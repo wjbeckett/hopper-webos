@@ -1,6 +1,6 @@
 {
-  "name": "org.siloserver.webos.pairing",
+  "name": "com.hopperapp.hopper.service",
   "version": "1.0.0",
-  "description": "Silo companion pairing service",
+  "description": "Hopper companion pairing service",
   "main": "service.js"
 }

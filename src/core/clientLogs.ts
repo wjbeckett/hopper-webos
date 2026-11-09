@@ -129,7 +129,7 @@ function createZip(filename: string, content: string) {
 export function exportClientLogs() {
   const entries = readEntries();
   if (!entries.length) return false;
-  const metadata = { type: "export_metadata", client: "Silo webOS", platform: "webOS", exported_at: new Date().toISOString() };
+  const metadata = { type: "export_metadata", client: "Hopper for webOS", platform: "webOS", exported_at: new Date().toISOString() };
   const lines = [JSON.stringify(metadata), ...entries.map(entry => JSON.stringify(entry))].join("\n") + "\n";
   const blob = createZip("debug-logs.jsonl", lines);
   const url = URL.createObjectURL(blob);

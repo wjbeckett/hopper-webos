@@ -95,7 +95,7 @@ function subtitleDetail(track: SubtitleInventory) {
 }
 
 function clientDiagnostic(event: string, details: Record<string, unknown>) {
-  console.error(`[Silo webOS] ${event}`, details);
+  console.error(`[Hopper] ${event}`, details);
   if (import.meta.env.DEV) {
     void fetch("/__client-log", {
       method: "POST",
@@ -371,7 +371,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     void attachSidecarSubtitle(video, next.plan, session, sidecarHeaders, sidecarTrack.current, subtitleDelayRef.current).then(track => { sidecarTrack.current = track; }).catch(() => undefined);
     hlsRef.current?.destroy();
     hlsRef.current = null;
-    console.info("[Silo webOS] installing playback-v3 plan", {
+    console.info("[Hopper] installing playback-v3 plan", {
       delivery: next.plan.delivery,
       protocol: next.plan.stream.protocol,
       container: next.plan.stream.container,

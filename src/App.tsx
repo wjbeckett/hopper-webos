@@ -200,7 +200,7 @@ export default function App() {
           if (matches.length === 0) setSection("home");
         }
       })
-      .catch((error) => { console.error("[Silo webOS] libraries", error); if (alive) setLibrariesLoaded(true); });
+      .catch((error) => { console.error("[Hopper] libraries", error); if (alive) setLibrariesLoaded(true); });
     return () => { alive = false; };
   }, [session]);
 
@@ -215,7 +215,7 @@ export default function App() {
         );
       })
       .catch(error => {
-        console.warn("[Silo webOS] request availability", error);
+        console.warn("[Hopper] request availability", error);
         if (alive) setRequestsAvailable(undefined);
       });
     return () => { alive = false; };
@@ -297,7 +297,7 @@ export default function App() {
       for (const [name, value] of Object.entries(merged)) {
         if (/^--[a-z0-9-]+$/.test(name) && typeof value === "string" && value.length <= 128) root.style.setProperty(name, value);
       }
-    }).catch(error => console.warn("[Silo webOS] profile appearance", error));
+    }).catch(error => console.warn("[Hopper] profile appearance", error));
     return () => { alive = false; };
   }, [session?.profileId]);
 

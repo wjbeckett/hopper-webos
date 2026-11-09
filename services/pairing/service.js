@@ -11,7 +11,7 @@ var mdns = require("./mdns");
 var MAX_FRAME = 1 << 20;
 var HELLO_STATE = "setup";
 
-var svc = new Service("org.siloserver.webos.pairing");
+var svc = new Service("com.hopperapp.hopper.service");
 
 var advertiser = null;
 var server = null;

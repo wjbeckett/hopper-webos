@@ -1,5 +1,5 @@
 {
-  "id": "org.siloserver.webos.pairing",
-  "description": "Silo companion pairing",
-  "services": [{ "name": "org.siloserver.webos.pairing" }]
+  "id": "com.hopperapp.hopper.service",
+  "description": "Hopper companion pairing",
+  "services": [{ "name": "com.hopperapp.hopper.service" }]
 }

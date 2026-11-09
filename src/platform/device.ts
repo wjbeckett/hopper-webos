@@ -13,7 +13,7 @@ export function getDeviceId(): string {
 }
 
 export const clientIdentity = {
-  client: "Silo webOS",
+  client: "Hopper for webOS",
   device: "LG webOS TV",
-  version: "0.2.0-dev"
+  version: "0.3.0"
 };

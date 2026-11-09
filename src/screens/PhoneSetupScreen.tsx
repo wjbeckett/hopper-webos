@@ -136,7 +136,7 @@ export function PhoneSetupScreen({
   return (
     <main className="login-shell server-setup">
       <section className="login-card wide-login-card">
-        <div className="eyebrow">Silo for LG webOS</div>
+        <div className="eyebrow">Hopper for LG webOS</div>
         <h1>Set up with your phone</h1>
         <p>Open Silo on your phone, choose “Sign in on TV”, then pick this TV. Nothing to type with the remote.</p>
         <p className="pair-status">{status}</p>

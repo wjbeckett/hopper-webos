@@ -48,7 +48,7 @@ export function ServerSetupScreen({
   return (
     <main className="login-shell server-setup">
       <section className="login-card wide-login-card">
-        <div className="eyebrow">Silo for LG webOS</div>
+        <div className="eyebrow">Hopper for LG webOS</div>
         <h1>Choose your server</h1>
         <p>Pair this TV with an existing Silo installation.</p>
 

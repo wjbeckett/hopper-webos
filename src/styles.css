@@ -5012,7 +5012,46 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
   transition: opacity 400ms ease-out;
 }
 .startup-splash.leaving { opacity: 0; }
-.startup-splash video { width: min(25vw, 440px); aspect-ratio: 16 / 9; object-fit: contain; }
+
+/* Hopper brand animation: hopper drops in and settles, play pops in, word rises. */
+.startup-splash-brand { display: flex; flex-direction: column; align-items: center; gap: 22px; }
+.startup-splash-mark { width: 150px; height: 150px; overflow: visible; }
+.startup-splash-body,
+.startup-splash-play { transform-box: fill-box; }
+.startup-splash-body {
+  transform-origin: 50% 100%;
+  animation: hopper-drop 700ms cubic-bezier(.2, .9, .3, 1.25) both;
+}
+.startup-splash-play {
+  transform-origin: 50% 50%;
+  animation: hopper-play 420ms cubic-bezier(.3, 1.6, .5, 1) 520ms both;
+}
+.startup-splash-word {
+  color: #f4f4f2;
+  font-size: 2.6rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+  animation: hopper-word 500ms ease-out 820ms both;
+}
+@keyframes hopper-drop {
+  0% { opacity: 0; transform: translateY(-60px) scaleY(1.08); }
+  60% { opacity: 1; transform: translateY(0) scaleY(.92); }
+  100% { opacity: 1; transform: translateY(0) scaleY(1); }
+}
+@keyframes hopper-play {
+  from { opacity: 0; transform: scale(.3); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes hopper-word {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Top-nav lockup: mark + word. */
+.tv-nav .brand-mark { width: auto; min-width: 0; }
+.hopper-lockup { display: inline-flex; align-items: center; gap: 10px; white-space: nowrap; }
+.hopper-lockup-mark { width: 34px; height: 34px; }
+.hopper-lockup-word { color: #f4f4f2; font-size: 1.45rem; font-weight: 700; letter-spacing: .01em; }
 
 /* The row slide is driven from script; native smooth scrolling would fight it. */
 .webos .rail-track { scroll-behavior: auto; scroll-snap-type: none; }
