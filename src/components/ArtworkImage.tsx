@@ -6,6 +6,7 @@ import {
   isScrolling,
   isTvDevice,
   onNavigationSettled,
+  isWarmArtwork,
   onScrollSettled,
   thumbhashToDataURL,
 } from "../core/artwork";
@@ -74,7 +75,8 @@ export function ArtworkImage({ url, thumbhash, kind, className, hideImage, onErr
   const wrapRef = useRef<HTMLDivElement>(null);
   const loadedRef = useRef(false);
   // TV: the file is requested only for cards near the screen, and only while the remote is quiet.
-  const [wanted, setWanted] = useState(() => !isTvDevice());
+  // Already fetched (e.g. warmed ahead of time): no network cost, so show it at once.
+  const [wanted, setWanted] = useState(() => !isTvDevice() || isWarmArtwork(url));
 
   useEffect(() => {
     if (!isTvDevice()) return;

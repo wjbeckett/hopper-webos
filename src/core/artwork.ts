@@ -218,6 +218,23 @@ export function onScrollSettled(listener: () => void): () => void {
   };
 }
 
+/** URLs fetched and decoded ahead of time; their cards skip the TV near-screen load gate. */
+const warmArtwork = new Map<string, HTMLImageElement>();
+
+export function isWarmArtwork(url: string): boolean {
+  return warmArtwork.get(url)?.complete === true;
+}
+
+/** Fetch + decode an image in the background and keep it referenced so it stays cached. */
+export function warmArtworkImage(url: string): Promise<void> {
+  if (!url || warmArtwork.has(url)) return Promise.resolve();
+  const image = new Image();
+  image.decoding = "async";
+  warmArtwork.set(url, image);
+  image.src = url;
+  return image.decode().catch(() => { warmArtwork.delete(url); });
+}
+
 /** LG webOS TV panels: decode and composite budget is far below a desktop browser. */
 export const isTvDevice = (): boolean =>
   typeof navigator !== "undefined" && /Web0S|webOS/i.test(navigator.userAgent);
