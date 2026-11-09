@@ -33,6 +33,21 @@ brand/render.sh   # needs Google Chrome + macOS sips; also copies the app assets
 | `hopper-icon-1024.png` | 1024×1024 | Master raster |
 | `hopper-splash-1920x1080.png` | 1920×1080 | Splash raster |
 
-Store screenshots (1920×1080) must be taken from a running TV. They are not generated here.
+## Store screenshots (`store/screenshots/`)
+
+Taken on BedroomTV against the public demo server (`demo.siloserver.org`, demo/demo), so no
+personal library appears. Content is open movies (Sintel, Big Buck Bunny) and public-domain titles.
+
+| File | Size | Screen |
+|---|---|---|
+| `01-home.png` | 1920×1080 | Home: Sintel hero, Continue Watching |
+| `02-details.png` | 1920×1080 | Sintel details: Resume, time-left ring, cast |
+| `03-movies.png` | 1920×1080 | Movies: poster row |
+| `04-series.png` | 1920×1080 | Series: The Lucy Show hero |
+
+Playback can't be captured over the inspector, because webOS plays video on a hardware layer the
+page screenshot doesn't include. To include a player shot, use the TV's own capture.
+
+The draft listing text is in `store/LISTING.md`.
 Check the sizes against the current LG Seller Lounge guide before you submit.
 "Hopper" has not been checked for trademark or store conflicts.
