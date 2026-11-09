@@ -5003,6 +5003,11 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 
 /* The row slide is driven from script; native smooth scrolling would fight it. */
 .webos .rail-track { scroll-behavior: auto; scroll-snap-type: none; }
+/* Browse grid (TV): each card is its own layout/paint island, so a focus change repaints one
+   card, not the grid (measured 150ms -> 50ms per frame). Cards far from the selector skip paint
+   entirely; the window follows focus and spans well past the screen, so it is never visible. */
+.webos .library-grid > * { contain: layout paint style; }
+.webos .library-grid > .grid-far { visibility: hidden; }
 .webos .home-backdrop-image.previous { display: none; }
 /* New backdrop fades in over 1s once focus has rested. */
 .webos .home-backdrop-image.current.loaded { transition: opacity 1000ms ease-out; }

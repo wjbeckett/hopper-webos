@@ -9,6 +9,7 @@ import type { BrowseSortKey, BrowseSortOption } from "./LibraryBrowsePanels";
 import { attemptFirstContentFocus, focusFirstContentCard, focusNavigationTarget } from "../navigation/spatial";
 import type { Session, SiloItem, SiloLibrary } from "../types";
 import { LoadingState } from "../components/LoadingState";
+import { isTvDevice } from "../core/artwork";
 
 type BrowseSort = BrowseSortKey;
 type SortOrder = "asc" | "desc";
@@ -532,7 +533,72 @@ export function LibraryScreen({
 
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [loading, hasMoreBrowseItems, browseCursors, loadMoreBrowseItems]);
+    // `loadingMore` re-arms the observer when a page lands: if the sentinel is still
+    // within range, the next page starts at once instead of waiting at the page break.
+  }, [loading, loadingMore, hasMoreBrowseItems, browseCursors, loadMoreBrowseItems]);
+
+  // Fetch ahead of the selector: once focus is within ~8 rows of the loaded end, the next
+  // page starts, so continuous Down presses rarely reach an unloaded edge.
+  useEffect(() => {
+    if (!hasMoreBrowseItems) return;
+    const results = resultsRef.current;
+    if (!results) return;
+    const onFocus = (event: FocusEvent) => {
+      const target = event.target as HTMLElement | null;
+      const id = target?.dataset.mediaId;
+      if (!id) return;
+      const index = browseItemsRef.current.findIndex(item => item.Id === id);
+      if (index >= 0 && index > browseItemsRef.current.length - 60) void loadMoreBrowseItems();
+    };
+    results.addEventListener("focusin", onFocus);
+    return () => results.removeEventListener("focusin", onFocus);
+  }, [hasMoreBrowseItems, loadMoreBrowseItems]);
+
+  // TV paint window: only cards within ±PAINT_WINDOW_ROWS rows of the selector paint; the rest
+  // get `.grid-far` (visibility: hidden). Measured on the TV: 150ms -> ~17ms per frame with a few
+  // hundred cards. Toggled directly on the DOM so a key press never re-renders the grid.
+  useEffect(() => {
+    if (!isTvDevice()) return;
+    const results = resultsRef.current;
+    if (!results) return;
+    const PAINT_WINDOW_ROWS = 6;
+    let lastStart = -1;
+    let lastEnd = -1;
+    const apply = (focused?: Element | null) => {
+      const grid = results.querySelector<HTMLElement>(".library-grid");
+      if (!grid) return;
+      const children = grid.children;
+      if (!children.length) return;
+      const template = getComputedStyle(grid).gridTemplateColumns;
+      const columns = Math.max(1, template && template !== "none" ? template.trim().split(/\s+/).length : 1);
+      let index = 0;
+      const host = focused?.closest(".library-grid > *");
+      if (host && host.parentElement === grid) index = Array.prototype.indexOf.call(children, host);
+      else if (lastStart >= 0) index = lastStart + PAINT_WINDOW_ROWS * columns; // keep the current window
+      const row = Math.floor(index / columns);
+      const start = Math.max(0, (row - PAINT_WINDOW_ROWS) * columns);
+      const end = Math.min(children.length, (row + PAINT_WINDOW_ROWS + 1) * columns);
+      // classList.toggle with a force flag is a no-op when the state is unchanged, so no style
+      // invalidation happens for the cards that stay on the same side of the window.
+      for (let i = 0; i < children.length; i++) {
+        const far = i < start || i >= end;
+        if (children[i].classList.contains("grid-far") !== far) children[i].classList.toggle("grid-far", far);
+      }
+      lastStart = start;
+      lastEnd = end;
+    };
+    const onFocus = (event: FocusEvent) => apply(event.target as Element);
+    results.addEventListener("focusin", onFocus);
+    // New pages append cards: classify them without waiting for the next press.
+    const grid = results.querySelector(".library-grid");
+    const observer = grid ? new MutationObserver(() => apply(document.activeElement)) : null;
+    if (grid && observer) observer.observe(grid, { childList: true });
+    apply(document.activeElement);
+    return () => {
+      results.removeEventListener("focusin", onFocus);
+      observer?.disconnect();
+    };
+  }, [visibleItems.length > 0]);
 
   const shuffleTarget = useMemo<{ kind: string; id: string | number } | undefined>(() => {
     if (collection) return browseType ? undefined : { kind: collection.source, id: collection.id };

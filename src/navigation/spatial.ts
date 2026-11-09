@@ -90,6 +90,45 @@ export function pinFocusedRailItem(element: HTMLElement) {
   if (rail && rail.scrollWidth > rail.clientWidth + 1) pinRailItem(rail, element);
 }
 
+/**
+ * Vertical twin of the rail slide. Repeated presses retarget one running animation
+ * from an absolute goal, instead of stacking native smooth scrolls that lag behind
+ * the selector and stutter until the key is released.
+ */
+const VERTICAL_SLIDE_MS = 140;
+const verticalSlides = new WeakMap<HTMLElement, { frame: number; goal: number }>();
+
+function slideScrollTop(container: HTMLElement, delta: number) {
+  const running = verticalSlides.get(container);
+  if (running) cancelAnimationFrame(running.frame);
+  const maxScroll = container.scrollHeight - container.clientHeight;
+  // `delta` is measured against the current (mid-slide) position, so the goal is absolute
+  // and always lands the newly focused card in view, however fast the presses come.
+  const start = container.scrollTop;
+  const goal = Math.max(0, Math.min(maxScroll, start + delta));
+  const distance = goal - start;
+  if (Math.abs(distance) < 1) {
+    verticalSlides.delete(container);
+    return;
+  }
+  container.style.scrollBehavior = "auto";
+  if (running) {
+    // A press arrived mid-slide (key held or rapid presses): jump straight to the goal so the
+    // selector never trails off screen. Single presses still get the eased slide.
+    container.scrollTop = goal;
+    verticalSlides.delete(container);
+    return;
+  }
+  const began = performance.now();
+  const tick = (now: number) => {
+    const progress = Math.max(0, Math.min(1, (now - began) / VERTICAL_SLIDE_MS));
+    container.scrollTop = start + distance * easeOut(progress);
+    if (progress < 1) verticalSlides.set(container, { frame: requestAnimationFrame(tick), goal });
+    else verticalSlides.delete(container);
+  };
+  verticalSlides.set(container, { frame: requestAnimationFrame(tick), goal });
+}
+
 function focusElement(element: HTMLElement) {
   element.focus({ preventScroll: true });
   const libraryResults = element.closest<HTMLElement>(".library-results");
@@ -103,7 +142,7 @@ function focusElement(element: HTMLElement) {
     const topDelta = elementRect.top < visibleStart ? elementRect.top - visibleStart : 0;
     const bottomDelta = elementRect.bottom > visibleEnd ? elementRect.bottom - visibleEnd : 0;
     const delta = topDelta || bottomDelta;
-    if (delta) libraryResults.scrollBy({ top: delta, behavior: "smooth" });
+    if (delta) slideScrollTop(libraryResults, delta);
 
     const horizontalContainer = element.closest<HTMLElement>(".library-filter-row");
     if (horizontalContainer) {
@@ -468,8 +507,39 @@ function navigateLibrary(current: HTMLElement, direction: Direction) {
     return true;
   }
 
-  if (currentGrid && gridItems.includes(current)) {
-    const sameRow = gridItems.filter(item => item.offsetTop === current.offsetTop);
+  const currentIndex = currentGrid ? gridItems.indexOf(current) : -1;
+  if (currentGrid && currentIndex >= 0) {
+    // Index arithmetic, not layout reads: measuring every card on each press cost ~50ms
+    // per key on the TV once a few hundred cards were loaded.
+    const columns = gridColumnCount(currentGrid);
+    const rowStart = currentIndex - (currentIndex % columns);
+    const sameRow = gridItems.slice(rowStart, rowStart + columns);
+    if (direction === "down" || direction === "up") {
+      const target = direction === "down"
+        ? (currentIndex + columns < gridItems.length
+          ? gridItems[currentIndex + columns]
+          // Partial last row: drop to its last card rather than nowhere.
+          : rowStart + columns < gridItems.length ? gridItems[gridItems.length - 1] : undefined)
+        : currentIndex - columns >= 0 ? gridItems[currentIndex - columns] : undefined;
+      if (target) {
+        focusElement(target);
+        return true;
+      }
+      if (direction === "down" && currentGrid.closest<HTMLElement>(".library-results")?.dataset.hasMore === "true") {
+        window.dispatchEvent(new CustomEvent("silo:library-load-more", {
+          detail: { loadedCount: gridItems.length, column: currentIndex % columns }
+        }));
+        return true;
+      }
+      if (direction === "up") {
+        const controls = filters.length ? filters : toolbarItems;
+        const above = controls[controls.length - 1]
+          ?? navItems.find(item => item.getAttribute("aria-current") === "page") ?? navItems[0];
+        if (above) focusElement(above);
+        return true;
+      }
+      return true;
+    }
     if (direction === "left" || direction === "right") {
       if (focusAdjacent(current, sameRow, direction)) return true;
       if (direction === "right" && jumpItems[0]) {
@@ -479,40 +549,17 @@ function navigateLibrary(current: HTMLElement, direction: Direction) {
       }
       return true;
     }
-
-    const rowTops = Array.from(new Set(gridItems.map(item => item.offsetTop))).sort((a, b) => a - b);
-    const rowIndex = rowTops.indexOf(current.offsetTop);
-    const targetRow = rowTops[rowIndex + (direction === "down" ? 1 : -1)];
-    if (targetRow !== undefined) {
-      const currentX = center(current.getBoundingClientRect()).x;
-      const target = gridItems
-        .filter(item => item.offsetTop === targetRow)
-        .sort((a, b) => Math.abs(center(a.getBoundingClientRect()).x - currentX) - Math.abs(center(b.getBoundingClientRect()).x - currentX))[0];
-      if (target) {
-        focusElement(target);
-        return true;
-      }
-    } else if (direction === "down" && currentGrid.closest<HTMLElement>(".library-results")?.dataset.hasMore === "true") {
-      const firstRowTop = rowTops[0];
-      const columnCount = gridItems.filter(item => item.offsetTop === firstRowTop).length;
-      window.dispatchEvent(new CustomEvent("silo:library-load-more", {
-        detail: { loadedCount: gridItems.length, column: gridItems.indexOf(current) % Math.max(1, columnCount) }
-      }));
-    } else if (direction === "up" && rowIndex === 0) {
-      const controls = filters.length ? filters : toolbarItems;
-      if (controls.length) {
-        focusElement(controls[controls.length - 1]);
-        return true;
-      }
-      if (navItems.length) {
-        focusElement(navItems.find(item => item.getAttribute("aria-current") === "page") ?? navItems[0]);
-        return true;
-      }
-    }
     return true;
   }
 
   return false;
+}
+
+/** Columns of a CSS grid, read from its computed template (one style read, no per-card layout). */
+function gridColumnCount(grid: HTMLElement) {
+  const template = getComputedStyle(grid).gridTemplateColumns;
+  const count = template && template !== "none" ? template.trim().split(/\s+/).length : 1;
+  return Math.max(1, count);
 }
 
 export function installSpatialNavigation() {

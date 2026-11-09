@@ -10,6 +10,9 @@
   "splashBackground": "splash.png",
   "bgImage": "splash.png",
   "bgColor": "#000000",
+  "iconColor": "#010D9F",
+  "splashColor": "#000000",
+  "appDescription": "Your Silo media server on the big screen",
   "requiredACG": [],
   "resolution": "1920x1080",
   "disableBackHistoryAPI": true
