@@ -29,6 +29,39 @@ function clock(seconds: number) {
   return hours ? `${hours}:${String(minutes).padStart(2, "0")}:${rest}` : `${minutes}:${rest}`;
 }
 
+/** "1h 12m left" / "28m left" / "45s left": what is left to watch, never a position. */
+function remainingLabel(seconds: number) {
+  const total = Math.max(0, Math.round(seconds));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  if (hours) return `${hours}h ${minutes}m left`;
+  if (minutes) return `${minutes}m left`;
+  return `${total}s left`;
+}
+
+/** Metadata-row progress: a ring filled to the watched fraction, plus the time left. */
+function ResumeProgress({ position, duration }: { position: number; duration: number }) {
+  const fraction = Math.min(1, Math.max(0, position / duration));
+  const radius = 8;
+  const circumference = 2 * Math.PI * radius;
+  return (
+    <span className="details-remaining">
+      <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+        <circle cx="10" cy="10" r={radius} className="details-remaining-track" />
+        <circle
+          cx="10"
+          cy="10"
+          r={radius}
+          className="details-remaining-fill"
+          strokeDasharray={circumference}
+          strokeDashoffset={circumference * (1 - fraction)}
+        />
+      </svg>
+      {remainingLabel(duration - position)}
+    </span>
+  );
+}
+
 function audiobookDuration(detail: SiloItem) {
   const seconds = detail.AudiobookDurationSeconds ?? (detail.RunTimeTicks ? detail.RunTimeTicks / 10_000_000 : undefined);
   if (!seconds || seconds <= 0) return "";
@@ -199,6 +232,7 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
           {detail.ContentRating ? <span className="details-rating-chip">{detail.ContentRating}</span> : null}
           {tokens.map(token => <span key={token}>{token}</span>)}
           {facts.map(fact => <span key={fact}>{fact}</span>)}
+          {canResume ? <ResumeProgress position={position} duration={duration} /> : null}
         </div> : null}
         {!audiobook && extras?.tagline ? <div className="details-tokens">{extras.tagline}</div> : null}
         {audiobook ? <div className="audiobook-detail-metadata">{[detail.AudiobookAuthorNames ?? detail.Author, (detail.AudiobookNarratorNames ?? detail.Narrator) ? `Narrated by ${detail.AudiobookNarratorNames ?? detail.Narrator}` : "", audiobookDuration(detail)].filter(Boolean).join("  ")}</div> : null}
@@ -210,9 +244,9 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
         {detail.Type !== "AudioBook" && directorCredit ? <div className="details-credit">{`Directed by ${directorCredit}`}</div> : null}
         {hasPlaybackSummary ? <PlaybackSummary detail={watchDetail} choices={choices} /> : null}
         <div className="details-actions">
-          <button ref={playRef} type="button" data-tv-focusable="true" className={`tv-button ${activeButton === null || activeButton === "play" ? "pin-open" : ""}`} aria-label={audiobook ? audiobookPlayLabel : canResume ? `Resume ${clock(position)}` : "Play"} onFocus={() => setActiveButton("play")} onClick={() => onPlay(playPosition, choices)}>
+          <button ref={playRef} type="button" data-tv-focusable="true" className={`tv-button ${activeButton === null || activeButton === "play" ? "pin-open" : ""}`} aria-label={audiobook ? audiobookPlayLabel : canResume ? "Resume" : "Play"} onFocus={() => setActiveButton("play")} onClick={() => onPlay(playPosition, choices)}>
             <PlayIcon />
-            <span className="tv-button-label">{audiobook ? audiobookPlayLabel : canResume ? `Resume ${clock(position)}` : "Play"}</span>
+            <span className="tv-button-label">{audiobook ? audiobookPlayLabel : canResume ? "Resume" : "Play"}</span>
           </button>
           {canResume || audiobook ? (
             <button type="button" data-tv-focusable="true" className="tv-button secondary" aria-label="Start Over" onFocus={() => setActiveButton("start")} onClick={() => onPlay(0, choices)}>

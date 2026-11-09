@@ -3960,6 +3960,19 @@ body {
   font-size: 1.05rem;
 }
 
+/* Time left: a progress ring + label that stands out from the plain facts. */
+.details-remaining {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+  font-weight: 600;
+}
+.details-remaining svg { width: 1.15em; height: 1.15em; transform: rotate(-90deg); }
+.details-remaining circle { fill: none; stroke-width: 2.6; }
+.details-remaining-track { stroke: rgba(255,255,255,.22); }
+.details-remaining-fill { stroke: var(--accent, #2f6bff); stroke-linecap: round; }
+
 .details-rating-chip {
   padding: 1px 7px;
   border: 1px solid rgba(255,255,255,.7);
