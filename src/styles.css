@@ -5020,6 +5020,10 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
    card, not the grid (measured 150ms -> 50ms per frame). Cards far from the selector skip paint
    entirely; the window follows focus and spans well past the screen, so it is never visible. */
 .webos .library-grid > * { contain: layout paint style; }
+/* Paint containment clips at the card's box, which cut off the focused card's scale, glow and
+   title. Lift it from the one focused card only; the rest keep the measured paint win. */
+.webos .library-grid > *:focus-within,
+.webos .library-grid > .media-card:focus { contain: layout style; }
 .webos .library-grid > .grid-far { visibility: hidden; }
 .webos .home-backdrop-image.previous { display: none; }
 /* New backdrop fades in over 1s once focus has rested. */

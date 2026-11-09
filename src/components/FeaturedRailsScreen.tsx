@@ -4,6 +4,7 @@ import { backdropUrl, mediaLogoUrl } from "../api/silo";
 import { focusFirstContentCard, focusNavigationTarget } from "../navigation/spatial";
 import { subscribeWatchState } from "../core/watchState";
 import { MediaRail } from "./MediaRail";
+import { isResumable, ResumeProgress } from "./ResumeProgress";
 import type { HomeRail, Session, SiloItem } from "../types";
 
 type Props = {
@@ -515,6 +516,10 @@ function FeaturedCopy({
   const isEpisode = item.Type?.toLowerCase() === "episode";
   const title = isEpisode ? item.SeriesName ?? item.Name : item.Name;
   const genre = item.Genres?.find(value => value.trim());
+  // Time-left ring (as on Details) for anything with an unfinished resume point.
+  const position = (item.UserData?.PlaybackPositionTicks ?? 0) / 10_000_000;
+  const duration = (item.RunTimeTicks ?? 0) / 10_000_000;
+  const resumable = item.UserData?.Played !== true && isResumable(position, duration);
 
   return (
     <div className={`home-featured-copy ${className}`} aria-hidden={className.includes("previous")}>
@@ -554,6 +559,7 @@ function FeaturedCopy({
             {genre ? <span>{genre}</span> : null}
           </>
         )}
+        {resumable ? <ResumeProgress position={position} duration={duration} /> : null}
       </div>
       {item.Overview ? <p className="home-featured-overview">{item.Overview}</p> : null}
     </div>
