@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { SiloItem } from "../types";
+import { invalidateWatchDetail } from "../api/playback";
 
 type Listener = (item: SiloItem) => void;
 
@@ -7,6 +8,9 @@ const listeners = new Set<Listener>();
 const refreshListeners = new Set<() => void>();
 
 export function publishWatchState(item: SiloItem) {
+  // The item's position or watched flag changed: its cached /watch response is stale now.
+  invalidateWatchDetail(item.Id);
+  if (item.SeriesId) invalidateWatchDetail(item.SeriesId);
   for (const listener of [...listeners]) listener({ ...item });
 }
 

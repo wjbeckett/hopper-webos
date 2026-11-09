@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { saveAudioChoice, saveSubtitleChoice } from "../api/playback";
 import type { AudioTrack, FileVersion, PlaybackChoices, SubtitleTrack, WatchDetail } from "../api/playback";
-import { getWatchDetail } from "../api/playback";
+import { getWatchDetail, prewarmPlayback } from "../api/playback";
 import type { Session, SiloItem } from "../types";
 import { LoadingState } from "./LoadingState";
 
@@ -217,7 +217,10 @@ export function useWatchDetail(session: Session, item: SiloItem | undefined) {
     if (!item) { setDetail(null); return; }
     let alive = true;
     setDetail(null);
-    getWatchDetail(session, item).then(next => { if (alive) setDetail(next); }).catch(() => undefined);
+    // Fresh read on open (resume position may have moved); the player then reuses this response.
+    getWatchDetail(session, item, { fresh: true }).then(next => { if (alive) setDetail(next); }).catch(() => undefined);
+    // Play is likely next: settle the installation id and load the HLS module now.
+    prewarmPlayback(session);
     return () => { alive = false; };
   }, [session, id]);
   return detail;

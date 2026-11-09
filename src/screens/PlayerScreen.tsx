@@ -412,6 +412,10 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         }
         const hls = new HlsPlayer({
           enableWorker: true,
+          // Fast start: begin on the lowest rendition, then ABR climbs. Waiting to measure
+          // bandwidth before the first segment delayed the first frame on the TV.
+          startLevel: 0,
+          testBandwidth: false,
           xhrSetup: (xhr) => Object.entries(headers).forEach(([name, value]) => xhr.setRequestHeader(name, value))
         });
         hlsRef.current = hls;
@@ -650,10 +654,9 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     setIntroSkipMode("ask");
     setAutoSkipCredits(false);
     setAutoPlayNext(true);
-    Promise.all([
-      getWatchDetail(session, item),
-      getEffectiveSettings(session, ["playback.intro_skip_mode", "playback.auto_skip_credits", "playback.auto_play_next", "playback.subtitle_appearance", "catalog.hide_unwatched_episode_overviews", "catalog.hide_unwatched_episode_images", "player.video_skip_back_seconds", "player.video_skip_forward_seconds"]).catch(() => new Map()),
-    ]).then(async ([watch, settings]) => {
+    // Settings never block the stream: they apply whenever they land, while /playback/start
+    // goes out as soon as /watch resolves (usually instantly, cached from Details).
+    getEffectiveSettings(session, ["playback.intro_skip_mode", "playback.auto_skip_credits", "playback.auto_play_next", "playback.subtitle_appearance", "catalog.hide_unwatched_episode_overviews", "catalog.hide_unwatched_episode_images", "player.video_skip_back_seconds", "player.video_skip_forward_seconds"]).catch(() => new Map()).then((settings) => {
       if (!alive) return;
       const configuredMode = settings.get("playback.intro_skip_mode")?.value;
       if (configuredMode === "never" || configuredMode === "ask" || configuredMode === "always") setIntroSkipMode(configuredMode);
@@ -669,6 +672,9 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       setHideUnwatchedImages(settings.get("catalog.hide_unwatched_episode_images")?.value === true);
       setSkipSeconds({ back: validSkip(settings.get("player.video_skip_back_seconds")?.value, DEFAULT_SKIP_BACK_SECONDS), forward: validSkip(settings.get("player.video_skip_forward_seconds")?.value, DEFAULT_SKIP_FORWARD_SECONDS) });
       setPlayerSettingsLoaded(true);
+    });
+    getWatchDetail(session, item).then(async (watch) => {
+      if (!alive) return;
       const selectedVersion = watch.versions.find(entry => entry.file_id === choices?.fileId)
         ?? bestVersionForDevice(watch.versions, watch.user_data?.last_file_id);
       if (!selectedVersion) throw new Error("Silo did not return a playable media file.");

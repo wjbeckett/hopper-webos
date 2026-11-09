@@ -123,9 +123,38 @@ function requirePlan(decision: Decision): PlaybackPlan {
   return decision.playback_plan;
 }
 
-export async function getWatchDetail(session: Session, item: SiloItem): Promise<WatchDetail> {
-  const detail = await requestV2<WatchDetail>(session, `/watch/${encodeURIComponent(item.Id)}`);
-  return { ...detail, versions: (detail.versions ?? []).map(version => ({ ...version, duration: version.duration_seconds ?? version.duration })) };
+/**
+ * Short-lived /watch cache: Details reads it, then the player needs the same response moments
+ * later. Reusing it removes one serial round trip from Play-to-first-frame. Kept brief so resume
+ * positions never go stale across a viewing session.
+ */
+const WATCH_CACHE_MS = 60_000;
+const watchCache = new Map<string, { at: number; value: Promise<WatchDetail> }>();
+
+export function getWatchDetail(session: Session, item: SiloItem, options?: { fresh?: boolean }): Promise<WatchDetail> {
+  const key = `${session.serverUrl}|${session.profileId ?? ""}|${item.Id}`;
+  const cached = watchCache.get(key);
+  if (!options?.fresh && cached && performance.now() - cached.at < WATCH_CACHE_MS) return cached.value;
+  const value = requestV2<WatchDetail>(session, `/watch/${encodeURIComponent(item.Id)}`)
+    .then(detail => ({ ...detail, versions: (detail.versions ?? []).map(version => ({ ...version, duration: version.duration_seconds ?? version.duration })) }));
+  watchCache.set(key, { at: performance.now(), value });
+  value.catch(() => watchCache.delete(key));
+  return value;
+}
+
+/** Drop cached /watch data, e.g. after playback stops so the next read has the new position. */
+export function invalidateWatchDetail(itemId?: string) {
+  if (!itemId) { watchCache.clear(); return; }
+  for (const key of watchCache.keys()) if (key.endsWith(`|${itemId}`)) watchCache.delete(key);
+}
+
+/**
+ * Warm everything Play needs before it is pressed: the device installation id and the HLS
+ * player module. Called from Details so these no longer sit in the Play-to-first-frame chain.
+ */
+export function prewarmPlayback(session: Session) {
+  void playbackInstallationId(session).catch(() => undefined);
+  void import("hls.js").catch(() => undefined);
 }
 
 export type TrickplaySheet = { index: number; url: string };
