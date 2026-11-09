@@ -5007,50 +5007,83 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
      (full-bleed rendered the logo about 4x too large). min(25% of width, 440). */
   display: grid;
   place-items: center;
-  background: #000;
+  /* Same backdrop as public/splash.png (LG's native launch splash), so the hand-off is seamless. */
+  background:
+    radial-gradient(circle at 50% 43.5%, rgba(129, 140, 248, .45), rgba(129, 140, 248, 0) 420px),
+    radial-gradient(620px 420px at 260px 180px, rgba(45, 212, 191, .22), rgba(45, 212, 191, 0)),
+    radial-gradient(640px 420px at 1680px 940px, rgba(244, 114, 182, .2), rgba(244, 114, 182, 0)),
+    radial-gradient(ellipse 70% 70% at 50% 45%, #1B1F4B, #0E1030 60%, #07081A);
   opacity: 1;
   transition: opacity 400ms ease-out;
 }
 .startup-splash.leaving { opacity: 0; }
 
-/* Hopper brand animation: hopper drops in and settles, play pops in, word rises. */
-.startup-splash-brand { display: flex; flex-direction: column; align-items: center; gap: 22px; }
-.startup-splash-mark { width: 150px; height: 150px; overflow: visible; }
-.startup-splash-body,
-.startup-splash-play { transform-box: fill-box; }
-.startup-splash-body {
-  transform-origin: 50% 100%;
-  animation: hopper-drop 700ms cubic-bezier(.2, .9, .3, 1.25) both;
+/* Hopper brand animation: tiles tumble in one by one, hopper settles, play pops,
+   spout glows, word rises. Geometry matches public/splash.png (mark 412x521, word 112px). */
+.startup-splash-brand {
+  display: flex; flex-direction: column; align-items: center; gap: 64px;
+  /* splash.png puts the mark top at y=180; plain centring lands at ~192. */
+  transform: translateY(-12px);
 }
-.startup-splash-play {
-  transform-origin: 50% 50%;
-  animation: hopper-play 420ms cubic-bezier(.3, 1.6, .5, 1) 520ms both;
-}
+.startup-splash-mark { width: 412px; height: 521px; overflow: visible; }
 .startup-splash-word {
   color: #f4f4f2;
-  font-size: 2.6rem;
+  font-size: 112px;
+  line-height: 1;
   font-weight: 700;
-  letter-spacing: .02em;
-  animation: hopper-word 500ms ease-out 820ms both;
+  letter-spacing: 2px;
+  animation: hopper-word 500ms ease-out 1100ms both;
+}
+/* Chrome 87: SVG CSS transforms need fill-box to resolve transform-origin per element. */
+.startup-splash-mark .hopper-tile,
+.startup-splash-mark .hopper-body,
+.startup-splash-mark .hopper-play,
+.startup-splash-mark .hopper-glow { transform-box: fill-box; }
+.startup-splash-mark .hopper-body {
+  transform-origin: 50% 100%;
+  animation: hopper-drop 650ms cubic-bezier(.2, .9, .3, 1.25) both;
+}
+.startup-splash-mark .hopper-tile {
+  transform-origin: 50% 50%;
+  animation: hopper-tile 560ms cubic-bezier(.25, 1.1, .4, 1) both;
+}
+.startup-splash-mark .hopper-tile-a { animation-delay: 380ms; }
+.startup-splash-mark .hopper-tile-c { animation-delay: 500ms; }
+.startup-splash-mark .hopper-tile-b { animation-delay: 620ms; }
+.startup-splash-mark .hopper-play {
+  transform-origin: 50% 50%;
+  animation: hopper-play 420ms cubic-bezier(.3, 1.6, .5, 1) 820ms both;
+}
+.startup-splash-mark .hopper-glow {
+  transform-origin: 50% 50%;
+  animation: hopper-glow 600ms ease-out 900ms both;
 }
 @keyframes hopper-drop {
   0% { opacity: 0; transform: translateY(-60px) scaleY(1.08); }
-  60% { opacity: 1; transform: translateY(0) scaleY(.92); }
+  60% { opacity: 1; transform: translateY(0) scaleY(.94); }
   100% { opacity: 1; transform: translateY(0) scaleY(1); }
+}
+@keyframes hopper-tile {
+  from { opacity: 0; transform: translateY(-160px) rotate(-18deg); }
+  to { opacity: 1; transform: translateY(0) rotate(0); }
 }
 @keyframes hopper-play {
   from { opacity: 0; transform: scale(.3); }
   to { opacity: 1; transform: scale(1); }
+}
+@keyframes hopper-glow {
+  from { opacity: 0; transform: scaleX(.4); }
+  to { opacity: 1; transform: scaleX(1); }
 }
 @keyframes hopper-word {
   from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Top-nav lockup: mark + word. */
+/* Top-nav lockup: mark + word. Mark viewBox is 664x840 (portrait). */
 .tv-nav .brand-mark { width: auto; min-width: 0; }
 .hopper-lockup { display: inline-flex; align-items: center; gap: 10px; white-space: nowrap; }
-.hopper-lockup-mark { width: 34px; height: 34px; }
+.hopper-lockup-mark { width: 30px; height: 38px; }
 .hopper-lockup-word { color: #f4f4f2; font-size: 1.45rem; font-weight: 700; letter-spacing: .01em; }
 
 /* The row slide is driven from script; native smooth scrolling would fight it. */

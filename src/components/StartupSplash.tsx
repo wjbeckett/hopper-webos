@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { HOPPER_ACCENT, HOPPER_BODY_PATH, HOPPER_INK, HOPPER_PLAY_PATH } from "./HopperMark";
+import { HopperMark } from "./HopperMark";
 
 /** Safety net: never hold the app behind the splash longer than this. */
 const MAX_SPLASH_MS = 6000;
@@ -44,17 +44,7 @@ export function StartupSplash({ onDone }: { onDone: () => void }) {
   return (
     <div className={`startup-splash ${leaving ? "leaving" : ""}`} aria-hidden="true">
       <div className="startup-splash-brand">
-        <svg className="startup-splash-mark" viewBox="0 0 100 100" focusable="false">
-          <path className="startup-splash-body" d={HOPPER_BODY_PATH} fill={HOPPER_ACCENT} />
-          <path
-            className="startup-splash-play"
-            d={HOPPER_PLAY_PATH}
-            fill={HOPPER_INK}
-            stroke={HOPPER_INK}
-            strokeWidth="3"
-            strokeLinejoin="round"
-          />
-        </svg>
+        <HopperMark className="startup-splash-mark" />
         <span className="startup-splash-word">Hopper</span>
       </div>
     </div>

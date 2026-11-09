@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <!-- Hopper store banner (1920x1080): mark left, wordmark + tagline right, a wall of poster
+       tiles drifting toward the hopper. Used as the store hero / promo image. -->
+  <defs>
+    <radialGradient id="bg" cx="38%" cy="50%" r="80%">
+      <stop offset="0" stop-color="#1E2357"/>
+      <stop offset="0.55" stop-color="#0E1030"/>
+      <stop offset="1" stop-color="#07081A"/>
+    </radialGradient>
+    <radialGradient id="halo" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#818CF8" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#818CF8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="aurora" x1="0.12" y1="0.05" x2="0.88" y2="1">
+      <stop offset="0" stop-color="#5EEAD4"/><stop offset="0.5" stop-color="#818CF8"/><stop offset="1" stop-color="#F472B6"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#99F6E4"/><stop offset="1" stop-color="#C4B5FD"/></linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#F9A8D4" stop-opacity="0.9"/><stop offset="1" stop-color="#F472B6" stop-opacity="0"/></radialGradient>
+    <linearGradient id="tileA" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5EEAD4"/><stop offset="1" stop-color="#2DD4BF"/></linearGradient>
+    <linearGradient id="tileB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#A5B4FC"/><stop offset="1" stop-color="#818CF8"/></linearGradient>
+    <linearGradient id="tileC" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FBCFE8"/><stop offset="1" stop-color="#F472B6"/></linearGradient>
+    <linearGradient id="fade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#07081A" stop-opacity="0"/><stop offset="1" stop-color="#07081A" stop-opacity="0.85"/>
+    </linearGradient>
+    <linearGradient id="word" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#F8FAFC"/><stop offset="1" stop-color="#E0E7FF"/></linearGradient>
+    <linearGradient id="tag" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#5EEAD4"/><stop offset="0.5" stop-color="#A5B4FC"/><stop offset="1" stop-color="#F9A8D4"/></linearGradient>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+
+  <!-- Drifting poster wall (top-left), fading as it nears the mark: content flowing in. -->
+  <g opacity="0.42">
+    <rect x="60" y="70" width="120" height="172" rx="16" fill="url(#tileB)" transform="rotate(-12 120 156)"/>
+    <rect x="230" y="40" width="120" height="172" rx="16" fill="url(#tileA)" transform="rotate(8 290 126)"/>
+    <rect x="400" y="96" width="120" height="172" rx="16" fill="url(#tileC)" transform="rotate(-6 460 182)"/>
+    <rect x="120" y="300" width="120" height="172" rx="16" fill="url(#tileC)" transform="rotate(10 180 386)"/>
+    <rect x="40" y="560" width="120" height="172" rx="16" fill="url(#tileA)" transform="rotate(-14 100 646)"/>
+    <rect x="130" y="820" width="120" height="172" rx="16" fill="url(#tileB)" transform="rotate(6 190 906)"/>
+  </g>
+
+  <circle cx="620" cy="560" r="430" fill="url(#halo)"/>
+
+  <!-- Mark, left of centre. -->
+  <g transform="translate(300 216) scale(0.64)">
+    <rect x="300" y="196" width="150" height="214" rx="22" fill="url(#tileA)" transform="rotate(-16 375 303)"/>
+    <rect x="575" y="176" width="150" height="214" rx="22" fill="url(#tileC)" transform="rotate(14 650 283)"/>
+    <rect x="437" y="128" width="150" height="214" rx="22" fill="url(#tileB)" transform="rotate(-3 512 235)"/>
+    <path d="M232 404H792a34 34 0 0 1 29 51L612 790v64a30 30 0 0 1-30 30H442a30 30 0 0 1-30-30v-64L203 455a34 34 0 0 1 29-51Z" fill="url(#aurora)"/>
+    <path d="M232 404H792a34 34 0 0 1 30 18H202a34 34 0 0 1 30-18Z" fill="url(#rim)"/>
+    <path d="M470 500c0-16 17-26 31-18l122 72c14 8 14 28 0 36l-122 72c-14 8-31-2-31-18Z" fill="#0E1030"/>
+    <ellipse cx="512" cy="912" rx="150" ry="40" fill="url(#glow)"/>
+  </g>
+
+  <!-- Wordmark + tagline. -->
+  <text x="1060" y="540" font-family="-apple-system, 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="168" font-weight="800" letter-spacing="1" fill="url(#word)">Hopper</text>
+  <rect x="1066" y="582" width="180" height="6" rx="3" fill="url(#tag)"/>
+  <text x="1064" y="660" font-family="-apple-system, 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="46" font-weight="500" fill="#C7D2FE">Your whole library.</text>
+  <text x="1064" y="720" font-family="-apple-system, 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="46" font-weight="500" fill="#C7D2FE">Beautifully on your TV.</text>
+</svg>
