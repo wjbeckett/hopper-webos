@@ -27,7 +27,7 @@ There is one long-lived branch, `main`. Every change arrives through a pull requ
 
 ## Your own change, step by step
 
-1. **You:** branch off `main`: `git fetch origin main && git checkout -b <type>/<slug> origin/main`. For a GitHub issue, run `/fix-issue <number>` in Claude Code and it does steps 1 to 3 and drafts the PR text.
+1. **You:** branch off `main`: `git fetch origin main && git checkout -b <type>/<slug> origin/main`. For a GitHub issue, run `/fix-issue <number>` in Claude Code and it does steps 1 to 3, including opening the PR. When Claude Code makes any other change for you, it also opens the PR itself (see Development procedure in `CLAUDE.md`).
 2. **You:** make the change and run `npm run build`.
 3. **You:** commit, push the branch, and open a pull request into `main`. Fill in the template.
 4. **Automatic:** **Build** runs, the PR is labelled, and **Claude PR review** starts. It takes a few minutes.
@@ -56,7 +56,7 @@ To review any pull request on demand through the read-only path: **Actions → P
 ## Issues
 
 - **Automatic:** issues opened from the bug or feature form are labelled `bug` or `enhancement`. The bug form requires the TV model, webOS version and steps.
-- **You:** run `/fix-issue` in Claude Code to triage open issues. It lists them by severity and effort, investigates the one you pick, fixes it on a branch and drafts the PR. There is no automatic issue bot.
+- **You:** run `/fix-issue` in Claude Code to triage open issues. It lists them by severity and effort, investigates the one you pick, fixes it on a branch and opens the PR. There is no automatic issue bot.
 
 ## Releases
 

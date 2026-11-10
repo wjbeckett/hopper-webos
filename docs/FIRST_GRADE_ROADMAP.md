@@ -120,3 +120,9 @@ Do not expose ebook reading or phone-style downloads management on TV unless pro
   - **Moved:** build, setup, TV deploy and PR conventions to the new `CONTRIBUTING.md`. Brand details to `brand/README.md`.
   - **TODO audit:** ticked the episode long-press menu, which shipped in the 2026-10-29 rebuild (SeriesScreen hold-OK menu: Play, watched, favorite, matching `TvDetailEpisodeRail`). Ticked LAN discovery through phone pairing. Narrowed the audiobook transport item (speed, sleep timer, chapters and skip intervals exist; bookmarks are missing). Narrowed translation to the detail "Translate description". Release blocker 6 now lists what is implemented.
   - **Verification:** source greps against `src/` and the Android reference. Docs only, so no runtime check.
+
+- PR and writing conventions (2026-11-10):
+  - **PRs:** Claude Code now opens a pull request for every change itself (ready for review), instead of drafting text for the maintainer to paste. `CLAUDE.md`, the `fix-issue` skill and `docs/MAINTAINING.md` say so.
+  - **Commits:** no `Co-Authored-By` or "Generated with" lines.
+  - **Writing:** the `unslop` skill from the Silo server repository is copied into `.claude/skills/unslop/` (AGPL-3.0, source in its `SOURCE.md`) and is the final pass for PR text, comments and reviews. `claude-review.yml` reads it from the base branch, so a PR cannot change the reviewer's instructions; `pr-intake.yml` reads it from `main`.
+  - **Verification:** docs and workflow prompts only. The two workflow changes have not run yet: a PR that changes `claude-review.yml` is not reviewed by it, and `pr-intake.yml` runs from `main`.

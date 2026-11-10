@@ -25,7 +25,9 @@ Last updated 2026-11-10 (PR automation added; flow flattened to branch → `main
 ## Issue and PR workflow (added 2026-11-10)
 The maintainer's step-by-step, including what is automatic and what is manual, is `docs/MAINTAINING.md`. Contributors read `CONTRIBUTING.md`.
 - **Flow for every change:** new branch off `main` → PR into `main`. `main` is the only long-lived branch; the `dev` branch was retired on 2026-11-10 and everything on it was merged into `main`. No direct commits to `main`. The full procedure is in `CLAUDE.md` under Development procedure.
-- **`fix-issue` skill** (`.claude/skills/fix-issue/`): triages open issues, investigates, fixes on a branch off `main` and drafts the PR. `.gitignore` lets `.claude/skills/` through; the rest of `.claude/` stays ignored. Not yet used on a real issue.
+- **Claude Code opens the PR for every change** (rule added 2026-11-10, branch `chore/pr-workflow-unslop`): one branch and one PR per change, opened ready for review once the work is verified and pushed. Commit messages carry no `Co-Authored-By` or "Generated with" lines.
+- **`unslop` skill** (`.claude/skills/unslop/`, copied from the Silo server repository, AGPL-3.0, see its `SOURCE.md`): a final pass on PR text, issue and PR comments and review text. Both review workflows are told to apply it. Not yet seen running in a workflow.
+- **`fix-issue` skill** (`.claude/skills/fix-issue/`): triages open issues, investigates, fixes on a branch off `main` and opens the PR. `.gitignore` lets `.claude/skills/` through; the rest of `.claude/` stays ignored. Not yet used on a real issue.
 - **`claude-review.yml`** (PRs from branches in this repo): full review that may push `review: ` fix commits.
   - Confirmed on PR #3: runs end to end, updates one summary comment per PR, and reads the PR description from `.claude-review/pr-description.md`.
   - A PR that changes this file is not reviewed by it (the action requires the file to match `main`).
