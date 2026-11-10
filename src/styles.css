@@ -46,6 +46,8 @@
   --surface: #101113;
   --ring: #f4f4f2;
   --muted-foreground: #929398;
+  /* Hopper brand teal. Not a profile theme token: it stays the same in every theme. */
+  --accent: #2DD4BF;
   color: var(--foreground);
   background: var(--background);
   font-synthesis: none;
@@ -3873,7 +3875,7 @@ body {
 .details-remaining svg { width: 1.15em; height: 1.15em; transform: rotate(-90deg); }
 .details-remaining circle { fill: none; stroke-width: 2.6; }
 .details-remaining-track { stroke: rgba(255,255,255,.22); }
-.details-remaining-fill { stroke: var(--accent, #2f6bff); stroke-linecap: round; }
+.details-remaining-fill { stroke: var(--accent); stroke-linecap: round; }
 
 .details-rating-chip {
   padding: 1px 7px;

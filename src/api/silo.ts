@@ -511,7 +511,7 @@ export async function authenticate(serverUrl: string, username: string, password
   return sessionFromAuth(serverUrl, await response.json() as NativeAuth, username);
 }
 
-/** Login and first-run setup answer with the same token pair. */
+/** Login, first-run setup and sign-up answer with the same token pair. */
 function sessionFromAuth(serverUrl: string, data: NativeAuth, username: string): Session {
   if (!data.access_token) throw new Error("Silo did not return an access token.");
   return {
@@ -533,6 +533,17 @@ export async function getSetupStatus(serverUrl: string): Promise<boolean> {
   return data.needs_setup === true;
 }
 
+/** Message from a failed account-creation response (setup or sign-up), or "" when it carries none. */
+async function accountErrorMessage(response: Response): Promise<string> {
+  const body = await response.text().catch(() => "");
+  try {
+    const parsed = JSON.parse(body) as { message?: string; error?: string | { message?: string } };
+    return (parsed.message ?? (typeof parsed.error === "string" ? parsed.error : parsed.error?.message) ?? "").trim();
+  } catch {
+    return body.trim();
+  }
+}
+
 /**
  * First-run `POST /api/v2/auth/setup` (201): creates the admin account and
  * signs in (Android TvSetupViewModel). Single attempt, never retried.
@@ -543,16 +554,32 @@ export async function setupServer(serverUrl: string, username: string, email: st
     headers: { Accept: "application/json", "Content-Type": "application/json" },
     body: JSON.stringify({ username, email, password })
   });
+  if (response.status !== 201) throw new Error(await accountErrorMessage(response) || "Setup failed");
+  return sessionFromAuth(serverUrl, await response.json() as NativeAuth, username);
+}
+
+/** Public `GET /api/v2/auth/signup`: true when the server accepts invite-code sign-ups. */
+export async function getSignupStatus(serverUrl: string): Promise<boolean> {
+  const response = await fetch(apiUrl(serverUrl, "/auth/signup", "v2"), { headers: { Accept: "application/json" } });
+  if (!response.ok) throw new Error(`Could not reach server: ${response.status} ${response.statusText}`);
+  const data = await response.json() as { enabled?: boolean };
+  return data.enabled === true;
+}
+
+/**
+ * Invite-code `POST /api/v2/auth/signup` (201): creates the account and signs in.
+ * Single attempt, never retried. Error wording follows Android TvSignupViewModel.
+ */
+export async function signUp(serverUrl: string, username: string, email: string, password: string, inviteCode: string): Promise<Session> {
+  const response = await fetch(apiUrl(serverUrl, "/auth/signup", "v2"), {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({ username, email, password, invite_code: inviteCode })
+  });
   if (response.status !== 201) {
-    const body = await response.text().catch(() => "");
-    let message = "";
-    try {
-      const parsed = JSON.parse(body) as { message?: string; error?: string | { message?: string } };
-      message = parsed.message ?? (typeof parsed.error === "string" ? parsed.error : parsed.error?.message) ?? "";
-    } catch {
-      message = body;
-    }
-    throw new Error(message.trim() || "Setup failed");
+    if (response.status === 409) throw new Error("Username or email already in use");
+    if (response.status === 403) throw new Error("Invalid invite code");
+    throw new Error(await accountErrorMessage(response) || "Signup failed");
   }
   return sessionFromAuth(serverUrl, await response.json() as NativeAuth, username);
 }

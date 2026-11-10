@@ -1,6 +1,6 @@
 # Android TV parity TODO
 
-Status as of 2026-11-10. Audit on this date: episode long-press menu and phone-pairing (mDNS) discovery were already shipped and are now ticked; the audiobook and translation items were narrowed to what is actually missing. Compare against `silo-android/androidTvApp/` before implementing each item, then update this list and `FIRST_GRADE_ROADMAP.md` with source/build/browser/physical-TV verification status. The Android TV client is the behavior and design reference; do not label work complete from compilation alone.
+Status as of 2026-11-10. Invite-code sign-up shipped and the Watch Party gate inspection was closed on this date. Earlier audit the same day: episode long-press menu and phone-pairing (mDNS) discovery were already shipped and are now ticked; the audiobook and translation items were narrowed to what is actually missing. Compare against `silo-android/androidTvApp/` before implementing each item, then update this list and `FIRST_GRADE_ROADMAP.md` with source/build/browser/physical-TV verification status. The Android TV client is the behavior and design reference; do not label work complete from compilation alone.
 
 ## Completed this pass
 
@@ -22,11 +22,10 @@ Status as of 2026-11-10. Audit on this date: episode long-press menu and phone-p
 
 ## Remaining exposed workflow gaps
 
-- [ ] Invite-code self-signup (still needed; future implementation): Android `TvSignupScreen` + `TvSignupViewModel`, offered as "Create account" on the password Login screen only when public `GET /api/v2/auth/signup` reports `enabled`; `POST /api/v2/auth/signup` (201) with username, email, password and `invite_code` returns a token pair that signs in.
+- [x] Invite-code self-signup (Android `TvSignupScreen` + `TvSignupViewModel`): the password sign-in screen probes public `GET /api/v2/auth/signup` and offers "Create account" only when it reports `enabled` (a failed probe leaves it out). `SignupScreen` has Username, Email, Password and Invite code, validates in Android's order and wording, and calls `POST /api/v2/auth/signup` once (201) with `invite_code`; the returned token pair signs in and lands on profile selection. 409 shows "Username or email already in use", 403 "Invalid invite code". "Sign in instead" or Back returns to sign-in. Verified by build and in desktop Chrome against a mock server (probe, validation, 403, 201 to profile selection); the status probe's shape was also checked against `demo.siloserver.org`. Not verified: a real sign-up on a live server, and the remote and system keyboard on a TV. Differences: Android probes sign-up status when the server is chosen and passes it to Login, webOS probes when the password screen opens; webOS uses its card layout, not Android's marquee layout with the Use-phone card.
 - [x] Episode long-press menu on the detail episode rail: hold OK on an episode tile opens Play / Mark Watched-Unwatched / Add-Remove Favorite; Back or an action returns focus to the tile. Matches Android `TvDetailEpisodeRail` (`TvMediaCardActions` with `onSetWatched` + `onToggleFavorite`, no watchlist). Shipped in the 2026-10-29 rebuild; it was left unchecked here by mistake.
 - [ ] "Translate description" on detail pages (Android `TvDescriptionTranslationSection` + "Translated by AI" label). Player-side AI subtitle translation is already implemented (`AiTranslateDialog`); only the detail description workflow is missing.
 - [x] LAN discovery via phone pairing: the bundled JS service (`services/pairing`, `com.hopperapp.hopper.service`) advertises `_silopair-roku._tcp` over mDNS; the Silo phone app's "Sign in on TV" finds the TV, pushes its server and approves the device login (`PhoneSetupScreen`, first screen when no server is saved). Manual entry and QR sign-in remain the fallback. Verified on a webOS 22 TV. Not done: the TV browsing for servers itself (a browser page has no mDNS).
-- [ ] Inspect the Android TV app's release-build gates for Watch Party. It is experimental and disabled in Android release builds; do not imply it is available on webOS. If product scope later requires it, implement the complete room lifecycle/realtime sync/player coordination, not just its hub screen.
 
 ## Player/device differences and validation
 
@@ -38,6 +37,7 @@ Status as of 2026-11-10. Audit on this date: episode long-press menu and phone-p
 ## Explicitly not outstanding
 
 - Cast/crew, trailers/extras, facts, person detail, and detail theme music are implemented.
+- Watch Party: gate inspected on 2026-11-10. Android puts it behind a device-local Settings → Experimental → Watch Party toggle (`WatchPartyExperiment`, preference `silo_experimental`/`watch_party`) that defaults on in debug builds and off in release builds; turning it off hides every entry point. It is an opt-in experiment, not a shipped Android TV destination, so webOS does not implement it and must not imply it is available. If product scope later requires it, implement the complete room lifecycle, realtime sync and player coordination, not just its hub screen.
 - Episode spoiler overview/artwork handling is implemented using the profile's effective native settings and artwork provenance.
 - Global Browse (`TvBrowseScreen`): Android registers `TvMainRoute.Browse`, but its only opener is Home's `onSeeAll`, which `TvHomeContent` never wires to a control, so no Android TV entry point reaches it. webOS ships no screen for it; `getBrowseCatalogPage`/`getBrowseFilterOptions` in `src/api/silo.ts` are ready if Android adds an entry point.
 - Android TV has no navigation route to `TvInboxScreen`, so there is no Android TV inbox destination to reproduce.
