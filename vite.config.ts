@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [
     react(),
     {
-      name: "silo-client-diagnostics",
+      name: "hopper-client-log",
       configureServer(server) {
         server.middlewares.use("/__client-log", (request, response) => {
           if (request.method !== "POST") {
@@ -16,7 +16,7 @@ export default defineConfig({
           let body = "";
           request.on("data", (chunk) => { body += String(chunk); });
           request.on("end", () => {
-            console.error(`[Silo webOS client] ${body}`);
+            console.error(`[Hopper client] ${body}`);
             response.statusCode = 204;
             response.end();
           });

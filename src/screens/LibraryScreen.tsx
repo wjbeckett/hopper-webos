@@ -563,7 +563,6 @@ export function LibraryScreen({
     if (!results) return;
     const PAINT_WINDOW_ROWS = 6;
     let lastStart = -1;
-    let lastEnd = -1;
     const apply = (focused?: Element | null) => {
       const grid = results.querySelector<HTMLElement>(".library-grid");
       if (!grid) return;
@@ -585,7 +584,6 @@ export function LibraryScreen({
         if (children[i].classList.contains("grid-far") !== far) children[i].classList.toggle("grid-far", far);
       }
       lastStart = start;
-      lastEnd = end;
     };
     const onFocus = (event: FocusEvent) => apply(event.target as Element);
     results.addEventListener("focusin", onFocus);
