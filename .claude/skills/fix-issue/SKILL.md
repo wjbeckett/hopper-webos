@@ -51,7 +51,7 @@ Read every open issue, including its comments. For each one, work out:
 | Severity | blocks use, wrong behaviour, cosmetic |
 | Effort | small (one file, clear cause), medium, large (design needed) |
 | Verifiable by | build only, browser, live Silo server, physical TV |
-| Notes | duplicates, missing information, already fixed on `main`, already tracked in `docs/ANDROID_PARITY_TODO.md` or the roadmap |
+| Notes | duplicates, missing information, already fixed on `main`, already tracked in `docs/ANDROID_PARITY_TODO.md` or `docs/HANDOFF.md` |
 
 Spend a few minutes in the code for each issue so the effort estimate is based on what's actually there, not on the title. Check whether `main` already fixes it.
 
@@ -79,7 +79,7 @@ Then report to the maintainer:
 - how it can be verified, and what only a TV can confirm
 - anything uncertain
 
-Stop here if the issue isn't a code problem, needs information from the reporter, needs a design decision, or would change behaviour the maintainer chose on purpose (see `docs/FIRST_GRADE_ROADMAP.md` and `docs/RECONSTRUCTION.md`). Offer a draft reply to the reporter instead.
+Stop here if the issue isn't a code problem, needs information from the reporter, needs a design decision, or would change behaviour the maintainer chose on purpose (see "Explicitly not outstanding" in `docs/ANDROID_PARITY_TODO.md`, and `docs/RECONSTRUCTION.md`). Offer a draft reply to the reporter instead.
 
 ## Stage 3: Fix
 
@@ -111,11 +111,11 @@ npm run build      # type-check + build; the only automated gate
 
 The build must pass. Beyond that, check the change in a browser if a dev server is available. Keep track of which level you actually reached (build, browser, live server, physical TV), because the PR has to say so truthfully. "Builds" is not "works on a TV".
 
-Update the docs that `CLAUDE.md` lists under "After each verified step", as far as they apply to this fix:
+Update every doc the fix makes out of date, in the same branch. `CLAUDE.md` lists them under "Docs to keep current". At the least:
 
-- `docs/FIRST_GRADE_ROADMAP.md` change log (newest at the bottom), with how it was verified
+- `docs/HANDOFF.md`: what changed and how it was verified
 - `docs/ANDROID_PARITY_TODO.md` if a parity item changed
-- `docs/HANDOFF.md`
+- `README.md` if a user-visible feature or limitation changed
 - `README.md` only if a user-visible feature or known limitation changed
 
 Commit to the fix branch, with the issue number in the message, and push it. Do not add `Co-Authored-By` or "Generated with" lines to commit messages:

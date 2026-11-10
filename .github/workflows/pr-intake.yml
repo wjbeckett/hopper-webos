@@ -310,7 +310,8 @@ jobs:
                   tokens, no new network destinations, no obfuscated or suspicious
                   code, no unexpected new dependencies or changes to build scripts
                   and workflows.
-               10. Docs: updated where the change calls for it, nothing overclaims parity.
+               10. Docs: every doc the change makes out of date is updated (see "Docs to
+                   keep current" in CLAUDE.md), nothing overclaims parity.
                11. PR description: says how the change was tested (build, browser,
                    live server, physical TV).
                Use "N/A" when a check does not apply and "Not verified" when you

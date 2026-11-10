@@ -1,6 +1,6 @@
 # Android TV parity TODO
 
-Status as of 2026-11-10. Invite-code sign-up shipped and the Watch Party gate inspection was closed on this date. Earlier audit the same day: episode long-press menu and phone-pairing (mDNS) discovery were already shipped and are now ticked; the audiobook and translation items were narrowed to what is actually missing. Compare against `silo-android/androidTvApp/` before implementing each item, then update this list and `FIRST_GRADE_ROADMAP.md` with source/build/browser/physical-TV verification status. The Android TV client is the behavior and design reference; do not label work complete from compilation alone.
+Status as of 2026-11-10. Invite-code sign-up shipped and the Watch Party gate inspection was closed on this date. Earlier audit the same day: episode long-press menu and phone-pairing (mDNS) discovery were already shipped and are now ticked; the audiobook and translation items were narrowed to what is actually missing. Compare against `silo-android/androidTvApp/` before implementing each item, then update this list and `HANDOFF.md` with source/build/browser/physical-TV verification status. The Android TV client is the behavior and design reference; do not label work complete from compilation alone.
 
 ## Completed this pass
 
@@ -27,15 +27,22 @@ Status as of 2026-11-10. Invite-code sign-up shipped and the Watch Party gate in
 - [ ] "Translate description" on detail pages (Android `TvDescriptionTranslationSection` + "Translated by AI" label). Player-side AI subtitle translation is already implemented (`AiTranslateDialog`); only the detail description workflow is missing.
 - [x] LAN discovery via phone pairing: the bundled JS service (`services/pairing`, `com.hopperapp.hopper.service`) advertises `_silopair-roku._tcp` over mDNS; the Silo phone app's "Sign in on TV" finds the TV, pushes its server and approves the device login (`PhoneSetupScreen`, first screen when no server is saved). Manual entry and QR sign-in remain the fallback. Verified on a webOS 22 TV. Not done: the TV browsing for servers itself (a browser page has no mDNS).
 
+- [ ] Music library Genres tab (Android `TvLibraryTab.Genres`): a new library tab with its own genre row and filtered grid. Not started.
+- [ ] Settings load states: Android's "checking" and "Try Again" states are not built. A failed settings-contract load blocks the whole pane.
+- [ ] Episode rail edge carousel on the detail page: not compared against Android.
+- [ ] Audiobook Authors/Series grids cover only the first audiobook library when there are several.
+- [ ] SiloControl receiver compatibility: listed as a target of the official TV clients. Not started and not evaluated.
+
 ## Player/device differences and validation
 
 - [ ] Negative audio delay: Android allows -1000..1000 ms; current WebAudio DelayNode supports only 0..1000 ms. Keep the limitation explicit unless a TV-safe implementation can advance audio without introducing worse sync behavior.
 - [ ] Verify Dolby Vision capability probing/profile advertisement and in-place setting restart on physical LG hardware. Never advertise DV Profile 7 on webOS.
 - [ ] Physically verify the recent player/Up Next/On Deck sizing, skip and hold-seek indicators, focus behavior, spoiler handling, and detail theme music on representative webOS versions.
-- [ ] Run a destination-by-destination side-by-side Android comparison; record each verified flow and remaining gap in `FIRST_GRADE_ROADMAP.md`.
+- [ ] Run a destination-by-destination side-by-side Android comparison; record each verified flow and remaining gap in this file.
 
 ## Explicitly not outstanding
 
+- Ebook reading and phone-style downloads management are not exposed on TV unless product direction changes. Android TV hides ebook-like content too.
 - Cast/crew, trailers/extras, facts, person detail, and detail theme music are implemented.
 - Watch Party: gate inspected on 2026-11-10. Android puts it behind a device-local Settings → Experimental → Watch Party toggle (`WatchPartyExperiment`, preference `silo_experimental`/`watch_party`) that defaults on in debug builds and off in release builds; turning it off hides every entry point. It is an opt-in experiment, not a shipped Android TV destination, so webOS does not implement it and must not imply it is available. If product scope later requires it, implement the complete room lifecycle, realtime sync and player coordination, not just its hub screen.
 - Episode spoiler overview/artwork handling is implemented using the profile's effective native settings and artwork provenance.
