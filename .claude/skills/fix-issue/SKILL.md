@@ -16,7 +16,9 @@ fix/<number>-<slug>  ──pull request──►  main
 
 `main` is the only long-lived branch. Every fix goes on its own branch and reaches `main` through a pull request; never commit to `main` directly.
 
-Before anything else, read `docs/HANDOFF.md` (as `CLAUDE.md` requires) so you know the current state and what is deliberately left alone.
+Before anything else, read `docs/DECISIONS.md` so you know what Hopper does differently on purpose and what is not planned. Issues are grouped by milestone (`CLAUDE.md`, "What to work on"): Public repo first, then Store submission, then After store release.
+
+Issues are not only bugs. Features and `verification` checks go through the same stages; for a feature, "root cause" below means the design and what it touches.
 
 ## Where to start
 
@@ -51,11 +53,11 @@ Read every open issue, including its comments. For each one, work out:
 | Severity | blocks use, wrong behaviour, cosmetic |
 | Effort | small (one file, clear cause), medium, large (design needed) |
 | Verifiable by | build only, browser, live Silo server, physical TV |
-| Notes | duplicates, missing information, already fixed on `main`, already tracked in `docs/BACKLOG.md` or `docs/HANDOFF.md` |
+| Notes | duplicates, missing information, already fixed on `main`, another issue already covers it, or `docs/DECISIONS.md` says it is deliberate or not planned |
 
 Spend a few minutes in the code for each issue so the effort estimate is based on what's actually there, not on the title. Check whether `main` already fixes it.
 
-Report a table, most worthwhile first, then recommend one issue to start on and say why. A good first pick is a real bug with a clear cause that can be checked in a browser.
+Report a table grouped by milestone (earliest first), most worthwhile first within each, then recommend one issue to start on and say why. Skip `maintainer` issues: list them separately as waiting on the maintainer. A good first pick is in the earliest open milestone, has a clear cause or design, and can be checked in a browser.
 
 Suggest labels, duplicate closures and "needs more info" replies, but only apply them after the maintainer says yes. Those are public, and other people get notified.
 
@@ -79,7 +81,7 @@ Then report to the maintainer:
 - how it can be verified, and what only a TV can confirm
 - anything uncertain
 
-Stop here if the issue isn't a code problem, needs information from the reporter, needs a design decision, or would change behaviour the maintainer chose on purpose (see "Where Hopper differs" and "Not planned" in `docs/BACKLOG.md`, and `docs/RECONSTRUCTION.md`). Offer a draft reply to the reporter instead.
+Stop here if the issue isn't a code problem, needs information from the reporter, needs a design decision, or would change behaviour the maintainer chose on purpose (see "Where Hopper differs" and "Not planned" in `docs/DECISIONS.md`). Offer a draft reply to the reporter instead.
 
 ## Stage 3: Fix
 
@@ -113,8 +115,8 @@ The build must pass. Beyond that, check the change in a browser if a dev server 
 
 Update every doc the fix makes out of date, in the same branch. `CLAUDE.md` lists them under "Docs to keep current". At the least:
 
-- `docs/HANDOFF.md`: what changed and how it was verified
-- `docs/BACKLOG.md` if a backlog item or a feature's verification level changed
+- `docs/DECISIONS.md` if the maintainer decided a new difference from Android TV
+- The issue itself: if the fix leaves part of it open (for example a TV check), comment with exactly what is left and use `Part of #<number>` in the PR so it stays open
 - `README.md` if a user-visible feature or limitation changed
 - `README.md` only if a user-visible feature or known limitation changed
 

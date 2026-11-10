@@ -2,18 +2,40 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Start every session with `docs/HANDOFF.md`.** It records the current state of the project, open items and next steps, and it is the starting point for the next round of changes. Update it at the end of each piece of work.
+**Start every session with the open issues.** The work list is GitHub issues, grouped by milestone (see "What to work on"). There is no handoff or backlog file. Read `docs/DECISIONS.md` before changing behaviour: it lists what Hopper does differently on purpose.
 
 ## What this is
 Hopper (`com.hopperapp.hopper`) is an LG webOS TV client for the Silo media server. The goal is a first-class TV client in its own right. It stays close to the official Android TV and Apple tvOS clients in features and behaviour, and may differ from them on purpose. It is built with React 19, TypeScript and Vite and packaged with LG `@webos-tools/cli`. It is a 10-foot UI: every interactive element must be reachable with Up/Down/Left/Right/OK/Back, and mouse/pointer support is secondary.
 
 ## Hard rules
 1. **No bulk overwrites.** Never do bulk checkouts, resets, restores, regenerations or whole-tree copies over `src/`. Make targeted edits to specific files, and rewrite a whole file only when that single file needs it. Commit to your working branch and push it after each verified step so work never lives only in the working tree (see Development procedure).
-2. **Android TV is the reference, not the definition.** Hopper is its own client. The official Android TV app in `silo-android/androidTvApp/` (git-ignored; it may need a local checkout) is the reference for behaviour, layout, focus/back flow and server contracts. Read the relevant Android source before building or changing a screen, menu or server action, and stay close to it unless there is a reason not to. Hopper may differ on purpose, for webOS limits or for its own design. The maintainer decides each difference; record it under "Where Hopper differs" in `docs/BACKLOG.md`, and never undo a recorded difference to match Android. Rebuild Android transitions with webOS-safe CSS and DOM behaviour; don't assume Compose behaviour carries over.
+2. **Android TV is the reference, not the definition.** Hopper is its own client. The official Android TV app in `silo-android/androidTvApp/` (git-ignored; it may need a local checkout) is the reference for behaviour, layout, focus/back flow and server contracts. Read the relevant Android source before building or changing a screen, menu or server action, and stay close to it unless there is a reason not to. Hopper may differ on purpose, for webOS limits or for its own design. The maintainer decides each difference; record it under "Where Hopper differs" in `docs/DECISIONS.md`, and never undo a recorded difference to match Android. Rebuild Android transitions with webOS-safe CSS and DOM behaviour; don't assume Compose behaviour carries over.
 3. **Native Silo API only.** Never use Jellyfin-compatible endpoints, headers, models or playback URLs. Take endpoints and payloads from the Android client's native Silo contracts or the server's own API spec; never invent routes.
 4. **Diagnostics stay local.** The Silo maintainer won't accept reports from third-party clients. Never integrate with the hosted diagnostics collector, and never imply that the app collects or uploads reports.
 5. **Don't claim more than was verified.** Say how far each thing was checked: source, build, browser, live server or physical TV. Built is not working on a TV. Don't describe a feature as matching the official clients unless it was compared against them, and name anything unimplemented or unverified.
-6. **Update the docs in the same change.** Every run that changes the repository, whether a feature, a fix, a cleanup or a workflow change, also updates every doc it makes out of date, in the same branch and pull request. Use the table under "Docs to keep current". A change is not finished, and its PR is not ready, until that is done.
+6. **Update the docs and the issues in the same change.** Every run that changes the repository, whether a feature, a fix, a cleanup or a workflow change, also updates every doc it makes out of date, in the same branch and pull request, and keeps the issues true (see "What to work on"). Use the table under "Docs to keep current". A change is not finished, and its PR is not ready, until that is done.
+
+## What to work on
+GitHub issues are the only list of work. Do not keep to-do lists in docs.
+
+| Milestone | Holds |
+| --- | --- |
+| Public repo | What must happen before the repository is made public |
+| Store submission | What must happen before Hopper is submitted to the LG Content Store, including features the maintainer wants in the first store release |
+| After store release | Features and improvements that do not block the store |
+
+Work the earliest milestone that has open issues, unless the maintainer names an issue. An issue with no milestone has not been triaged yet; ask before starting it.
+
+```bash
+gh api repos/wjbeckett/hopper-webos/milestones --jq '.[] | "\(.number) \(.title): \(.open_issues) open"'
+gh api 'repos/wjbeckett/hopper-webos/issues?state=open&milestone=<number>&per_page=100' \
+  --jq '.[] | select(.pull_request | not) | "#\(.number) \(.title) [\([.labels[].name] | join(", "))]"'
+```
+
+- **Working an issue** uses the `fix-issue` skill (`/fix-issue <number>`), for features and verification as well as bugs. The PR says `Fixes #<number>` so merging closes the issue.
+- **Labels:** `maintainer` issues need a decision or action from the maintainer; don't attempt them. `needs: tv` and `needs: live server` issues can't be finished without that hardware or server: do what can be done, say exactly what is left, and leave the issue open. `verification` issues are checks of things already built.
+- **Work you find but don't do** becomes a new issue, with area labels and no milestone, so the maintainer can place it. Don't leave it as a note in a doc or a code comment.
+- **Partly done:** if a PR finishes only part of an issue, say `Part of #<number>` and comment on the issue with what is left.
 
 ## Commands
 ```bash
@@ -114,12 +136,12 @@ Keep each concern in its own layer:
 4. When the change is complete, open the pull request (see Development procedure). Its "Docs updated" section lists the docs you changed, or says "None needed" and why.
 
 ## Docs to keep current
-There is no change log file. The history is the merged pull requests, so each PR description must say what changed and how it was tested.
+There is no change log, handoff or backlog file. The history is the merged pull requests, so each PR description must say what changed and how it was tested. Open work is GitHub issues.
 
 | Doc | Holds | Update it when |
 | --- | --- | --- |
-| `docs/HANDOFF.md` | Current state, release blockers, open items, working notes | Every change. Move finished items out, add new open items, and correct anything the change made untrue. Say how each thing was verified: build, browser, live server or physical TV |
-| `docs/BACKLOG.md` | Open work, deliberate differences from Android TV, what is not planned, and verification status of shipped features | An item is finished, narrowed or found, a difference from Android is decided, or a feature's verification level changes |
+| GitHub issues | All open work, with milestones and labels | Every change: close what it finishes (`Fixes #n`), comment on what it narrows, open an issue for new work found |
+| `docs/DECISIONS.md` | Deliberate differences from Android TV, and what is not planned | The maintainer decides a new difference, or decides not to build something |
 | `README.md` | What users get: Features, Known limitations, Availability | A user-visible feature ships, a limitation is removed or added, or a store submission or release happens |
 | `CONTRIBUTING.md` | Setup, browser development, TV deploy, PR conventions | Commands, tooling, scripts or contribution rules change |
 | `docs/MAINTAINING.md` | What the PR automation does and the maintainer's steps | A workflow in `.github/workflows/`, a label or a repository setting changes |
@@ -132,3 +154,4 @@ The README is public and user-facing: keep build and setup material in `CONTRIBU
 ## Local notes
 - Never commit personal server URLs, tokens or `localStorage` backups. Any change to a TV's `localStorage` must back it up first and keep `silo-webos-device-id`.
 - Shell heredocs have hung the agent tool runner before. Prefer file edits or `sed`/`perl`.
+- `getBrowseCatalogPage` and `getBrowseFilterOptions` in `src/api/silo.ts` are unused on purpose (parked for Global Browse, see `docs/DECISIONS.md`). Leave them.

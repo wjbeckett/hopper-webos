@@ -39,9 +39,5 @@ stay online during review.
 | Screenshots 1920×1080 | `brand/store/screenshots/01–04` |
 
 ## Before you submit
-- [ ] Get the demo server operator's OK for LG review use of demo/demo, and an uptime commitment for the review window
-- [ ] Optional: add a player screenshot taken with the TV's own capture (inspector captures show a blank video layer)
-- [ ] Check the asset sizes and file limits against the current LG Seller Lounge guide
-- [ ] Clear the name "Hopper" (trademark and store search)
-- [ ] Get permission to use the Silo name in the description (see CLAUDE.md › Branding)
-- [ ] Add a privacy policy URL (the app stores the server URL and tokens on the TV only)
+The steps left before submission are the open issues in the [Store submission milestone](https://github.com/wjbeckett/hopper-webos/milestone/2).
+

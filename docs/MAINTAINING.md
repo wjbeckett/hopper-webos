@@ -56,7 +56,10 @@ To review any pull request on demand through the read-only path: **Actions → P
 ## Issues
 
 - **Automatic:** issues opened from the bug or feature form are labelled `bug` or `enhancement`. The bug form requires the TV model, webOS version and steps.
-- **You:** run `/fix-issue` in Claude Code to triage open issues. It lists them by severity and effort, investigates the one you pick, fixes it on a branch and opens the PR. There is no automatic issue bot.
+- **Issues are the only work list.** There is no backlog or handoff file. Decisions that are not work (what Hopper does differently on purpose, what is not planned) are in `docs/DECISIONS.md`.
+- **Milestones:** *Public repo* (before the repository is made public), *Store submission* (before submitting to the LG Content Store, including features you want in the first store release) and *After store release*. An issue with no milestone has not been triaged; give it one or close it.
+- **You:** run `/fix-issue` in Claude Code to triage open issues, or `/fix-issue <number>` to work one. It lists them by milestone, severity and effort, investigates the one you pick, does the work on a branch and opens the PR. It handles features and verification checks as well as bugs. There is no automatic issue bot.
+- **Claude Code** opens a new issue, with no milestone, for work it finds but does not do.
 
 ## Releases
 
@@ -81,6 +84,9 @@ To review any pull request on demand through the read-only path: **Actions → P
 | `size/XS` … `size/XL` | Triage | Changed lines, not counting `package-lock.json` |
 | `area: …`, `documentation` | Triage | Which parts of the code the PR touches |
 | `bug`, `enhancement` | Issue forms | Set when an issue is opened from a form |
+| `maintainer` | **You** or Claude Code | Needs a decision or action only you can take |
+| `verification` | **You** or Claude Code | Already built; needs checking against a live server or on a TV |
+| `needs: tv`, `needs: live server` | **You** or Claude Code | Cannot be finished without a physical LG TV or a real Silo server |
 
 Triage creates any label that does not exist yet.
 
