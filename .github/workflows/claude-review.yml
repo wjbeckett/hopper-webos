@@ -123,9 +123,9 @@ jobs:
             9. Privacy: no diagnostics upload, no personal server URLs, tokens or private
                library data.
             10. Docs: every doc the change makes out of date is updated in this PR (see
-                "Docs to keep current" in CLAUDE.md: HANDOFF, BACKLOG, README,
-                CONTRIBUTING, MAINTAINING, CLAUDE.md), and nothing claims more than
-                was verified.
+                "Docs to keep current" in CLAUDE.md: DECISIONS, README, CONTRIBUTING,
+                MAINTAINING, CLAUDE.md), the PR names the issue it fixes or is part of
+                when there is one, and nothing claims more than was verified.
             11. PR description: says how the change was tested (build, browser, live
                 server, physical TV).
 

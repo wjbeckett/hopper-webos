@@ -70,7 +70,7 @@ WEBOS_DEVICE=livingroom npm run webos:inspect  # open LG Web Inspector for the a
 ## Project conventions
 
 - **Native Silo API only.** Don't use Jellyfin-compatible endpoints, headers, models or playback URLs, and don't guess endpoints. Check them against Silo's server contract or the official clients.
-- **The official Android TV client is the reference** for layout, behaviour and focus flow. If you change a screen, check how Android TV handles it first. Hopper is its own client and differs in places on purpose; those are listed under "Where Hopper differs" in [`docs/BACKLOG.md`](docs/BACKLOG.md).
+- **The official Android TV client is the reference** for layout, behaviour and focus flow. If you change a screen, check how Android TV handles it first. Hopper is its own client and differs in places on purpose; those are listed under "Where Hopper differs" in [`docs/DECISIONS.md`](docs/DECISIONS.md).
 - **Remote first.** Every control must be reachable with Up, Down, Left, Right, OK and Back. One OK press must trigger exactly one action.
 - **Code layout:**
   - API access goes in `src/api`. UI components don't contain raw API URLs.
