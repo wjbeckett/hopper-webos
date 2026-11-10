@@ -71,7 +71,7 @@ new branch off main  ──pull request──►  main
 - **Writing for people goes through the `unslop` skill** (`.claude/skills/unslop/SKILL.md`): PR titles and descriptions, issue and PR comments, and review comments and summaries. Write the text, then apply the skill as a final pass before posting. It does not apply to code, commands, logs or quoted text.
 - **Maintainer steps, what is automatic and what is manual, labels and settings** are in `docs/MAINTAINING.md`. Keep it in step with the workflows in `.github/workflows/`.
 - **Fork PRs are untrusted.** `pr-intake.yml` runs with secrets on `pull_request_target`, so it must never check out, install or run pull request code, and Claude there must stay limited to reading files. Don't loosen that without the maintainer's say-so.
-- **A PR that changes `claude-review.yml` is not reviewed by it.** The Claude action skips the review (the check still goes green, with no comment) unless the file in the PR matches the copy on `main`. That is expected; reviews resume once the change is merged.
+- **A PR that changes `claude-review.yml` is not reviewed by it.** The Claude action skips the review unless the file in the PR matches the copy on `main`. The "Report review status" step then posts a status comment saying so. That is expected; reviews resume once the change is merged.
 
 ## Architecture
 Keep each concern in its own layer:
