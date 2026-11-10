@@ -175,4 +175,9 @@ jobs:
             <what could not be verified here and how to check it. Or "Nothing specific.">
 
             Keep it factual and short. Report a failing build or anything you could not
-            check plainly. Do not write the review anywhere other than GitHub comments.
+            check plainly. Before posting the summary or an inline comment, read
+            `.claude/skills/unslop/SKILL.md` and its `references/patterns.md` from the
+            base branch (`git show origin/${{ github.base_ref }}:<path>`) if they exist
+            there, and apply them as a final pass on your prose. Leave code,
+            suggestion blocks, file paths, commands and the structure above exact.
+            Do not write the review anywhere other than GitHub comments.

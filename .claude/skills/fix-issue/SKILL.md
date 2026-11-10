@@ -1,12 +1,12 @@
 ---
 name: fix-issue
-description: Triage Hopper's GitHub issues, investigate one, code the fix on a branch off main, and draft a pull request into main for the maintainer to open. Use this whenever the user mentions GitHub issues, a bug report, an issue number (e.g. "#12", "issue 12"), triage, "what should I work on", "fix this issue", or asks for a PR for a reported problem, even if they don't name the skill. Run with no argument to triage all open issues, or with an issue number to go straight to investigating it.
+description: Triage Hopper's GitHub issues, investigate one, code the fix on a branch off main, and open a pull request into main for the maintainer to test and merge. Use this whenever the user mentions GitHub issues, a bug report, an issue number (e.g. "#12", "issue 12"), triage, "what should I work on", "fix this issue", or asks for a PR for a reported problem, even if they don't name the skill. Run with no argument to triage all open issues, or with an issue number to go straight to investigating it.
 argument-hint: "[issue number]"
 ---
 
-# Fix an issue: triage → investigate → fix → draft PR
+# Fix an issue: triage → investigate → fix → open PR
 
-This skill takes a GitHub issue on `wjbeckett/hopper-webos` from report to a pull request that is ready for the maintainer to open. An automated reviewer (`.github/workflows/claude-review.yml`) checks the PR afterwards, so the aim here is a focused, honest PR, not a perfect one.
+This skill takes a GitHub issue on `wjbeckett/hopper-webos` from report to an open pull request that the maintainer tests and merges. An automated reviewer (`.github/workflows/claude-review.yml`) checks the PR afterwards, so the aim here is a focused, honest PR, not a perfect one.
 
 The branch flow is:
 
@@ -118,21 +118,20 @@ Update the docs that `CLAUDE.md` lists under "After each verified step", as far 
 - `docs/HANDOFF.md`
 - `README.md` only if a user-visible feature or known limitation changed
 
-Commit to the fix branch, with the issue number in the message, and push it:
+Commit to the fix branch, with the issue number in the message, and push it. Do not add `Co-Authored-By` or "Generated with" lines to commit messages:
 
 ```bash
 git push -u origin fix/<number>-<short-slug>
 ```
 
-## Stage 4: Draft the PR
+## Stage 4: Open the PR
 
-The maintainer opens the PR. Don't create it unless they ask.
+Every fix ends with an open pull request. Do not stop at a pushed branch.
 
-Give them:
+Write:
 
-1. The compare link: `https://github.com/wjbeckett/hopper-webos/compare/main...fix/<number>-<short-slug>?expand=1`
-2. The title, under about 70 characters, saying what changed: `Fix <symptom> (#<number>)`
-3. The body, in a fenced block they can paste, using this template:
+1. The title, under about 70 characters, saying what changed: `Fix <symptom> (#<number>)`
+2. The body, saved to a file outside the repository, using this template:
 
 ```markdown
 ## Summary
@@ -161,12 +160,14 @@ Fixes #<number>
 
 Tick only the boxes that are true. The TV steps matter most: the maintainer tests on hardware before merging, and good steps save them working it out again.
 
-If they ask you to open the PR, target `main` and open it as a draft:
+Before posting, run the title and body through the `unslop` skill (`.claude/skills/unslop/SKILL.md`) as a final pass. Do the same for any issue or PR comment you write. Keep the facts, the checkboxes and the TV steps exact.
+
+Then open the PR into `main`, ready for review:
 
 ```bash
-gh pr create --base main --head fix/<number>-<short-slug> --draft --title "<title>" --body-file <file>
+gh pr create --base main --head fix/<number>-<short-slug> --title "<title>" --body-file <file>
 ```
 
-The automated reviewer skips drafts and runs when the PR is marked ready for review. It may push small fix commits to the branch, so pull before adding more commits.
+The automated reviewer runs on it straight away. It may push small fix commits to the branch, so pull before adding more commits.
 
-Finish by telling the maintainer what is done, what was verified and how, and what is left for them: open the PR, test on the TV, and merge.
+Finish by giving the maintainer the PR link and telling them what is done, what was verified and how, and what is left for them: test on the TV and merge.
