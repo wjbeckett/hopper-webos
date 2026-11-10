@@ -13,6 +13,7 @@ Hopper (`com.hopperapp.hopper`) is an LG webOS TV client for the Silo media serv
 3. **Native Silo API only.** Never use Jellyfin-compatible endpoints, headers, models or playback URLs. Mirror Android's documented native Silo contracts rather than inventing routes.
 4. **Diagnostics stay local.** The Silo maintainer won't accept reports from third-party clients. Never integrate with the hosted diagnostics collector, and never imply that the app collects or uploads reports.
 5. **Don't overclaim parity.** Before claiming parity, compare every exposed destination and workflow against Android TV, and name anything unimplemented or not verified against a server.
+6. **Update Documentation.** After every run, update relevant documentation with recent changes or closed off items (Parity TODO, Readme, etc)
 
 ## Commands
 ```bash
@@ -89,6 +90,7 @@ Keep each concern in its own layer:
 2. Commit to `dev`.
 3. Update `docs/FIRST_GRADE_ROADMAP.md` (status and change log, newest at the bottom) and `docs/ANDROID_PARITY_TODO.md`, saying how each item was verified: build, browser or physical TV.
 4. Refresh `docs/HANDOFF.md` so the next session starts from the current state.
+5. If a user-visible feature shipped or a limitation was removed, update the Features or Known limitations section of `README.md`. The README is public and user-facing: keep build and setup material in `CONTRIBUTING.md`, brand material in `brand/README.md`, and personal device or server details out of both. Update the README Availability table whenever a store submission or release happens.
 
 ## Local notes
 - Never commit personal server URLs, tokens or `localStorage` backups. Any change to a TV's `localStorage` must back it up first and keep `silo-webos-device-id`.

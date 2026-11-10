@@ -1,8 +1,23 @@
 # Hopper brand assets
 
-Concept: poster tiles tumble into an aurora-gradient hopper (teal `#5EEAD4` → violet `#818CF8` →
-rose `#F472B6`) that carries a negative-space play button; the spout glows where the picture comes
-out. Background navy `#0E1030`.
+<p align="center"><img src="out/store/hopper-icon-400.png" alt="Hopper icon" width="160"></p>
+
+The mark shows poster tiles dropping into an aurora-gradient hopper. The hopper carries a negative-space play button, and the spout glows where the picture comes out.
+
+| Role | Colour |
+|---|---|
+| Aurora gradient | teal `#5EEAD4` → violet `#818CF8` → rose `#F472B6` |
+| Background | navy `#0E1030` (also `bgColor`, `iconColor` and `splashColor` in `public/appinfo.json`) |
+
+## In the app
+
+| Piece | File | Notes |
+|---|---|---|
+| Mark | `src/components/HopperMark.tsx` | Same geometry as `hopper-icon.svg` with no background (viewBox `180 110 664 840`). Gradient IDs come from `useId`. |
+| Nav lockup | `HopperLockup` in the same file | 30×38 mark plus wordmark, in the top nav |
+| Startup animation | `src/components/StartupSplash.tsx` and `src/styles.css` | The tiles, body, play button, glow and wordmark animate in turn. The final frame lines up with `public/splash.png`, so the native splash hands over to the app without a jump. |
+
+If you change the artwork, update the SVG and `HopperMark.tsx` together.
 
 ## Sources (edit these)
 
@@ -11,9 +26,6 @@ out. Background navy `#0E1030`.
 | `hopper-icon.svg` | 1024×1024 | Master icon (also copied to `public/hopper-mark.svg`) |
 | `hopper-splash.svg` | 1920×1080 | Launch splash / app background |
 | `hopper-store-banner.svg` | 1920×1080 | Store hero / promo image |
-
-The in-app mark (`src/components/HopperMark.tsx`) uses the same geometry with no background
-(viewBox `180 110 664 840`). Change both if the artwork changes.
 
 ## Render
 
@@ -35,7 +47,7 @@ brand/render.sh   # needs Google Chrome + macOS sips; also copies the app assets
 
 ## Store screenshots (`store/screenshots/`)
 
-Taken on BedroomTV against the public demo server (`demo.siloserver.org`, demo/demo), so no
+Taken on an LG TV (webOS 22) against the public demo server (`demo.siloserver.org`, demo/demo), so no
 personal library appears. Content is open movies (Sintel, Big Buck Bunny) and public-domain titles.
 
 | File | Size | Screen |

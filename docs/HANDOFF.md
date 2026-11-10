@@ -1,12 +1,13 @@
 # Handoff: Hopper for LG webOS
 
-Last updated 2026-11-10 at `dev` HEAD `48a263c`, plus the docs commit that adds this file.
+Last updated 2026-11-10 (README/CONTRIBUTING split and TODO audit).
 
 ## Read first (in order)
 1. `CLAUDE.md`: hard rules (no bulk overwrites; Android TV is the reference; native Silo API only), architecture, TV navigation rules and webOS gotchas.
 2. `docs/FIRST_GRADE_ROADMAP.md`: verified features, release blockers and the change log (newest entries at the bottom).
 3. `docs/ANDROID_PARITY_TODO.md`: prioritised parity gaps.
 4. `brand/README.md` and `brand/store/LISTING.md`: brand pipeline and store submission state.
+5. `CONTRIBUTING.md`: setup, browser dev, TV deploy and PR conventions (public-facing; the README is user-facing only and carries the Availability table to update on store submission or release).
 
 ## Where things stand
 - **App:** Hopper, `com.hopperapp.hopper` v0.3.0, pairing service `com.hopperapp.hopper.service`. React 19 + TS + Vite, packaged with `@webos-tools/cli`.
@@ -39,13 +40,12 @@ Last updated 2026-11-10 at `dev` HEAD `48a263c`, plus the docs commit that adds 
 - Dedicated audiobook player:
   - Whole-book multi-part timeline and resume.
   - Chapters, bookmarks, sleep timer, speed and skip intervals.
-- Episode long-press menu, detail translation controls, invite-code sign-up.
+- "Translate description" on detail pages; invite-code sign-up; audiobook bookmarks.
 - Expired-session and network-loss UX. Token refresh itself is implemented in `src/api/silo.ts`.
 - Codec/container matrix on an older and a current webOS generation.
 - Automated tests (none exist): API parsing, auth state, navigation geometry, player state.
 - Side-by-side Android TV comparison of every destination, run on a physical LG TV. Confirm playback, remote focus and device-specific capabilities.
 - Evaluate Android TV's Watch Party, which is experimental and disabled in Android release builds. Don't claim parity unless the full server-backed room workflow and remote focus/back behaviour are implemented.
-- LAN server discovery from the web app, only if webOS exposes a supported discovery API. Until then, keep manual and saved-server management.
 
 ## Working notes
 - **Before you change anything:** read the matching Android source in `silo-android/androidTvApp/`. Make targeted edits only. Run `npm run build`, then commit to `dev` after each verified step. Update the roadmap and parity TODO with what was verified and how (build, browser or physical TV).

@@ -1,6 +1,6 @@
 # Android TV parity TODO
 
-Status as of 2026-11-10. No parity items changed since 2026-11-06. Recent work covered performance, the Hopper rebrand and store assets, which are logged in `FIRST_GRADE_ROADMAP.md`. Compare against `silo-android/androidTvApp/` before implementing each item, then update this list and `FIRST_GRADE_ROADMAP.md` with source/build/browser/physical-TV verification status. The Android TV client is the behavior and design reference; do not label work complete from compilation alone.
+Status as of 2026-11-10. Audit on this date: episode long-press menu and phone-pairing (mDNS) discovery were already shipped and are now ticked; the audiobook and translation items were narrowed to what is actually missing. Compare against `silo-android/androidTvApp/` before implementing each item, then update this list and `FIRST_GRADE_ROADMAP.md` with source/build/browser/physical-TV verification status. The Android TV client is the behavior and design reference; do not label work complete from compilation alone.
 
 ## Completed this pass
 
@@ -16,16 +16,16 @@ Status as of 2026-11-10. No parity items changed since 2026-11-06. Recent work c
 - [x] Replace generic movie detail for audiobooks with Android's audiobook hero: book artwork, title, author, narrator, publisher, total duration, description, Resume/Play/Start Over semantics. Source/build checked; browser/TV visual check pending.
 - [ ] Implement whole-book resume across multipart audiobooks. Never pin the first part's file when the requested book position belongs to a later part. The hero now sends a global resume value/0 for restart/undefined for fresh play (as Android does), but the webOS player has no part timeline/cross-part session orchestration yet.
 - [ ] Add Android's dedicated audio player rather than routing audiobooks through video-player chrome.
-- [ ] Match audiobook transport actions, skip interval settings, speed, sleep timer, chapters, bookmarks, and back/focus behavior.
+- [ ] Match audiobook transport and back/focus behaviour. The shared player already has playback speed, sleep timer, chapter list and profile skip intervals; missing are bookmarks (Android `TvAudiobookBookmarksPanel`) and the audiobook-specific layout.
 - [ ] Report whole-book progress and watched/finished state correctly; verify against Silo native playback contracts and Android's audiobook player/view model.
 - [ ] Add tests for multi-part seek mapping, finished/restart state, chapter boundaries, and D-pad focus.
 
 ## Remaining exposed workflow gaps
 
 - [ ] Invite-code self-signup (still needed; future implementation): Android `TvSignupScreen` + `TvSignupViewModel`, offered as "Create account" on the password Login screen only when public `GET /api/v2/auth/signup` reports `enabled`; `POST /api/v2/auth/signup` (201) with username, email, password and `invite_code` returns a token pair that signs in.
-- [ ] Episode long-press/context menu parity on the detail episode rail (Android actions and focus restoration).
-- [ ] Android detail translation controls and their native server workflow, if the TV build exposes them for the item/capability.
-- [ ] Revisit LG server discovery only if webOS provides a supported LAN discovery mechanism. Android uses mDNS; no browser mDNS implementation is planned. Saved-server management/manual entry already exist, but profile-selection landing after server switch is not identical.
+- [x] Episode long-press menu on the detail episode rail: hold OK on an episode tile opens Play / Mark Watched-Unwatched / Add-Remove Favorite; Back or an action returns focus to the tile. Matches Android `TvDetailEpisodeRail` (`TvMediaCardActions` with `onSetWatched` + `onToggleFavorite`, no watchlist). Shipped in the 2026-10-29 rebuild; it was left unchecked here by mistake.
+- [ ] "Translate description" on detail pages (Android `TvDescriptionTranslationSection` + "Translated by AI" label). Player-side AI subtitle translation is already implemented (`AiTranslateDialog`); only the detail description workflow is missing.
+- [x] LAN discovery via phone pairing: the bundled JS service (`services/pairing`, `com.hopperapp.hopper.service`) advertises `_silopair-roku._tcp` over mDNS; the Silo phone app's "Sign in on TV" finds the TV, pushes its server and approves the device login (`PhoneSetupScreen`, first screen when no server is saved). Manual entry and QR sign-in remain the fallback. Verified on a webOS 22 TV. Not done: the TV browsing for servers itself (a browser page has no mDNS).
 - [ ] Inspect the Android TV app's release-build gates for Watch Party. It is experimental and disabled in Android release builds; do not imply it is available on webOS. If product scope later requires it, implement the complete room lifecycle/realtime sync/player coordination, not just its hub screen.
 
 ## Player/device differences and validation
