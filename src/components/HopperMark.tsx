@@ -29,15 +29,18 @@ export function HopperMark({ className, glow = true }: { className?: string; glo
         <linearGradient id={id("tileB")} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#A5B4FC" /><stop offset="1" stopColor="#818CF8" /></linearGradient>
         <linearGradient id={id("tileC")} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#FBCFE8" /><stop offset="1" stopColor="#F472B6" /></linearGradient>
       </defs>
-      {/* Tiles: outer group carries the drop animation, inner rect keeps its resting tilt. */}
-      <g className="hopper-tile hopper-tile-a"><rect x="300" y="196" width="150" height="214" rx="22" fill={`url(#${id("tileA")})`} transform="rotate(-16 375 303)" /></g>
-      <g className="hopper-tile hopper-tile-c"><rect x="575" y="176" width="150" height="214" rx="22" fill={`url(#${id("tileC")})`} transform="rotate(14 650 283)" /></g>
-      <g className="hopper-tile hopper-tile-b"><rect x="437" y="128" width="150" height="214" rx="22" fill={`url(#${id("tileB")})`} transform="rotate(-3 512 235)" /></g>
-      <g className="hopper-body">
-        <path d="M232 404H792a34 34 0 0 1 29 51L612 790v64a30 30 0 0 1-30 30H442a30 30 0 0 1-30-30v-64L203 455a34 34 0 0 1 29-51Z" fill={`url(#${id("aurora")})`} />
-        <path d="M232 404H792a34 34 0 0 1 30 18H202a34 34 0 0 1 30-18Z" fill={`url(#${id("rim")})`} />
-        <path className="hopper-play" d="M470 500c0-16 17-26 31-18l122 72c14 8 14 28 0 36l-122 72c-14 8-31-2-31-18Z" fill="#0E1030" />
-      </g>
+      {/* hopper-react wraps the tiles and the hopper so the splash can dip them together when a tile lands. */}
+      <g className="hopper-react">
+        {/* Tiles: outer group carries the drop animation, inner rect keeps its resting tilt. */}
+        <g className="hopper-tile hopper-tile-a"><rect x="300" y="196" width="150" height="214" rx="22" fill={`url(#${id("tileA")})`} transform="rotate(-16 375 303)" /></g>
+        <g className="hopper-tile hopper-tile-c"><rect x="575" y="176" width="150" height="214" rx="22" fill={`url(#${id("tileC")})`} transform="rotate(14 650 283)" /></g>
+        <g className="hopper-tile hopper-tile-b"><rect x="437" y="128" width="150" height="214" rx="22" fill={`url(#${id("tileB")})`} transform="rotate(-3 512 235)" /></g>
+        <g className="hopper-body">
+          <path d="M232 404H792a34 34 0 0 1 29 51L612 790v64a30 30 0 0 1-30 30H442a30 30 0 0 1-30-30v-64L203 455a34 34 0 0 1 29-51Z" fill={`url(#${id("aurora")})`} />
+          <path d="M232 404H792a34 34 0 0 1 30 18H202a34 34 0 0 1 30-18Z" fill={`url(#${id("rim")})`} />
+          <path className="hopper-play" d="M470 500c0-16 17-26 31-18l122 72c14 8 14 28 0 36l-122 72c-14 8-31-2-31-18Z" fill="#0E1030" />
+        </g>
+        </g>
       {glow ? <ellipse className="hopper-glow" cx="512" cy="912" rx="150" ry="40" fill={`url(#${id("glow")})`} /> : null}
     </svg>
   );
