@@ -11,7 +11,7 @@ Last updated 2026-11-10 (issue-fix skill and automated PR review added).
 
 ## Where things stand
 - **App:** Hopper, `com.hopperapp.hopper` v0.3.0, pairing service `com.hopperapp.hopper.service`. React 19 + TS + Vite, packaged with `@webos-tools/cli`.
-- **Recent work** (all committed to `dev`):
+- **Recent work** (all on `dev`):
   - Browse, Continue Watching and Details performance.
   - Faster playback start.
   - `ResumeProgress` time-left ring.
@@ -23,7 +23,7 @@ Last updated 2026-11-10 (issue-fix skill and automated PR review added).
 - **Uncommitted on purpose:** `.claude/settings.json` deletion is unrelated. Do not stage it.
 
 ## Issue and PR workflow (added 2026-11-10, not yet exercised)
-- **Flow:** `fix/<number>-<slug>` → PR into `dev` → release PR `dev` → `main` after TV testing.
+- **Flow for every change:** new branch off `dev` → PR into `dev` → release PR `dev` → `main` after TV testing. No direct commits to `dev` or `main`. The full procedure is in `CLAUDE.md` under Development procedure.
 - **`fix-issue` skill** (`.claude/skills/fix-issue/`): triages open issues, investigates, fixes on a branch off `dev` and drafts the PR. `.gitignore` now lets `.claude/skills/` through; the rest of `.claude/` stays ignored.
 - **`.github/workflows/claude-review.yml`:** reviews non-draft PRs into `dev` (may push `review: ` fix commits) and `main` (comment only).
 - **Setup:** the maintainer has installed the Claude GitHub App and added the `CLAUDE_CODE_OAUTH_TOKEN` secret.
@@ -58,7 +58,7 @@ Last updated 2026-11-10 (issue-fix skill and automated PR review added).
 - Evaluate Android TV's Watch Party, which is experimental and disabled in Android release builds. Don't claim parity unless the full server-backed room workflow and remote focus/back behaviour are implemented.
 
 ## Working notes
-- **Before you change anything:** read the matching Android source in `silo-android/androidTvApp/`. Make targeted edits only. Run `npm run build`, then commit to `dev` after each verified step. Update the roadmap and parity TODO with what was verified and how (build, browser or physical TV).
+- **Before you change anything:** read the matching Android source in `silo-android/androidTvApp/`. Make targeted edits only. Work on a branch off `dev` (see Development procedure in `CLAUDE.md`). Run `npm run build`, then commit and push the branch after each verified step, and get it into `dev` through a pull request. Update the roadmap and parity TODO with what was verified and how (build, browser or physical TV).
 - **webOS Chrome 87:**
   - No `:has()`.
   - SVG CSS transforms need `transform-box: fill-box`.
