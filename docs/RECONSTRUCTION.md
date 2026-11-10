@@ -180,7 +180,7 @@ APIs, shuffle APIs, media rails, TopNav.
 ## Browse / library (survives, but re-check these during rebuild)
 
 - Multi-library merge: keep rendered prefix, append later pages in library order, NEVER
-  re-sort rendered items (AGENTS.md rule); error → do not abort paging.
+  re-sort rendered items (CLAUDE.md rule); error → do not abort paging.
 - First-card landing focus with retry (~2s budget, cancels on keypress or existing focus);
   `LibraryScreen` must be keyed by section+landing+library ids (remount on switch) — a reused
   instance skipped the focus effect and broke Movies↔TV landing.

@@ -43,5 +43,5 @@ stay online during review.
 - [ ] Optional: add a player screenshot taken with the TV's own capture (inspector captures show a blank video layer)
 - [ ] Check the asset sizes and file limits against the current LG Seller Lounge guide
 - [ ] Clear the name "Hopper" (trademark and store search)
-- [ ] Get permission to use the Silo name in the description (see AGENTS.md › Branding)
+- [ ] Get permission to use the Silo name in the description (see CLAUDE.md › Branding)
 - [ ] Add a privacy policy URL (the app stores the server URL and tokens on the TV only)

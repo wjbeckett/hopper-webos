@@ -3,7 +3,7 @@
 Last updated 2026-11-10 at `dev` HEAD `48a263c`, plus the docs commit that adds this file.
 
 ## Read first (in order)
-1. `AGENTS.md`: hard rules (no bulk overwrites; Android TV is the reference; native Silo API only) and webOS gotchas.
+1. `CLAUDE.md`: hard rules (no bulk overwrites; Android TV is the reference; native Silo API only), architecture, TV navigation rules and webOS gotchas.
 2. `docs/FIRST_GRADE_ROADMAP.md`: verified features, release blockers and the change log (newest entries at the bottom).
 3. `docs/ANDROID_PARITY_TODO.md`: prioritised parity gaps.
 4. `brand/README.md` and `brand/store/LISTING.md`: brand pipeline and store submission state.
@@ -43,7 +43,9 @@ Last updated 2026-11-10 at `dev` HEAD `48a263c`, plus the docs commit that adds 
 - Expired-session and network-loss UX. Token refresh itself is implemented in `src/api/silo.ts`.
 - Codec/container matrix on an older and a current webOS generation.
 - Automated tests (none exist): API parsing, auth state, navigation geometry, player state.
-- Side-by-side Android TV comparison of every destination.
+- Side-by-side Android TV comparison of every destination, run on a physical LG TV. Confirm playback, remote focus and device-specific capabilities.
+- Evaluate Android TV's Watch Party, which is experimental and disabled in Android release builds. Don't claim parity unless the full server-backed room workflow and remote focus/back behaviour are implemented.
+- LAN server discovery from the web app, only if webOS exposes a supported discovery API. Until then, keep manual and saved-server management.
 
 ## Working notes
 - **Before you change anything:** read the matching Android source in `silo-android/androidTvApp/`. Make targeted edits only. Run `npm run build`, then commit to `dev` after each verified step. Update the roadmap and parity TODO with what was verified and how (build, browser or physical TV).
