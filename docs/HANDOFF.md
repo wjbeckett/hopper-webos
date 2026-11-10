@@ -29,7 +29,7 @@ Last updated 2026-11-10 (issue-fix skill and automated PR review added).
 - **Setup:** the maintainer has installed the Claude GitHub App and added the `CLAUDE_CODE_OAUTH_TOKEN` secret.
 - **The workflow file must be identical on `main` (the default branch).** The first run, on PR #1, was skipped by the action for this reason: the check went green in 19 seconds with no comment. Any change to the workflow has to reach `main` before reviews run again.
 - **Confirmed on PR #3:** with the file matching `main`, the review ran end to end (about 75 seconds), ran the build and posted its summary comment as `claude[bot]`.
-- **PR descriptions:** plain `gh pr view` was denied for the app's token, so the reviewer could not read PR descriptions. The workflow now saves the title, author and body from the event payload to `.claude-review/pr-description.md` (git-excluded, never committed) for the reviewer to read. Not yet confirmed on a run: it needs the same workflow file on `main` first.
+- **PR descriptions:** plain `gh pr view` was denied for the app's token, so the reviewer could not read PR descriptions. The workflow now saves the title, author and body from the event payload to `.claude-review/pr-description.md` (git-excluded, never committed) for the reviewer to read. Confirmed on PR #3 once `main` matched: the reviewer read the (empty) description and flagged it.
 - **Still unconfirmed:** that a `review: ` fix commit lands on the PR branch and does not start a second review. PR #3 had nothing to fix.
 
 ## Open items
