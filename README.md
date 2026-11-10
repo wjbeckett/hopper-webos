@@ -35,7 +35,7 @@ Hopper is an independent, community-built client. It is not affiliated with or e
 
 **Getting started**
 - Phone pairing: the TV advertises itself on your network over mDNS. In the Silo phone app, choose "Sign in on TV" and pick the TV. The phone sends the server and approves the sign-in, so there's nothing to type with the remote.
-- Sign in with a QR code or a code on another device, or with a username and password.
+- Sign in with a QR code or a code on another device, or with a username and password. If your server allows it, create an account on the TV with an invite code.
 - First-run setup for a brand-new Silo server.
 - Several saved servers, with switching and removal.
 
@@ -72,7 +72,7 @@ Hopper is an independent, community-built client. It is not affiliated with or e
 - **TV models:** playback has been tested on one LG TV (webOS 22). Other webOS versions and codecs haven't been fully tested.
 - **Connection errors:** losing the network or having your session expire needs clearer recovery screens.
 - **Audio delay** can only delay audio by 0 to 1000 ms. It can't move audio earlier.
-- **Not implemented yet:** sign-up with an invite code, and "Translate description" on details pages.
+- **Not implemented yet:** "Translate description" on details pages.
 - **Watch Party** isn't available. It's experimental and switched off in the official Android TV app too.
 
 ## Contributing
