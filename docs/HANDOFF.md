@@ -1,11 +1,11 @@
 # Handoff: Hopper for LG webOS
 
-Last updated 2026-11-10 (`docs/FIRST_GRADE_ROADMAP.md` retired; its release blockers moved here).
+Last updated 2026-11-10 (Hopper is its own client: Android TV is the reference, not the definition; `ANDROID_PARITY_TODO.md` became `BACKLOG.md`).
 
 ## Read first (in order)
-1. `CLAUDE.md`: hard rules (no bulk overwrites; Android TV is the reference; native Silo API only), architecture, TV navigation rules and webOS gotchas.
+1. `CLAUDE.md`: hard rules (no bulk overwrites; Android TV is the reference, not the definition; native Silo API only), architecture, TV navigation rules and webOS gotchas.
 2. This file: current state, release blockers and open items. There is no change log file; the history is the merged pull requests (`gh pr list --state merged`).
-3. `docs/ANDROID_PARITY_TODO.md`: prioritised parity gaps.
+3. `docs/BACKLOG.md`: open work, where Hopper deliberately differs from Android TV, what is not planned, and how far shipped features were verified.
 4. `brand/README.md` and `brand/store/LISTING.md`: brand pipeline and store submission state.
 5. `CONTRIBUTING.md`: setup, browser dev, TV deploy and PR conventions; `docs/MAINTAINING.md`: what the PR automation does and the maintainer's steps (public-facing; the README is user-facing only and carries the Availability table to update on store submission or release).
 
@@ -52,7 +52,7 @@ What stands between the app and a store release. Update an item when its state c
 7. **Codec matrix:** validate codecs and containers on at least one older and one current webOS generation.
 8. **Automated tests:** none exist. Needed for navigation geometry, auth state, API parsing and player state.
 9. **Store submission:** icons, splash, banner, four screenshots and a draft listing are done (`brand/store/LISTING.md`). Open: the items under "Blocked on the user" below, an accessibility pass and LG's certification checklist.
-10. **Android TV comparison:** a destination-by-destination comparison on a physical TV has not been done. Known open points: Back does not always return to the originating screen, Home metadata enrichment and LG-remote focus transitions are unverified, and the sampled Home tint depends on artwork CORS behaviour that has not been checked on a TV. Feature gaps are in `docs/ANDROID_PARITY_TODO.md`.
+10. **Android TV comparison:** a destination-by-destination comparison on a physical TV has not been done. Known open points: Back does not always return to the originating screen, Home metadata enrichment and LG-remote focus transitions are unverified, and the sampled Home tint depends on artwork CORS behaviour that has not been checked on a TV. Open features are in `docs/BACKLOG.md`.
 
 ## Open items
 
@@ -78,10 +78,10 @@ What stands between the app and a store release. Update an item when its state c
 - Codec/container matrix on an older and a current webOS generation.
 - Automated tests (none exist): API parsing, auth state, navigation geometry, player state.
 - Side-by-side Android TV comparison of every destination, run on a physical LG TV. Confirm playback, remote focus and device-specific capabilities.
-- Watch Party: evaluated 2026-11-10 and not implemented, by decision. Android hides it behind a Settings → Experimental toggle that is off by default in release builds (details in `ANDROID_PARITY_TODO.md`).
+- Watch Party: evaluated 2026-11-10 and not implemented, by decision. Android hides it behind a Settings → Experimental toggle that is off by default in release builds (details in `BACKLOG.md`).
 
 ## Working notes
-- **Before you change anything:** read the matching Android source in `silo-android/androidTvApp/`. Make targeted edits only. Work on a branch off `main` (see Development procedure in `CLAUDE.md`). Run `npm run build`, then commit and push the branch after each verified step, and open a pull request into `main`. In the same change, update every doc it affects (the table under "Docs to keep current" in `CLAUDE.md`), saying what was verified and how (build, browser, live server or physical TV).
+- **Before you change anything:** read the matching Android source in `silo-android/androidTvApp/` and check "Where Hopper differs" in `docs/BACKLOG.md`. Make targeted edits only. Work on a branch off `main` (see Development procedure in `CLAUDE.md`). Run `npm run build`, then commit and push the branch after each verified step, and open a pull request into `main`. In the same change, update every doc it affects (the table under "Docs to keep current" in `CLAUDE.md`), saying what was verified and how (build, browser, live server or physical TV).
 - **webOS Chrome 87:**
   - No `:has()`.
   - SVG CSS transforms need `transform-box: fill-box`.

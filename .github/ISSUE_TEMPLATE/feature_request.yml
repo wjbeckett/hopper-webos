@@ -19,7 +19,7 @@ body:
     id: reference
     attributes:
       label: Does an official Silo client already do this?
-      description: Hopper follows the official Android TV client, so this helps a lot.
+      description: Hopper stays close to the official Android TV client, so this helps a lot.
       options:
         - "Yes, Android TV"
         - "Yes, Apple TV"

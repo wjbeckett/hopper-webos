@@ -63,7 +63,7 @@ Hopper is an independent, community-built client. It is not affiliated with or e
 **Built for the TV**
 - Every screen works with arrows, OK and Back on the LG remote, and the remote's media keys control playback.
 - An animated startup splash, and performance tuning for older webOS TVs.
-- Settings match the official Android TV client: General, Playback, Subtitles, Diagnostics and Server.
+- Settings for General, Playback, Subtitles, Diagnostics and Server, laid out like the official Android TV client.
 - Diagnostics stay on the TV. Logs can be viewed or exported, and are never uploaded.
 
 ## Known limitations

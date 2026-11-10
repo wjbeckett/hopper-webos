@@ -5,14 +5,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Start every session with `docs/HANDOFF.md`.** It records the current state of the project, open items and next steps, and it is the starting point for the next round of changes. Update it at the end of each piece of work.
 
 ## What this is
-Hopper (`com.hopperapp.hopper`) is an LG webOS TV client for the Silo media server. The goal is a first-class TV client whose features match the official Android TV and Apple tvOS clients. It is built with React 19, TypeScript and Vite and packaged with LG `@webos-tools/cli`. It is a 10-foot UI: every interactive element must be reachable with Up/Down/Left/Right/OK/Back, and mouse/pointer support is secondary.
+Hopper (`com.hopperapp.hopper`) is an LG webOS TV client for the Silo media server. The goal is a first-class TV client in its own right. It stays close to the official Android TV and Apple tvOS clients in features and behaviour, and may differ from them on purpose. It is built with React 19, TypeScript and Vite and packaged with LG `@webos-tools/cli`. It is a 10-foot UI: every interactive element must be reachable with Up/Down/Left/Right/OK/Back, and mouse/pointer support is secondary.
 
 ## Hard rules
 1. **No bulk overwrites.** Never do bulk checkouts, resets, restores, regenerations or whole-tree copies over `src/`. Make targeted edits to specific files, and rewrite a whole file only when that single file needs it. Commit to your working branch and push it after each verified step so work never lives only in the working tree (see Development procedure).
-2. **Android TV is the reference.** The Android TV app in `silo-android/androidTvApp/` sets the design and behaviour for every screen, menu, focus/back flow and server action. That directory is git-ignored and may need a local checkout. Read the relevant Android source before building or changing anything, and match it as closely as webOS allows. Deviate only where the user has explicitly decided to (see "Explicitly not outstanding" in `docs/ANDROID_PARITY_TODO.md`, and `docs/RECONSTRUCTION.md`). Rebuild Android transitions with webOS-safe CSS and DOM behaviour; don't assume Compose behaviour carries over.
-3. **Native Silo API only.** Never use Jellyfin-compatible endpoints, headers, models or playback URLs. Mirror Android's documented native Silo contracts rather than inventing routes.
+2. **Android TV is the reference, not the definition.** Hopper is its own client. The official Android TV app in `silo-android/androidTvApp/` (git-ignored; it may need a local checkout) is the reference for behaviour, layout, focus/back flow and server contracts. Read the relevant Android source before building or changing a screen, menu or server action, and stay close to it unless there is a reason not to. Hopper may differ on purpose, for webOS limits or for its own design. The maintainer decides each difference; record it under "Where Hopper differs" in `docs/BACKLOG.md`, and never undo a recorded difference to match Android. Rebuild Android transitions with webOS-safe CSS and DOM behaviour; don't assume Compose behaviour carries over.
+3. **Native Silo API only.** Never use Jellyfin-compatible endpoints, headers, models or playback URLs. Take endpoints and payloads from the Android client's native Silo contracts or the server's own API spec; never invent routes.
 4. **Diagnostics stay local.** The Silo maintainer won't accept reports from third-party clients. Never integrate with the hosted diagnostics collector, and never imply that the app collects or uploads reports.
-5. **Don't overclaim parity.** Before claiming parity, compare every exposed destination and workflow against Android TV, and name anything unimplemented or not verified against a server.
+5. **Don't claim more than was verified.** Say how far each thing was checked: source, build, browser, live server or physical TV. Built is not working on a TV. Don't describe a feature as matching the official clients unless it was compared against them, and name anything unimplemented or unverified.
 6. **Update the docs in the same change.** Every run that changes the repository, whether a feature, a fix, a cleanup or a workflow change, also updates every doc it makes out of date, in the same branch and pull request. Use the table under "Docs to keep current". A change is not finished, and its PR is not ready, until that is done.
 
 ## Commands
@@ -45,7 +45,7 @@ new branch off main  ──pull request──►  main
 5. **The maintainer tests on a physical TV before merging** whenever the change affects the app. A release is a tag on a tested `main` commit.
 
 - **Issue fixes** use the `fix-issue` skill (`.claude/skills/fix-issue/SKILL.md`), which follows this procedure: triage, investigate, fix on a branch off `main`, then open the PR.
-- **No AI attribution in commits.** Do not add `Co-Authored-By` trailers or "Generated with" lines to commit messages.
+- **No AI attribution anywhere.** Do not add `Co-Authored-By` trailers or "Generated with" lines to commit messages, pull request descriptions, comments or reviews.
 - **Writing for people goes through the `unslop` skill** (`.claude/skills/unslop/SKILL.md`): PR titles and descriptions, issue and PR comments, and review comments and summaries. Write the text, then apply the skill as a final pass before posting. It does not apply to code, commands, logs or quoted text.
 - **Maintainer steps, what is automatic and what is manual, labels and settings** are in `docs/MAINTAINING.md`. Keep it in step with the workflows in `.github/workflows/`.
 - **Fork PRs are untrusted.** `pr-intake.yml` runs with secrets on `pull_request_target`, so it must never check out, install or run pull request code, and Claude there must stay limited to reading files. Don't loosen that without the maintainer's say-so.
@@ -95,7 +95,7 @@ Keep each concern in its own layer:
 - **One activation per press:** handle OK/Enter once per remote press. When activation changes screens, consume the matching key-up so the same press can't activate the newly focused control.
 - **Stable paging:** keep item keys stable and append cursor pages in the order the API returns them. Never re-sort already-rendered results when a later page arrives; keeping focus and scroll position matters more.
 - **Load at the edge:** when focus reaches the loaded edge of a paged grid, load the next page without moving the current selection until a destination card exists.
-- **Android as the guide:** follow Android TV's grid focus restoration and pagination, implemented natively in React for webOS.
+- **Android as the starting point:** grid focus restoration and pagination follow Android TV's behaviour, implemented natively in React for webOS.
 
 ## webOS runtime gotchas (verified on Chrome 87 TVs)
 - No CSS `:has()`.
@@ -119,7 +119,7 @@ There is no change log file. The history is the merged pull requests, so each PR
 | Doc | Holds | Update it when |
 | --- | --- | --- |
 | `docs/HANDOFF.md` | Current state, release blockers, open items, working notes | Every change. Move finished items out, add new open items, and correct anything the change made untrue. Say how each thing was verified: build, browser, live server or physical TV |
-| `docs/ANDROID_PARITY_TODO.md` | Feature gaps against Android TV, what is deliberately not built, and per-item verification status | A gap is closed, narrowed or found, or a decision is made not to build something |
+| `docs/BACKLOG.md` | Open work, deliberate differences from Android TV, what is not planned, and verification status of shipped features | An item is finished, narrowed or found, a difference from Android is decided, or a feature's verification level changes |
 | `README.md` | What users get: Features, Known limitations, Availability | A user-visible feature ships, a limitation is removed or added, or a store submission or release happens |
 | `CONTRIBUTING.md` | Setup, browser development, TV deploy, PR conventions | Commands, tooling, scripts or contribution rules change |
 | `docs/MAINTAINING.md` | What the PR automation does and the maintainer's steps | A workflow in `.github/workflows/`, a label or a repository setting changes |
