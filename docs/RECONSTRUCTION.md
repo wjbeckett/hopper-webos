@@ -180,7 +180,7 @@ APIs, shuffle APIs, media rails, TopNav.
 ## Browse / library (survives, but re-check these during rebuild)
 
 - Multi-library merge: keep rendered prefix, append later pages in library order, NEVER
-  re-sort rendered items (AGENTS.md rule); error → do not abort paging.
+  re-sort rendered items (CLAUDE.md rule); error → do not abort paging.
 - First-card landing focus with retry (~2s budget, cancels on keypress or existing focus);
   `LibraryScreen` must be keyed by section+landing+library ids (remount on switch) — a reused
   instance skipped the focus effect and broke Movies↔TV landing.
@@ -206,3 +206,7 @@ APIs, shuffle APIs, media rails, TopNav.
 5. PlaybackOptions dialog + prefs endpoints + editions grouping.
 6. `events.ts` socket + rail refresh wiring + Home dismissal rows.
 7. AudiobookGroups + Person screens; music genres if revisited.
+
+## Recovery outcome (Oct 29)
+
+The 19:31:04 pre-wipe snapshot (a full `git add` of the working tree ~10 minutes before the 19:41 overwrite) was found as dangling blobs via `git fsck --lost-found` and restored file by file: App, api (silo, playback, events), components (TopNav, DetailSections, PlaybackOptions, FeaturedRailsScreen, MediaCard, MediaRail), core/watchState, navigation/spatial, platform/youtube, screens (Details, Series, Person, AudiobookGroups, LibraryCollections, Library, LibraryBrowsePanels, Home, ForYou, LibraryRecommendations, Player), types, styles.css, vite.config.ts, index.html, README and roadmap. Files with no 19:31 blob were unchanged from what is committed. Re-applied on top: LG Back `10009` + player-owned Back guard in App.tsx. Changes made between 19:31 and 19:41 are not recoverable; the rebuild steps above now apply only to anything found missing during device testing.

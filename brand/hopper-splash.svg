@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <!-- Hopper splash / store hero (1920x1080). LG: must not be black; minimal text. -->
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="45%" r="70%">
+      <stop offset="0" stop-color="#1B1F4B"/>
+      <stop offset="0.6" stop-color="#0E1030"/>
+      <stop offset="1" stop-color="#07081A"/>
+    </radialGradient>
+    <radialGradient id="halo" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#818CF8" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#818CF8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="tealGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#2DD4BF" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#2DD4BF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="roseGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#F472B6" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#F472B6" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="aurora" x1="0.12" y1="0.05" x2="0.88" y2="1">
+      <stop offset="0" stop-color="#5EEAD4"/>
+      <stop offset="0.5" stop-color="#818CF8"/>
+      <stop offset="1" stop-color="#F472B6"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#99F6E4"/>
+      <stop offset="1" stop-color="#C4B5FD"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#F9A8D4" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#F472B6" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="tileA" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5EEAD4"/><stop offset="1" stop-color="#2DD4BF"/></linearGradient>
+    <linearGradient id="tileB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#A5B4FC"/><stop offset="1" stop-color="#818CF8"/></linearGradient>
+    <linearGradient id="tileC" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FBCFE8"/><stop offset="1" stop-color="#F472B6"/></linearGradient>
+    <linearGradient id="word" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#F8FAFC"/>
+      <stop offset="1" stop-color="#E0E7FF"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+  <!-- Ambient colour washes in the corners echo the three tiles. -->
+  <ellipse cx="260" cy="180" rx="620" ry="420" fill="url(#tealGlow)"/>
+  <ellipse cx="1680" cy="940" rx="640" ry="420" fill="url(#roseGlow)"/>
+  <circle cx="960" cy="470" r="420" fill="url(#halo)"/>
+
+  <!-- Mark (icon artwork scaled to 0.62, centred above the wordmark). -->
+  <g transform="translate(642.56 112) scale(0.62)">
+    <rect x="300" y="196" width="150" height="214" rx="22" fill="url(#tileA)" transform="rotate(-16 375 303)"/>
+    <rect x="575" y="176" width="150" height="214" rx="22" fill="url(#tileC)" transform="rotate(14 650 283)"/>
+    <rect x="437" y="128" width="150" height="214" rx="22" fill="url(#tileB)" transform="rotate(-3 512 235)"/>
+    <path d="M232 404H792a34 34 0 0 1 29 51L612 790v64a30 30 0 0 1-30 30H442a30 30 0 0 1-30-30v-64L203 455a34 34 0 0 1 29-51Z" fill="url(#aurora)"/>
+    <path d="M232 404H792a34 34 0 0 1 30 18H202a34 34 0 0 1 30-18Z" fill="url(#rim)"/>
+    <path d="M470 500c0-16 17-26 31-18l122 72c14 8 14 28 0 36l-122 72c-14 8-31-2-31-18Z" fill="#0E1030"/>
+    <ellipse cx="512" cy="912" rx="150" ry="40" fill="url(#glow)"/>
+  </g>
+
+  <text x="960" y="872" text-anchor="middle" font-family="-apple-system, 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="112" font-weight="700" letter-spacing="2" fill="url(#word)">Hopper</text>
+</svg>

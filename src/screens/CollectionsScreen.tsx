@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { getCollectionItemsPage, getCollections, imageUrl } from "../api/silo";
 import { MediaCard } from "../components/MediaCard";
+import { ArtworkImage } from "../components/ArtworkImage";
 import { focusFirstContentCard } from "../navigation/spatial";
 import type { Session, SiloCollection, SiloItem } from "../types";
+import { LoadingState } from "../components/LoadingState";
 
 export function CollectionsScreen({ session, onOpen }: {
   session: Session;
@@ -96,7 +98,7 @@ export function CollectionsScreen({ session, onOpen }: {
   if (selected) {
     return (
       <main className="content-screen collection-screen" onKeyDownCapture={event => {
-        if (["Escape", "Backspace", "Back", "GoBack", "BrowserBack"].includes(event.key) || event.keyCode === 461) {
+        if (["Escape", "Backspace", "Back", "GoBack", "BrowserBack"].includes(event.key) || event.keyCode === 461 || event.keyCode === 10009) {
           setSelected(null);
           event.preventDefault();
           event.stopPropagation();
@@ -105,9 +107,9 @@ export function CollectionsScreen({ session, onOpen }: {
         <button type="button" className="tv-button secondary" data-tv-focusable="true" onClick={() => setSelected(null)}>‹ Collections</button>
         <h1 className="collection-title">{selected.name}</h1>
         {error ? <div className="error">{error}</div> : null}
-        {loading ? <div className="screen-state">Loading collection…</div> : items.length ? (
+        {loading ? <LoadingState label="Loading collection" /> : items.length ? (
           <div className="library-grid">
-            {items.map(item => <MediaCard key={item.Id} item={item} image={imageUrl(session, item)} onOpen={() => onOpen(item)} />)}
+            {items.map(item => <MediaCard key={item.Id} session={session} item={item} image={imageUrl(session, item)} onOpen={() => onOpen(item)} />)}
           </div>
         ) : !error ? <div className="empty-state compact-empty-state"><h2>This collection is empty</h2></div> : null}
         {cursor ? (
@@ -122,15 +124,15 @@ export function CollectionsScreen({ session, onOpen }: {
   return (
     <main className="content-screen collection-screen">
       {error ? <div className="error">{error}</div> : null}
-      {loading ? <div className="screen-state">Loading collections…</div> : collections.length ? (
+      {loading ? <LoadingState label="Loading collections" /> : collections.length ? (
         <div className="collection-grid">
           {collections.map(collection => {
-            const poster: SiloItem = { Id: collection.id, Name: collection.name, PosterUrl: collection.posterUrl };
+            const poster: SiloItem = { Id: collection.id, Name: collection.name, PosterUrl: collection.posterUrl, PosterThumbhash: collection.posterThumbhash };
             const posterImage = imageUrl(session, poster);
             return (
               <button key={collection.id} type="button" data-tv-focusable="true" className="collection-card" onClick={() => void openCollection(collection)}>
                 <div className="collection-card-art">
-                  {posterImage ? <img src={posterImage} alt="" loading="lazy" /> : <span aria-hidden="true">▦</span>}
+                  <ArtworkImage url={posterImage} thumbhash={poster.PosterThumbhash} kind="Video" width={400} height={600} />
                 </div>
                 <strong>{collection.name}</strong>
                 <small>{collection.itemCount ?? 0} titles{collection.groupName ? ` · ${collection.groupName}` : ""}</small>

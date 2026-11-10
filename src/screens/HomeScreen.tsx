@@ -1,15 +1,20 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getHomeRails } from "../api/silo";
 import { FeaturedRailsScreen } from "../components/FeaturedRailsScreen";
 import { focusFirstContentCard } from "../navigation/spatial";
+import { arrangeHomeRails, readHomeSectionLayout } from "../core/homeSections";
+import { useWatchStateRefresh } from "../core/watchState";
 import type { HomeRail, Session, SiloItem } from "../types";
+import { LoadingState } from "../components/LoadingState";
 
 export function HomeScreen({
   session,
-  onOpen
+  onOpen,
+  onExplore
 }: {
   session: Session;
   onOpen: (item: SiloItem) => void;
+  onExplore?: (rail: HomeRail) => void;
 }) {
   const [rails, setRails] = useState<HomeRail[]>([]);
   const [error, setError] = useState("");
@@ -24,19 +29,28 @@ export function HomeScreen({
     return () => { alive = false; };
   }, [session]);
 
+  const refreshRails = useCallback(() => getHomeRails(session)
+    .then(next => setRails(next))
+    .catch(() => undefined), [session]);
+
+  useWatchStateRefresh(refreshRails, 300, 20_000);
+
   useEffect(() => {
     if (loading) return;
     const frame = requestAnimationFrame(focusFirstContentCard);
     return () => cancelAnimationFrame(frame);
-  }, [loading, rails]);
+  }, [loading]);
 
-  if (loading) return <div className="screen-state">Loading your Silo…</div>;
+  const arranged = useMemo(() => arrangeHomeRails(rails, readHomeSectionLayout(session)), [rails, session]);
+
+  if (loading) return <LoadingState label="Loading your Silo" />;
 
   return (
     <FeaturedRailsScreen
-      rails={rails}
+      rails={arranged}
       session={session}
       onOpen={onOpen}
+      onExplore={onExplore}
       error={error}
       emptyTitle="Your library will show up here"
       emptyDescription="Connect a library on your Silo server to get started."

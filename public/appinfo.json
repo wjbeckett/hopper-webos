@@ -1,12 +1,19 @@
 {
-  "id": "org.siloserver.webos",
-  "version": "0.2.0",
-  "vendor": "Silo webOS community client",
+  "id": "com.hopperapp.hopper",
+  "version": "0.3.0",
+  "vendor": "Hopper",
   "type": "web",
   "main": "index.html",
-  "title": "Silo",
+  "title": "Hopper",
   "icon": "icon.png",
   "largeIcon": "largeIcon.png",
+  "splashBackground": "splash.png",
+  "bgImage": "splash.png",
+  "bgColor": "#0E1030",
+  "iconColor": "#0E1030",
+  "splashColor": "#0E1030",
+  "appDescription": "A TV client for your Silo media server",
+  "requiredACG": [],
   "resolution": "1920x1080",
   "disableBackHistoryAPI": true
 }

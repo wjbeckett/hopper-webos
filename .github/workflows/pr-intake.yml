@@ -2,8 +2,8 @@ name: PR intake
 
 # Runs on every pull request, with the base branch's copy of this file.
 #
-#   triage           Labels the PR (size, area, external), moves outside PRs that
-#                    target main over to dev, and welcomes outside contributors.
+#   triage           Labels the PR (size, area, external) and welcomes outside
+#                    contributors.
 #                    It never checks out or runs pull request code.
 #
 #   external-review  Claude review for pull requests from forks. Read-only: Claude
@@ -23,7 +23,7 @@ name: PR intake
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review, labeled]
-    branches: [dev, main]
+    branches: [main]
   workflow_dispatch:
     inputs:
       pr_number:
@@ -77,7 +77,7 @@ jobs:
 
             const getPr = async () =>
               (await github.rest.pulls.get({ owner, repo, pull_number: number })).data;
-            let pr = await getPr();
+            const pr = await getPr();
             const isFork = !pr.head.repo || pr.head.repo.full_name !== `${owner}/${repo}`;
             const open = pr.state === 'open';
 
@@ -133,15 +133,7 @@ jobs:
               }
             };
 
-            // 1. Outside pull requests go into dev. main only takes release PRs from dev.
-            let retargeted = false;
-            if (isFork && open && pr.base.ref === 'main') {
-              await github.rest.pulls.update({ owner, repo, pull_number: number, base: 'dev' });
-              retargeted = true;
-              pr = await getPr();
-            }
-
-            // 2. Size, area and origin labels.
+            // 1. Size, area and origin labels.
             const current = new Set(pr.labels.map((l) => l.name));
             if (['opened', 'synchronize', 'reopened', 'ready_for_review', 'manual'].includes(action)) {
               const files = await github.paginate(github.rest.pulls.listFiles, {
@@ -174,7 +166,7 @@ jobs:
               await addLabels([...want].filter((name) => !current.has(name)));
             }
 
-            // 3. Decide whether the read-only Claude review runs.
+            // 2. Decide whether the read-only Claude review runs.
             const trusted = ['OWNER', 'MEMBER', 'COLLABORATOR', 'CONTRIBUTOR'].includes(pr.author_association);
             const approved = current.has('claude-review') || eventLabel === 'claude-review';
             const reviewAll = process.env.REVIEW_ALL_FORKS === 'true';
@@ -185,7 +177,7 @@ jobs:
             let review = false;
             let waiting = false;
             if (manual) {
-              review = open;
+              review = true; // a maintainer asked for it; works on closed PRs too
             } else if (isFork && open && !pr.draft && reviewEvent) {
               if (trusted || approved || reviewAll) review = true;
               else waiting = true;
@@ -193,8 +185,8 @@ jobs:
             if (waiting && !current.has('awaiting-review-approval')) await addLabels(['awaiting-review-approval']);
             if (review && current.has('awaiting-review-approval')) await removeLabel('awaiting-review-approval');
 
-            // 4. Tell outside contributors what happens next.
-            if (isFork && (action === 'opened' || retargeted)) {
+            // 3. Tell outside contributors what happens next.
+            if (isFork && action === 'opened') {
               const steps = [
                 'Thanks for the pull request. Here is what happens next:',
                 '',
@@ -202,13 +194,10 @@ jobs:
                 waiting
                   ? '2. **Automated review:** this looks like your first contribution, so a maintainer will start the automated review. After that it re-runs on every push.'
                   : '2. **Automated review:** Claude reviews the change and posts a summary plus inline suggestions. It re-runs on every push.',
-                '3. **Testing on a TV:** a maintainer tests the change on LG hardware before it is merged into `dev`.',
+                '3. **Testing on a TV:** a maintainer tests the change on LG hardware before it is merged.',
                 '',
-                'Please keep **Allow edits by maintainers** ticked, and say in the description how you tested the change (browser, live Silo server, or a physical TV with its model or webOS version). See [CONTRIBUTING.md](' + `${context.serverUrl}/${owner}/${repo}/blob/dev/CONTRIBUTING.md` + ').',
+                'Please keep **Allow edits by maintainers** ticked, and say in the description how you tested the change (browser, live Silo server, or a physical TV with its model or webOS version). See [CONTRIBUTING.md](' + `${context.serverUrl}/${owner}/${repo}/blob/main/CONTRIBUTING.md` + ').',
               ];
-              if (retargeted) {
-                steps.push('', '> This pull request was opened against `main`, so it has been moved to `dev`. All changes go into `dev` first; `main` only receives releases.');
-              }
               await stickyComment('<!-- hopper-welcome -->', steps.join('\n'));
             }
 
@@ -226,6 +215,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      checks: read           # read the Build check result for the reviewer
     env:
       PR_NUMBER: ${{ needs.triage.outputs.number }}
       HEAD_SHA: ${{ needs.triage.outputs.head_sha }}

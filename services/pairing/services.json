@@ -1,0 +1,5 @@
+{
+  "id": "com.hopperapp.hopper.service",
+  "description": "Hopper companion pairing",
+  "services": [{ "name": "com.hopperapp.hopper.service" }]
+}

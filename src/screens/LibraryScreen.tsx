@@ -1,12 +1,15 @@
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getCatalogFilterOptions, getLibraryItemsPage, getShuffleCapability, imageUrl, libraryHasItems } from "../api/silo";
-import type { CatalogFilterOptions, CatalogQueryGroup } from "../api/silo";
+import type { CatalogFilterOptions, CatalogQueryGroup, CatalogScope } from "../api/silo";
 import { MediaCard } from "../components/MediaCard";
 import { browsePrefsKey, readBrowsePrefs, readPreserve, writeBrowsePrefs, writePreserve } from "../core/browsePrefs";
 import { LibraryBrowsePanels } from "./LibraryBrowsePanels";
 import type { BrowseSortKey, BrowseSortOption } from "./LibraryBrowsePanels";
-import { focusFirstContentCard, focusNavigationTarget } from "../navigation/spatial";
+import { attemptFirstContentFocus, focusFirstContentCard, focusNavigationTarget } from "../navigation/spatial";
 import type { Session, SiloItem, SiloLibrary } from "../types";
+import { LoadingState } from "../components/LoadingState";
+import { isTvDevice } from "../core/artwork";
 
 type BrowseSort = BrowseSortKey;
 type SortOrder = "asc" | "desc";
@@ -52,6 +55,7 @@ function restoreBrowsePrefs(key: string | null, libraries: SiloLibrary[]) {
 }
 
 function sortDirectionLabel(sort: BrowseSort, order: SortOrder) {
+  if (sort === "collection") return "Default";
   if (["title", "author", "narrator", "series"].includes(sort)) return order === "asc" ? "A–Z" : "Z–A";
   if (["release_date", "year", "added_at"].includes(sort)) return order === "asc" ? "Oldest" : "Newest";
   if (sort === "runtime") return order === "asc" ? "Shortest" : "Longest";
@@ -124,12 +128,14 @@ function buildFilterGroups(selection: FilterSelection): CatalogQueryGroup[] {
 }
 
 function sortItems(items: SiloItem[], sort: BrowseSort, order: SortOrder) {
+  if (sort === "collection") return [...items];
   return [...items].sort((a, b) => compareItems(a, b, sort, order));
 }
 
 function compareItems(a: SiloItem, b: SiloItem, sort: BrowseSort, order: SortOrder) {
   const textCompare = (left: string | undefined, right: string | undefined) =>
     (left ?? "").localeCompare(right ?? "", undefined, { numeric: true, sensitivity: "base" });
+  if (sort === "collection") return 0;
   let comparison = 0;
   if (sort === "title") comparison = textCompare(a.Name, b.Name);
   else if (sort === "added_at") comparison = textCompare(a.DateAdded, b.DateAdded);
@@ -182,25 +188,41 @@ export function LibraryScreen({
   selectableLibraries = false,
   itemTypes,
   onOpen,
-  onShuffleLibrary
+  onShuffle,
+  collection,
+  presetGroups,
+  presetKey,
+  header,
+  hideControls = false
 }: {
   session: Session;
   libraries: SiloLibrary[];
   selectableLibraries?: boolean;
   itemTypes?: string[];
   onOpen: (item: SiloItem) => void;
-  onShuffleLibrary: (libraryId: number) => Promise<void>;
+  onShuffle: (kind: string, id: string | number) => Promise<void>;
+  collection?: { id: string; name: string; source: CatalogScope["source"] };
+  presetGroups?: CatalogQueryGroup[];
+  presetKey?: string;
+  header?: ReactNode;
+  hideControls?: boolean;
 }) {
+  const catalogScope = useMemo<CatalogScope | undefined>(
+    () => collection ? { source: collection.source, collectionId: collection.id } : undefined,
+    [collection?.id, collection?.source]
+  );
+  const defaultSort: BrowseSort = collection ? "collection" : "title";
+  const persistsPrefs = !collection && !presetKey;
   const [browseItems, setBrowseItems] = useState<SiloItem[]>([]);
   const [browseCursors, setBrowseCursors] = useState<Record<string, string | null>>({});
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [initialPrefs] = useState(() => restoreBrowsePrefs(
+  const [initialPrefs] = useState(() => persistsPrefs ? restoreBrowsePrefs(
     browsePrefsKey(session, libraries.map(library => library.id).join(","), itemTypes?.length === 1 ? itemTypes[0] : undefined),
     libraries
-  ));
-  const [sort, setSort] = useState<BrowseSort>((initialPrefs?.sort as BrowseSort | undefined) ?? "title");
+  ) : null);
+  const [sort, setSort] = useState<BrowseSort>((initialPrefs?.sort as BrowseSort | undefined) ?? defaultSort);
   const [order, setOrder] = useState<SortOrder>(initialPrefs?.order ?? "asc");
   const [filters, setFilters] = useState<FilterSelection>(initialPrefs?.filters ?? {});
   const [matchAll, setMatchAll] = useState(initialPrefs?.matchAll ?? true);
@@ -214,6 +236,7 @@ export function LibraryScreen({
   const [shuffleSupported, setShuffleSupported] = useState(false);
   const [libraryEmpty, setLibraryEmpty] = useState<boolean | null>(null);
   const [namePrefix, setNamePrefix] = useState<string | null>(null);
+  const pendingLetterFocusRef = useRef(false);
   const [reloadNonce, setReloadNonce] = useState(0);
   const browseSentinel = useRef<HTMLDivElement>(null);
   const [openPanel, setOpenPanel] = useState<BrowsePanel>(null);
@@ -224,26 +247,33 @@ export function LibraryScreen({
   const browseStreamsRef = useRef<Record<string, SiloItem[]>>({});
   const pendingDownFocusRef = useRef<{ loadedCount: number; column: number } | null>(null);
   const initialLoadCompleteRef = useRef(false);
+  const mountedRef = useRef("");
   const [selectedLibraryIds, setSelectedLibraryIds] = useState<number[]>(libraries.map(library => library.id));
   const resultsRef = useRef<HTMLDivElement>(null);
   const retryRef = useRef<HTMLButtonElement>(null);
   const activeLibraries = selectableLibraries ? libraries.filter(library => selectedLibraryIds.includes(library.id)) : libraries;
   const accepts = (item: SiloItem) => !itemTypes?.length || itemTypes.includes(item.Type ?? "");
-  const availableSortOptions = useMemo(() => getSortOptions(activeLibraries), [activeLibraries]);
+  const availableSortOptions = useMemo(
+    () => collection
+      ? [{ id: "collection" as const, label: "Collection Order", order: "asc" as const }, ...getSortOptions(activeLibraries)]
+      : getSortOptions(activeLibraries),
+    [activeLibraries, collection]
+  );
   const catalogGroups = useMemo(() => buildFilterGroups(filters), [filters]);
-  const filterGroupsKey = JSON.stringify(catalogGroups);
+  const requestGroups = useMemo(() => presetGroups?.length ? [...presetGroups, ...catalogGroups] : catalogGroups, [presetGroups, catalogGroups]);
+  const filterGroupsKey = JSON.stringify(requestGroups);
   const browseLibraryKey = activeLibraries.map(library => String(library.id)).join(",");
   const itemTypesKey = itemTypes?.join(",") ?? "";
   const browseType = itemTypes?.length === 1 ? itemTypes[0] : undefined;
   const browseTypeKey = browseType ?? "";
-  const browseRequestKey = `${session.serverUrl}|${session.profileId ?? ""}|${browseLibraryKey}|${browseTypeKey}|${sort}|${order}|${filterGroupsKey}|${matchAll}|${namePrefix ?? ""}|${reloadNonce}`;
-  const prefsKey = browsePrefsKey(session, browseLibraryKey, browseType);
+  const browseRequestKey = `${session.serverUrl}|${session.profileId ?? ""}|${browseLibraryKey}|${browseTypeKey}|${sort}|${order}|${filterGroupsKey}|${matchAll}|${namePrefix ?? ""}|${reloadNonce}|${collection?.id ?? ""}|${presetKey ?? ""}`;
+  const prefsKey = persistsPrefs ? browsePrefsKey(session, browseLibraryKey, browseType) : null;
   const [appliedPrefsKey, setAppliedPrefsKey] = useState(prefsKey);
   const [preserve, setPreserve] = useState(() => readPreserve(prefsKey));
   if (appliedPrefsKey !== prefsKey) {
     const saved = restoreBrowsePrefs(prefsKey, activeLibraries);
     setAppliedPrefsKey(prefsKey);
-    setSort((saved?.sort as BrowseSort | undefined) ?? "title");
+    setSort((saved?.sort as BrowseSort | undefined) ?? defaultSort);
     setOrder(saved?.order ?? "asc");
     setFilters(saved?.filters ?? {});
     setMatchAll(saved?.matchAll ?? true);
@@ -261,7 +291,12 @@ export function LibraryScreen({
 
   const returnTargetRef = useRef<string | undefined>(undefined);
   const returnLoadsRef = useRef(0);
-  const surfaceKey = `${session.serverUrl}|${session.profileId ?? ""}|${browseLibraryKey}|${browseTypeKey}`;
+  const surfaceKey = `${session.serverUrl}|${session.profileId ?? ""}|${browseLibraryKey}|${browseTypeKey}|${collection?.id ?? ""}|${presetKey ?? ""}`;
+  if (mountedRef.current !== surfaceKey) {
+    mountedRef.current = surfaceKey;
+    initialLoadCompleteRef.current = false;
+    returnTargetRef.current = undefined;
+  }
   if (!initialLoadCompleteRef.current && returnTargetRef.current === undefined) {
     returnTargetRef.current = browseReturnTargets.get(surfaceKey) ?? "";
     browseReturnTargets.delete(surfaceKey);
@@ -286,7 +321,7 @@ export function LibraryScreen({
       if (card) {
         card.scrollIntoView({ block: "center" });
         focusNavigationTarget(card);
-      } else focusFirstContentCard();
+      } else attemptFirstContentFocus(120);
     });
   }, [loading, loadingMore, browseItems, hasMoreBrowseItems]);
 
@@ -310,7 +345,7 @@ export function LibraryScreen({
       });
       return () => { alive = false; };
     }
-    Promise.all(libraryIds.map(id => getCatalogFilterOptions(session, id)))
+    Promise.all(libraryIds.map(id => getCatalogFilterOptions(session, id, catalogScope)))
       .then(results => {
         if (!alive) return;
         const merge = (key: keyof CatalogFilterOptions) => [...new Set(results.flatMap(result => result[key]))];
@@ -333,7 +368,7 @@ export function LibraryScreen({
         if (alive) setFilterOptionsError(cause instanceof Error ? cause.message : "Could not load catalog filter options.");
       });
     return () => { alive = false; };
-  }, [browseLibraryKey, session]);
+  }, [browseLibraryKey, session, catalogScope]);
 
   useEffect(() => {
     let alive = true;
@@ -352,7 +387,7 @@ export function LibraryScreen({
     const libraryIds = browseLibraryKey ? browseLibraryKey.split(",") : [];
     Promise.all(libraryIds.map(async id => ({
       key: cursorKey(id, ""),
-      page: await getLibraryItemsPage(session, id, undefined, browseType, 100, sort, order, catalogGroups, matchAll ? "all" : "any", namePrefix ?? undefined)
+      page: await getLibraryItemsPage(session, id, undefined, browseType, 100, sort, order, requestGroups, matchAll ? "all" : "any", namePrefix ?? undefined, catalogScope)
     })))
       .then((pages) => {
         if (!alive) return;
@@ -366,7 +401,7 @@ export function LibraryScreen({
         setBrowseCursors(cursors);
         if (items.length || Object.values(cursors).some(Boolean)) {
           setLibraryEmpty(false);
-        } else if (!catalogGroups.length && !namePrefix) {
+        } else if (!requestGroups.length && !namePrefix) {
           setLibraryEmpty(true);
         } else {
           void Promise.all(libraryIds.map(id => libraryHasItems(session, id, browseType))).then(results => {
@@ -374,7 +409,7 @@ export function LibraryScreen({
           });
         }
       })
-      .catch((err) => alive && setError(err instanceof Error ? err.message : "Library failed"))
+      .catch((err) => { if (alive) { setError(err instanceof Error ? err.message : "Library failed"); pendingLetterFocusRef.current = false; } })
       .finally(() => alive && setLoading(false));
     return () => { alive = false; };
   }, [session, browseLibraryKey, browseTypeKey, itemTypesKey, sort, order, filterGroupsKey, matchAll, namePrefix, reloadNonce]);
@@ -405,7 +440,7 @@ export function LibraryScreen({
           return compareItems(candidateLast, earliestLast, sort, order) < 0 ? candidate : earliest;
         });
         const [id] = key.split("::");
-        const page = await getLibraryItemsPage(session, id, cursor, browseType, 100, sort, order, catalogGroups, matchAll ? "all" : "any", namePrefix ?? undefined);
+        const page = await getLibraryItemsPage(session, id, cursor, browseType, 100, sort, order, requestGroups, matchAll ? "all" : "any", namePrefix ?? undefined, catalogScope);
         if (currentBrowseRequest.current !== browseRequestKey) return;
         const streams = {
           ...browseStreamsRef.current,
@@ -413,11 +448,12 @@ export function LibraryScreen({
         };
         const cursors = { ...browseCursorsRef.current, [key]: page.nextCursor ?? null };
         const previousItems = browseItemsRef.current;
-        const items = sortedSafePrefix(streams, cursors, sort, order, accepts, previousItems);
-        const prefixIsStable = previousItems.every((item, index) => items[index]?.Id === item.Id);
-        if (!prefixIsStable) {
-          throw new Error("The server returned catalog pages outside the selected sort order.");
-        }
+        const merged = sortedSafePrefix(streams, cursors, sort, order, accepts, previousItems);
+        const prefixIsStable = previousItems.every((item, index) => merged[index]?.Id === item.Id);
+        const known = new Set(previousItems.map(item => item.Id));
+        const appended = prefixIsStable ? merged.filter(item => !known.has(item.Id))
+          : Object.keys(streams).sort().flatMap(key => streams[key] ?? []).filter(item => !known.has(item.Id));
+        const items = prefixIsStable ? merged : [...previousItems, ...appended];
         browseStreamsRef.current = streams;
         browseCursorsRef.current = cursors;
         browseItemsRef.current = items;
@@ -450,6 +486,32 @@ export function LibraryScreen({
   }, [browseItems, visibleItems, loadingMore, hasMoreBrowseItems]);
 
   useEffect(() => {
+    if (!pendingLetterFocusRef.current || loading || error) return;
+    if (!browseItems.length) {
+      pendingLetterFocusRef.current = false;
+      return;
+    }
+    if (returnTargetRef.current) return;
+    pendingLetterFocusRef.current = false;
+    focusFirstContentCard();
+  }, [browseItems, loading, error]);
+
+  useEffect(() => {
+    const onBack = (event: Event) => {
+      if (!namePrefix) return;
+      setNamePrefix(null);
+      pendingLetterFocusRef.current = false;
+      event.preventDefault();
+      event.stopPropagation();
+      requestAnimationFrame(() => {
+        document.querySelector<HTMLElement>(".library-alpha-nav .library-alpha-button")?.focus({ preventScroll: true });
+      });
+    };
+    window.addEventListener("silo:library-back", onBack);
+    return () => window.removeEventListener("silo:library-back", onBack);
+  }, [namePrefix]);
+
+  useEffect(() => {
     const loadAtGridEdge = (event: Event) => {
       const customEvent = event as CustomEvent<{ loadedCount: number; column: number }>;
       if (!hasMoreBrowseItems || !customEvent.detail) return;
@@ -471,27 +533,99 @@ export function LibraryScreen({
 
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [loading, hasMoreBrowseItems, browseCursors, loadMoreBrowseItems]);
+    // `loadingMore` re-arms the observer when a page lands: if the sentinel is still
+    // within range, the next page starts at once instead of waiting at the page break.
+  }, [loading, loadingMore, hasMoreBrowseItems, browseCursors, loadMoreBrowseItems]);
 
-  const shuffleLibrary = activeLibraries.length === 1
-    && shuffleLibraryTypes.includes(activeLibraries[0].type.trim().toLowerCase())
-    && !(itemTypes?.length && activeLibraries[0].type.trim().toLowerCase() === "mixed")
-    ? activeLibraries[0]
-    : undefined;
+  // Fetch ahead of the selector: once focus is within ~8 rows of the loaded end, the next
+  // page starts, so continuous Down presses rarely reach an unloaded edge.
+  useEffect(() => {
+    if (!hasMoreBrowseItems) return;
+    const results = resultsRef.current;
+    if (!results) return;
+    const onFocus = (event: FocusEvent) => {
+      const target = event.target as HTMLElement | null;
+      const id = target?.dataset.mediaId;
+      if (!id) return;
+      const index = browseItemsRef.current.findIndex(item => item.Id === id);
+      if (index >= 0 && index > browseItemsRef.current.length - 60) void loadMoreBrowseItems();
+    };
+    results.addEventListener("focusin", onFocus);
+    return () => results.removeEventListener("focusin", onFocus);
+  }, [hasMoreBrowseItems, loadMoreBrowseItems]);
+
+  // TV paint window: only cards within ±PAINT_WINDOW_ROWS rows of the selector paint; the rest
+  // get `.grid-far` (visibility: hidden). Measured on the TV: 150ms -> ~17ms per frame with a few
+  // hundred cards. Toggled directly on the DOM so a key press never re-renders the grid.
+  useEffect(() => {
+    if (!isTvDevice()) return;
+    const results = resultsRef.current;
+    if (!results) return;
+    const PAINT_WINDOW_ROWS = 6;
+    let lastStart = -1;
+    let lastEnd = -1;
+    const apply = (focused?: Element | null) => {
+      const grid = results.querySelector<HTMLElement>(".library-grid");
+      if (!grid) return;
+      const children = grid.children;
+      if (!children.length) return;
+      const template = getComputedStyle(grid).gridTemplateColumns;
+      const columns = Math.max(1, template && template !== "none" ? template.trim().split(/\s+/).length : 1);
+      let index = 0;
+      const host = focused?.closest(".library-grid > *");
+      if (host && host.parentElement === grid) index = Array.prototype.indexOf.call(children, host);
+      else if (lastStart >= 0) index = lastStart + PAINT_WINDOW_ROWS * columns; // keep the current window
+      const row = Math.floor(index / columns);
+      const start = Math.max(0, (row - PAINT_WINDOW_ROWS) * columns);
+      const end = Math.min(children.length, (row + PAINT_WINDOW_ROWS + 1) * columns);
+      // classList.toggle with a force flag is a no-op when the state is unchanged, so no style
+      // invalidation happens for the cards that stay on the same side of the window.
+      for (let i = 0; i < children.length; i++) {
+        const far = i < start || i >= end;
+        if (children[i].classList.contains("grid-far") !== far) children[i].classList.toggle("grid-far", far);
+      }
+      lastStart = start;
+      lastEnd = end;
+    };
+    const onFocus = (event: FocusEvent) => apply(event.target as Element);
+    results.addEventListener("focusin", onFocus);
+    // New pages append cards: classify them without waiting for the next press.
+    const grid = results.querySelector(".library-grid");
+    const observer = grid ? new MutationObserver(() => apply(document.activeElement)) : null;
+    if (grid && observer) observer.observe(grid, { childList: true });
+    apply(document.activeElement);
+    return () => {
+      results.removeEventListener("focusin", onFocus);
+      observer?.disconnect();
+    };
+  }, [visibleItems.length > 0]);
+
+  const shuffleTarget = useMemo<{ kind: string; id: string | number } | undefined>(() => {
+    if (collection) return browseType ? undefined : { kind: collection.source, id: collection.id };
+    if (activeLibraries.length !== 1) return undefined;
+    const type = activeLibraries[0].type.trim().toLowerCase();
+    if (!shuffleLibraryTypes.includes(type) || (itemTypes?.length && type === "mixed") || presetKey) return undefined;
+    return { kind: "library", id: activeLibraries[0].id };
+  }, [collection, browseType, activeLibraries, itemTypes, presetKey]);
+  const shuffleKind = shuffleTarget?.kind;
 
   useEffect(() => {
+    if (!shuffleKind) {
+      setShuffleSupported(false);
+      return;
+    }
     let alive = true;
     getShuffleCapability(session)
-      .then(result => { if (alive) setShuffleSupported(result.available && result.scopeKinds.includes("library")); })
+      .then(result => { if (alive) setShuffleSupported(result.available && result.scopeKinds.includes(shuffleKind)); })
       .catch(() => { if (alive) setShuffleSupported(false); });
     return () => { alive = false; };
-  }, [session]);
+  }, [session, shuffleKind]);
 
   async function shuffle() {
-    if (!shuffleLibrary) return;
+    if (!shuffleTarget) return;
     setShuffleError("");
     try {
-      await onShuffleLibrary(shuffleLibrary.id);
+      await onShuffle(shuffleTarget.kind, shuffleTarget.id);
     } catch (cause) {
       setShuffleError(cause instanceof Error ? cause.message : "Could not start shuffle playback.");
     }
@@ -518,12 +652,15 @@ export function LibraryScreen({
     });
   }, [openPanel]);
 
+  const showAlphaRail = sort === "title" && !collection;
+
   return (
-    <main className={`content-screen library-screen ${sort === "title" ? "has-alpha-rail" : ""}`}>
+    <main className={`content-screen library-screen ${showAlphaRail ? "has-alpha-rail" : ""}`}>
       <div className="library-main">
         <div ref={resultsRef} className="library-results" data-has-more={hasMoreBrowseItems}>
           <div className="library-controls">
-            <div className="browse-toolbar">
+            {header}
+            {hideControls ? null : <div className="browse-toolbar">
               <button
                 type="button"
                 data-tv-focusable="true"
@@ -568,19 +705,23 @@ export function LibraryScreen({
                   <span aria-hidden="true">×</span>
                 </button>
               ) : null}
-              <button
-                type="button"
-                data-tv-focusable="true"
-                className="browse-shuffle"
-                disabled={!visibleItems.length}
-                onClick={() => void shuffle()}
-              >
-                <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
-                  <path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
-                </svg>
-                <span>Shuffle</span>
-              </button>
-            </div>
+              {shuffleSupported && shuffleTarget && visibleItems.length ? (
+                <button
+                  type="button"
+                  data-tv-focusable="true"
+                  className="browse-shuffle"
+                  onClick={() => void shuffle()}
+                >
+                  <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+                    <path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
+                  </svg>
+                  <span>Shuffle</span>
+                </button>
+              ) : null}
+              {collection && !hasMoreBrowseItems && !loading && visibleItems.length ? (
+                <span className="browse-item-count">{visibleItems.length === 1 ? "1 item" : `${visibleItems.length} items`}</span>
+              ) : null}
+            </div>}
             {filterOptionsError ? <div className="error">{filterOptionsError}</div> : null}
             {shuffleError ? <div className="error">{shuffleError}</div> : null}
             {selectableLibraries ? (
@@ -606,7 +747,7 @@ export function LibraryScreen({
             ) : null}
           </div>
           {error && browseItems.length ? <div className="error">{error}</div> : null}
-          {loading ? <div className="screen-state">Loading…</div> : !browseItems.length && error ? (
+          {loading ? <LoadingState label="Loading" /> : !browseItems.length && error ? (
             <div className="screen-state browse-error-state">
               <div>{error}</div>
               <div className="browse-error-actions">
@@ -625,7 +766,7 @@ export function LibraryScreen({
               {visibleItems.length ? (
                 <div className="library-grid">
                   {visibleItems.map((item) => (
-                    <MediaCard key={item.Id} item={item} image={imageUrl(session, item)} onOpen={() => { browseReturnTargets.set(surfaceKey, item.Id); onOpen(item); }} variant="browse" />
+                    <MediaCard key={item.Id} session={session} item={item} image={imageUrl(session, item)} onOpen={() => { browseReturnTargets.set(surfaceKey, item.Id); onOpen(item); }} variant="browse" />
                   ))}
                 </div>
               ) : <div className="screen-state">{hasMoreBrowseItems ? "Loading library items…" : libraryEmpty === false || (libraryEmpty === null && (catalogGroups.length || namePrefix)) ? "No titles match the current filters." : "This library is empty."}</div>}
@@ -636,7 +777,7 @@ export function LibraryScreen({
           )}
         </div>
       </div>
-      {sort === "title" ? (
+      {showAlphaRail ? (
         <aside className="library-alpha-nav" aria-label="Jump to title">
           {["", "#", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"].map((prefix, index) => {
             const selected = (namePrefix ?? "") === prefix;
@@ -649,7 +790,11 @@ export function LibraryScreen({
                 aria-pressed={selected}
                 className={`library-alpha-button ${selected ? "selected" : ""}`}
                 aria-label={prefix === "" ? "All titles" : prefix === "#" ? "Numbers" : `Titles beginning with ${prefix}`}
-                onClick={() => setNamePrefix(prefix || null)}
+                onClick={() => {
+                  if ((namePrefix ?? "") === prefix) return;
+                  pendingLetterFocusRef.current = true;
+                  setNamePrefix(prefix || null);
+                }}
               >
                 {prefix || "All"}
               </button>
@@ -677,11 +822,12 @@ export function LibraryScreen({
             setNamePrefix(null);
           }}
           preserve={preserve}
-          onPreserveChange={next => {
+          onPreserveChange={persistsPrefs ? next => {
             setPreserve(next);
             writePreserve(prefsKey, next);
             if (next) writeBrowsePrefs(prefsKey, { sort, order, filters, matchAll });
-          }}
+          } : undefined}
+          scope={catalogScope}
           audiobookLibrary={activeLibraries.length > 0 && activeLibraries.every(isAudiobookLibrary)}
           session={session}
           libraryIds={browseLibraryKey ? browseLibraryKey.split(",") : []}

@@ -4,6 +4,7 @@ import { MediaCard } from "../components/MediaCard";
 import { SortDropdown } from "../components/SortDropdown";
 import { focusFirstContentCard } from "../navigation/spatial";
 import type { Session, SiloItem } from "../types";
+import { LoadingState } from "../components/LoadingState";
 
 type PersonalFilter = "all" | "movies" | "series" | "episodes" | "unwatched" | "in-progress" | "watched";
 
@@ -107,10 +108,10 @@ export function PersonalScreen({
         />
       </div>
       {error ? <div className="error">{error}</div> : null}
-      {loading ? <div className="screen-state">Loading…</div> : items.length ? (
+      {loading ? <LoadingState label="Loading" /> : items.length ? (
         <div className="library-grid">
           {filteredItems.map((item) => (
-            <MediaCard key={item.Id} item={item} image={imageUrl(session, item)} onOpen={() => onOpen(item)} />
+            <MediaCard key={item.Id} session={session} item={item} image={imageUrl(session, item)} onOpen={() => onOpen(item)} />
           ))}
         </div>
       ) : (

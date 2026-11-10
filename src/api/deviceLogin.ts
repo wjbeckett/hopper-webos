@@ -14,8 +14,14 @@ export type DeviceLoginStart = {
 };
 
 export type DeviceLoginPoll = {
-  status: "pending" | "approved" | "denied" | "expired" | "consumed" | string;
+  status: "pending" | "approved" | "denied" | "expired" | "consumed" | "canceled" | string;
   poll_after?: number;
+  tokens?: {
+    access_token?: string;
+    refresh_token?: string;
+    expires_in?: number;
+    user?: { id?: string; username?: string };
+  };
   access_token?: string;
   refresh_token?: string;
   expires_in?: number;
@@ -67,7 +73,7 @@ export async function startDeviceLogin(
 ): Promise<DeviceLoginStart> {
   return jsonRequest<DeviceLoginStart>(
     serverUrl,
-    "/api/v1/auth/device/start",
+    "/api/v2/auth/device/start",
     {
       method: "POST",
       body: JSON.stringify({
@@ -136,7 +142,7 @@ export async function pollDeviceLogin(
 ): Promise<DeviceLoginPoll> {
   return jsonRequest<DeviceLoginPoll>(
     serverUrl,
-    "/api/v1/auth/device/poll",
+    "/api/v2/auth/device/poll",
     {
       method: "POST",
       body: JSON.stringify({ device_code: deviceCode })
@@ -148,26 +154,28 @@ export function sessionFromApprovedDeviceLogin(
   serverUrl: string,
   result: DeviceLoginPoll
 ): Session {
-  if (result.status !== "approved" || !result.access_token) {
+  const accessToken = result.tokens?.access_token ?? result.access_token;
+  const user = result.tokens?.user ?? result.user;
+  if (result.status !== "approved" || !accessToken) {
     throw new Error("Device login result is not approved.");
   }
 
   const userId =
-    result.user?.id ??
+    user?.id ??
     result.user?.Id ??
     result.profile_id ??
     "";
 
   const username =
-    result.user?.username ??
+    user?.username ??
     result.user?.name ??
     result.user?.Name ??
     "Silo user";
 
   return {
     serverUrl: normalizeServerUrl(serverUrl),
-    accessToken: result.access_token,
-    refreshToken: result.refresh_token,
+    accessToken,
+    refreshToken: result.tokens?.refresh_token ?? result.refresh_token,
     profileId: result.profile_id,
     profileToken: result.profile_token,
     userId,

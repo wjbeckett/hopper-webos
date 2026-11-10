@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getForYouRails } from "../api/silo";
 import { FeaturedRailsScreen } from "../components/FeaturedRailsScreen";
 import { focusFirstContentCard } from "../navigation/spatial";
+import { useWatchStateRefresh } from "../core/watchState";
 import type { HomeRail, Session, SiloItem } from "../types";
+import { LoadingState } from "../components/LoadingState";
 
 export function ForYouScreen({
   session,
@@ -28,13 +30,19 @@ export function ForYouScreen({
     return () => { alive = false; };
   }, [session]);
 
+  const refreshRails = useCallback(() => getForYouRails(session)
+    .then(next => setRails(next))
+    .catch(() => undefined), [session]);
+
+  useWatchStateRefresh(refreshRails, 300, 20_000);
+
   useEffect(() => {
     if (loading) return;
     const frame = requestAnimationFrame(focusFirstContentCard);
     return () => cancelAnimationFrame(frame);
-  }, [loading, rails]);
+  }, [loading]);
 
-  if (loading) return <div className="screen-state">Loading recommendations…</div>;
+  if (loading) return <LoadingState label="Loading recommendations" />;
 
   return (
     <FeaturedRailsScreen

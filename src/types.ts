@@ -22,9 +22,16 @@ export type SiloItem = {
   ProductionYear?: number;
   DateAdded?: string;
   ReleaseDate?: string;
+  AirDate?: string;
+  SeasonCount?: number;
+  EpisodeCount?: number;
   Resolution?: string;
   Author?: string;
   Narrator?: string;
+  Publisher?: string;
+  AudiobookDurationSeconds?: number;
+  AudiobookAuthorNames?: string;
+  AudiobookNarratorNames?: string;
   Overview?: string;
   Genres?: string[];
   ContentRating?: string;
@@ -36,12 +43,19 @@ export type SiloItem = {
   BackdropImageTags?: string[];
   PosterUrl?: string;
   BackdropUrl?: string;
+  /** Smaller backdrop for wide rail cards (the hero keeps BackdropUrl). */
+  CardBackdropUrl?: string;
+  PosterThumbhash?: string;
+  BackdropThumbhash?: string;
+  PosterIsEpisodeStill?: boolean;
+  BackdropIsEpisodeStill?: boolean;
   LogoUrl?: string;
   UserData?: {
     Played?: boolean;
     PlaybackPositionTicks?: number;
     PlayedPercentage?: number;
     IsFavorite?: boolean;
+    InWatchlist?: boolean;
   };
 };
 
@@ -54,6 +68,10 @@ export type HomeRail = {
   id: string;
   title: string;
   featured?: boolean;
+  /** Server section id; with `libraryId` it addresses the row's full page. */
+  sectionId?: string;
+  /** Owning library for library rows; null for Home rows. */
+  libraryId?: number | null;
   items: SiloItem[];
 };
 
@@ -126,6 +144,7 @@ export type SiloCollection = {
   name: string;
   itemCount?: number;
   posterUrl?: string;
+  posterThumbhash?: string;
   kind: "regular" | "user_collection";
   groupName?: string;
 };

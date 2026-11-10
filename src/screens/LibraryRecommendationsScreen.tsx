@@ -1,19 +1,23 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getLibrariesRails } from "../api/silo";
 import { FeaturedRailsScreen } from "../components/FeaturedRailsScreen";
 import { focusFirstContentCard } from "../navigation/spatial";
+import { useWatchStateRefresh } from "../core/watchState";
 import type { HomeRail, Session, SiloItem, SiloLibrary } from "../types";
+import { LoadingState } from "../components/LoadingState";
 
 export function LibraryRecommendationsScreen({
   session,
   title,
   libraries,
-  onOpen
+  onOpen,
+  onExplore
 }: {
   session: Session;
   title: string;
   libraries: SiloLibrary[];
   onOpen: (item: SiloItem) => void;
+  onExplore?: (rail: HomeRail) => void;
 }) {
   const [rails, setRails] = useState<HomeRail[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,19 +36,26 @@ export function LibraryRecommendationsScreen({
     return () => { alive = false; };
   }, [session, libraries, title]);
 
+  const refreshRails = useCallback(() => getLibrariesRails(session, libraries)
+    .then(next => setRails(next))
+    .catch(() => undefined), [session, libraries]);
+
+  useWatchStateRefresh(refreshRails, 300, 20_000);
+
   useEffect(() => {
     if (loading) return;
     const frame = requestAnimationFrame(focusFirstContentCard);
     return () => cancelAnimationFrame(frame);
-  }, [loading, rails]);
+  }, [loading]);
 
-  if (loading) return <div className="screen-state">Loading {title}…</div>;
+  if (loading) return <LoadingState label={`Loading ${title}...`} />;
 
   return (
     <FeaturedRailsScreen
       rails={rails}
       session={session}
       onOpen={onOpen}
+      onExplore={onExplore}
       error={error}
       emptyMark="✦"
       emptyTitle={`No ${title} recommendations yet`}

@@ -1,6 +1,9 @@
+import { getEffectiveSettings } from "./api/settings";
+import { hydrateTitleArt } from "./core/titleArt";
+import { setThemeMusicPreferences, setThemeMusicSession } from "./core/themeMusic";
 import { useCallback, useEffect, useState } from "react";
 import { TopNav, type AppSection, type LibraryLanding } from "./components/TopNav";
-import { advanceShuffle, createShuffle, deleteShuffle, getCatalogItem, getLibraries, getProfileAppearance, getRequestsFeatureStatus, restoreDefaultProfile } from "./api/silo";
+import { advanceShuffle, createShuffle, deleteShuffle, getCatalogItem, getEpisodes, getLibraries, getProfileAppearance, getRequestsFeatureStatus, getSeasons, getSetupStatus, restoreDefaultProfile } from "./api/silo";
 import { serverRegistry } from "./core/serverRegistry";
 import { focusTopNavigation, installSpatialNavigation } from "./navigation/spatial";
 import { DetailsScreen } from "./screens/DetailsScreen";
@@ -10,26 +13,54 @@ import { DeviceLoginScreen } from "./screens/DeviceLoginScreen";
 import { ForYouScreen } from "./screens/ForYouScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { HistoryScreen } from "./screens/HistoryScreen";
+import { AudiobookGroupsScreen, groupSubtitle } from "./screens/AudiobookGroupsScreen";
+import type { GroupKind } from "./screens/AudiobookGroupsScreen";
+import { LibraryCollectionsScreen } from "./screens/LibraryCollectionsScreen";
 import { LibraryScreen } from "./screens/LibraryScreen";
 import { LibraryRecommendationsScreen } from "./screens/LibraryRecommendationsScreen";
 import { LoginScreen } from "./screens/LoginScreen";
+import { PersonScreen } from "./screens/PersonScreen";
 import { PlayerScreen } from "./screens/PlayerScreen";
 import { PersonalScreen } from "./screens/PersonalScreen";
+import { clearBackgrounded, markBackgrounded, requiresSelectionAfterBackground, requiresSelectionAtLaunch } from "./core/profileLaunch";
 import { ProfileSelectionScreen } from "./screens/ProfileSelectionScreen";
 import { RequestsScreen } from "./screens/RequestsScreen";
 import { SearchScreen } from "./screens/SearchScreen";
 import { SeriesScreen } from "./screens/SeriesScreen";
+import { PhoneSetupScreen } from "./screens/PhoneSetupScreen";
 import { ServerSetupScreen } from "./screens/ServerSetupScreen";
+import { pairingAvailable } from "./platform/pairing";
+import { FirstRunSetupScreen } from "./screens/FirstRunSetupScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
-import type { Session, SiloItem, SiloLibrary, SiloProfile } from "./types";
+import { SectionBrowseScreen, type SectionBrowseArgs } from "./screens/SectionBrowseScreen";
+import type { AudiobookGroup } from "./api/silo";
+import type { PlaybackChoices } from "./api/playback";
+import { applyResumeState, applyWatchedState, publishWatchState } from "./core/watchState";
+import { firstEpisodeOfSeason, nextEpisodeAfter } from "./core/episodeNavigation";
+import { publishRailsChanged } from "./core/watchState";
+import { connectEventsSocket } from "./api/events";
+import type { HomeRail, Session, SiloCollection, SiloItem, SiloLibrary, SiloProfile } from "./types";
+import { LoadingState } from "./components/LoadingState";
+import { StartupSplash } from "./components/StartupSplash";
 
-type AuthRoute = "server-setup" | "device-login" | "password-login";
+// Plays once per launch (a cold start), like Android TV's startup splash.
+let splashPending = true;
+import { installClientLogCapture } from "./core/clientLogs";
+
+installClientLogCapture();
+
+type AuthRoute = "phone-setup" | "server-setup" | "first-run-setup" | "device-login" | "password-login";
 type DetailRoute =
   | { name: "main" }
-  | { name: "details"; item: SiloItem }
-  | { name: "series"; item: SiloItem; selectedEpisode?: SiloItem }
+  | { name: "details"; item: SiloItem; castIndex?: number }
+  | { name: "series"; item: SiloItem; selectedEpisode?: SiloItem; castIndex?: number }
+  | { name: "person"; personId?: string; personName: string; back: DetailRoute }
   | { name: "play-choice"; item: SiloItem; returnTo?: { series: SiloItem; selectedEpisode: SiloItem } }
-  | { name: "player"; item: SiloItem; startPosition?: number; returnTo?: { series: SiloItem; selectedEpisode: SiloItem }; shuffleId?: string };
+  | { name: "player"; item: SiloItem; startPosition?: number; autoAdvanceCount?: number; choices?: PlaybackChoices; returnTo?: { series: SiloItem; selectedEpisode: SiloItem }; shuffleId?: string; shuffleNext?: SiloItem; shuffleScope?: string };
+
+type BrowseDetail =
+  | { kind: "collection"; library: SiloLibrary; collection: SiloCollection }
+  | { kind: "group"; library: SiloLibrary; groupKind: GroupKind; group: AudiobookGroup };
 
 const DEV_SERVER_URL = "/__silo";
 const NAVIGATION_KEY = "silo-webos-navigation-v1";
@@ -92,8 +123,12 @@ function initialState() {
   if (import.meta.env.DEV) {
     return { session: null, serverUrl: DEV_SERVER_URL, auth: "device-login" as AuthRoute };
   }
-  return { session: null, serverUrl: "", auth: "server-setup" as AuthRoute };
+  // No server yet: lead with phone pairing (Android's phone-first setup), but
+  // only where the pairing service exists. Browsers keep manual entry.
+  return { session: null, serverUrl: "", auth: (pairingAvailable() ? "phone-setup" : "server-setup") as AuthRoute };
 }
+
+let launchSelectionRequired = requiresSelectionAtLaunch();
 
 export default function App() {
   const initial = initialState();
@@ -103,6 +138,9 @@ export default function App() {
   const [section, setSection] = useState<AppSection>("home");
   const [selectedSeriesLibraryId, setSelectedSeriesLibraryId] = useState<number | null>(null);
   const [libraryLanding, setLibraryLanding] = useState<LibraryLanding>("recommended");
+  const [browseDetail, setBrowseDetail] = useState<BrowseDetail | null>(null);
+  // A row's full page ("Explore all"), shown inside the shell so the top nav stays.
+  const [sectionBrowse, setSectionBrowse] = useState<SectionBrowseArgs | null>(null);
   const [libraries, setLibraries] = useState<SiloLibrary[]>([]);
   const [librariesLoaded, setLibrariesLoaded] = useState(false);
   const [requestsAvailable, setRequestsAvailable] = useState<boolean | undefined>();
@@ -110,12 +148,26 @@ export default function App() {
   const [profileHydrated, setProfileHydrated] = useState(false);
   const [route, setRoute] = useState<DetailRoute>({ name: "main" });
   const [navigationRestored, setNavigationRestored] = useState(false);
+  // Cold launches with a saved session only; a first login never plays it.
+  const [splashVisible, setSplashVisible] = useState(() => {
+    if (!initial.session) splashPending = false;
+    return splashPending;
+  });
 
   useEffect(() => installSpatialNavigation(), [route.name, authRoute, session]);
 
   useEffect(() => {
+    if (!session) return;
+    return connectEventsSocket(session, publishRailsChanged);
+  }, [session]);
+
+  useEffect(() => {
     if (!session || profileHydrated) return;
     let alive = true;
+    if (launchSelectionRequired) {
+      setProfileError("Choose who is watching.");
+      return;
+    }
     setProfileError("");
     restoreDefaultProfile(session)
       .then((profileSession) => {
@@ -148,7 +200,7 @@ export default function App() {
           if (matches.length === 0) setSection("home");
         }
       })
-      .catch((error) => { console.error("[Silo webOS] libraries", error); if (alive) setLibrariesLoaded(true); });
+      .catch((error) => { console.error("[Hopper] libraries", error); if (alive) setLibrariesLoaded(true); });
     return () => { alive = false; };
   }, [session]);
 
@@ -163,7 +215,7 @@ export default function App() {
         );
       })
       .catch(error => {
-        console.warn("[Silo webOS] request availability", error);
+        console.warn("[Hopper] request availability", error);
         if (alive) setRequestsAvailable(undefined);
       });
     return () => { alive = false; };
@@ -220,6 +272,17 @@ export default function App() {
   }, [navigationRestored, route, section, session?.profileId, session?.serverUrl]);
 
   useEffect(() => {
+    setThemeMusicSession(session ?? null);
+    if (!session?.profileId) return;
+    let alive = true;
+    void hydrateTitleArt(session);
+    getEffectiveSettings(session, ["ui.theme_music_enabled", "ui.theme_music_loop"]).then(effective => {
+      if (alive) setThemeMusicPreferences(effective.get("ui.theme_music_enabled")?.value === true, effective.get("ui.theme_music_loop")?.value === true);
+    }).catch(() => undefined);
+    return () => { alive = false; };
+  }, [session?.profileId, session?.serverUrl]);
+
+  useEffect(() => {
     if (!session?.profileId) return;
     let alive = true;
     getProfileAppearance(session).then(appearance => {
@@ -229,11 +292,12 @@ export default function App() {
       root.dataset.textScale = appearance.textScale;
       root.dataset.textWeight = appearance.textWeight;
       root.dataset.highContrast = appearance.highContrast ? "true" : "false";
+      root.dataset.posterSize = appearance.posterSize;
       const merged = { ...(THEME_TOKENS[appearance.theme] ?? THEME_TOKENS["midnight-cinema"]), ...appearance.variables };
       for (const [name, value] of Object.entries(merged)) {
         if (/^--[a-z0-9-]+$/.test(name) && typeof value === "string" && value.length <= 128) root.style.setProperty(name, value);
       }
-    }).catch(error => console.warn("[Silo webOS] profile appearance", error));
+    }).catch(error => console.warn("[Hopper] profile appearance", error));
     return () => { alive = false; };
   }, [session?.profileId]);
 
@@ -241,13 +305,29 @@ export default function App() {
     const onBack = (event: KeyboardEvent) => {
       if (!["Escape", "Backspace", "Back", "GoBack", "BrowserBack"].includes(event.key) && event.keyCode !== 461 && event.keyCode !== 10009) return;
       if (!session) return;
-      // The player owns Back while it is mounted (close panel first, then exit);
-      // this handler must not route over it.
       if (document.querySelector(".player-shell")) return;
+      if (document.querySelector(".profile-menu")) {
+        window.dispatchEvent(new Event("silo:close-profile-menu"));
+        event.preventDefault();
+        return;
+      }
+      const settingsPane = document.querySelector(".settings-pane");
+      if (settingsPane && document.activeElement instanceof HTMLElement && settingsPane.contains(document.activeElement)) {
+        document.querySelector<HTMLElement>(".settings-rail [aria-current='true']")?.focus();
+        event.preventDefault();
+        return;
+      }
       if (document.querySelector(".browse-panel-scrim")) {
         window.dispatchEvent(new Event("silo:browse-panel-back"));
         event.preventDefault();
         return;
+      }
+      if (document.querySelector(".library-results")) {
+        const cleared = window.dispatchEvent(new CustomEvent("silo:library-back", { cancelable: true }));
+        if (!cleared) {
+          event.preventDefault();
+          return;
+        }
       }
       const nav = document.querySelector<HTMLElement>(".tv-nav");
       if (nav) {
@@ -265,17 +345,28 @@ export default function App() {
           event.preventDefault();
           return;
         }
+        if (route.name === "main" && sectionBrowse && !(activeElement instanceof HTMLElement && activeElement.closest(".tv-nav"))) {
+          setSectionBrowse(null);
+          event.preventDefault();
+          return;
+        }
+        if (route.name === "main" && browseDetail && !(activeElement instanceof HTMLElement && activeElement.closest(".tv-nav"))) {
+          setBrowseDetail(null);
+          event.preventDefault();
+          return;
+        }
+        if (route.name === "person") {
+          setRoute(route.back);
+          event.preventDefault();
+          return;
+        }
         if (route.name !== "main") {
           setRoute({ name: "main" });
           focusTopNavigation(activeNav);
           event.preventDefault();
           return;
         }
-        if (
-          section !== "home"
-          && activeElement instanceof HTMLElement
-          && activeElement.closest(".tv-nav")
-        ) {
+        if (section !== "home") {
           setSection("home");
           focusTopNavigation(nav.querySelector<HTMLElement>("[data-nav-primary='home']"));
           event.preventDefault();
@@ -285,7 +376,13 @@ export default function App() {
         event.preventDefault();
         return;
       }
-      if (route.name !== "main") {
+      if (route.name === "person") {
+        setRoute(route.back);
+        event.preventDefault();
+      } else if (route.name === "play-choice") {
+        setRoute(route.returnTo ? { name: "series", item: route.returnTo.series, selectedEpisode: route.returnTo.selectedEpisode } : { name: "details", item: route.item });
+        event.preventDefault();
+      } else if (route.name !== "main") {
         setRoute({ name: "main" });
         event.preventDefault();
       } else if (section !== "home") {
@@ -295,9 +392,27 @@ export default function App() {
     };
     window.addEventListener("keydown", onBack);
     return () => window.removeEventListener("keydown", onBack);
-  }, [session, route.name, section]);
+  }, [session, route.name, section, browseDetail, sectionBrowse]);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.hidden) {
+        markBackgrounded();
+        return;
+      }
+      if (requiresSelectionAfterBackground()) {
+        clearBackgrounded();
+        setProfileError("Choose who is watching.");
+        setSection("home");
+        setRoute({ name: "main" });
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
 
   const login = useCallback((next: Session) => {
+    launchSelectionRequired = false;
     serverRegistry.saveSession(next);
     setServerUrl(next.serverUrl);
     setSession(next);
@@ -319,6 +434,14 @@ export default function App() {
       setRoute({ name: "main" });
     } else {
       setAuthRoute("device-login");
+      // Android TvServerSetupViewModel: a fresh server (needs_setup) goes to
+      // first-run setup instead of sign-in. A failed probe keeps sign-in.
+      const url = entry.url;
+      getSetupStatus(url)
+        .then(needsSetup => {
+          if (needsSetup) setAuthRoute(current => (current === "device-login" && serverRegistry.active()?.url === url ? "first-run-setup" : current));
+        })
+        .catch(() => undefined);
     }
   }
 
@@ -337,8 +460,8 @@ export default function App() {
     setAuthRoute("server-setup");
   }
 
-  function openItem(item: SiloItem) {
-    if (item.Type === "Series") setRoute({ name: "series", item });
+  function openItem(item: SiloItem, options?: { episode?: SiloItem }) {
+    if (item.Type === "Series") setRoute({ name: "series", item, selectedEpisode: options?.episode });
     else if (item.Type === "Episode" && item.SeriesId) {
       setRoute({
         name: "series",
@@ -349,24 +472,54 @@ export default function App() {
     else setRoute({ name: "details", item });
   }
 
+  // Android openHomeSection / openLibrarySection: a library row on a mixed
+  // library keeps the Movies/Series view's media scope on its full page.
+  function openSectionBrowse(rail: HomeRail) {
+    if (!rail.sectionId) return;
+    const library = rail.libraryId != null ? libraries.find(candidate => candidate.id === rail.libraryId) : undefined;
+    const mixed = library?.type.trim().toLowerCase() === "mixed";
+    const mediaScope = mixed ? (section === "movies" ? "movie" : section === "series" ? "series" : null) : null;
+    setSectionBrowse({ sectionId: rail.sectionId, title: rail.title, libraryId: rail.libraryId ?? null, mediaScope });
+  }
+
+  async function resolveNextEpisode(current: SiloItem): Promise<SiloItem | null> {
+    if (!session || !current.SeriesId || current.ParentIndexNumber == null || current.IndexNumber == null) return null;
+    const currentSeason = current.ParentIndexNumber;
+    const episodes = await getEpisodes(session, current.SeriesId, currentSeason);
+    const nextInSeason = nextEpisodeAfter(episodes, currentSeason, current.IndexNumber);
+    if (nextInSeason) return nextInSeason;
+    const seasons = await getSeasons(session, current.SeriesId);
+    const nextSeason = seasons
+      .filter(season => season.IndexNumber != null && season.IndexNumber > currentSeason)
+      .sort((left, right) => left.IndexNumber! - right.IndexNumber!)[0];
+    if (!nextSeason?.IndexNumber) return null;
+    const nextSeasonEpisodes = await getEpisodes(session, current.SeriesId, nextSeason.IndexNumber);
+    return firstEpisodeOfSeason(nextSeasonEpisodes);
+  }
+
   function requestPlayback(item: SiloItem, returnTo?: { series: SiloItem; selectedEpisode: SiloItem }) {
     const position = (item.UserData?.PlaybackPositionTicks ?? 0) / 10_000_000;
     if (position >= 30) setRoute({ name: "play-choice", item, returnTo });
     else setRoute({ name: "player", item, startPosition: 0, returnTo });
   }
 
-  async function shuffleLibrary(libraryId: number) {
-    if (!session) throw new Error("A connected server session is required to shuffle.");
-    const shuffle = await createShuffle(session, "library", libraryId);
-    setRoute({ name: "player", item: shuffle.current, startPosition: 0, shuffleId: shuffle.id });
+  function playExtra(trailer: { contentId?: string; title: string }) {
+    if (!trailer.contentId) return;
+    setRoute({ name: "player", item: { Id: trailer.contentId, Name: trailer.title, Type: "Extra" }, startPosition: 0 });
   }
 
-  async function advanceShuffleRoute(shuffleId: string, finished: SiloItem) {
+  async function startShuffle(kind: string, id: string | number) {
+    if (!session) throw new Error("A connected server session is required to shuffle.");
+    const shuffle = await createShuffle(session, kind, id);
+    setRoute({ name: "player", item: shuffle.current, startPosition: 0, shuffleId: shuffle.id, shuffleNext: shuffle.next, shuffleScope: shuffle.scopeLabel });
+  }
+
+  async function advanceShuffleRoute(shuffleId: string, finished: SiloItem, autoAdvanceCount = 0) {
     if (!session) return;
     try {
       const shuffle = await advanceShuffle(session, shuffleId, finished.Id);
       if (shuffle.current.Id === finished.Id) throw new Error("Nothing else can play.");
-      setRoute({ name: "player", item: shuffle.current, startPosition: 0, shuffleId });
+      setRoute({ name: "player", item: shuffle.current, startPosition: 0, shuffleId, shuffleNext: shuffle.next, shuffleScope: shuffle.scopeLabel, autoAdvanceCount });
     } catch {
       void deleteShuffle(session, shuffleId).catch(() => undefined);
       setRoute({ name: "main" });
@@ -384,6 +537,19 @@ export default function App() {
       : { name: "details", item: current.item });
   }
 
+  /**
+   * Android clearProfile after deleting the active profile: its token is dead
+   * server-side, so drop the selection and require a fresh pick.
+   */
+  function clearDeletedProfile() {
+    if (!session) return;
+    const cleared: Session = { ...session, profileId: undefined, profileToken: undefined, profileAvatar: undefined };
+    serverRegistry.saveSession(cleared);
+    localStorage.removeItem(NAVIGATION_KEY);
+    setSession(cleared);
+    setProfileError("Choose who is watching.");
+  }
+
   function activateProfile(profile: SiloProfile, profileToken?: string) {
     if (!session) return;
     const nextSession: Session = {
@@ -396,6 +562,8 @@ export default function App() {
     };
     serverRegistry.saveSession(nextSession);
     setSession(nextSession);
+    launchSelectionRequired = false;
+    clearBackgrounded();
     setProfileError("");
     setProfileHydrated(true);
     setLibrariesLoaded(false);
@@ -406,7 +574,11 @@ export default function App() {
   }
 
   if (!session) {
+    if (authRoute === "phone-setup") return <PhoneSetupScreen onPaired={login} onManual={() => setAuthRoute("server-setup")} />;
     if (authRoute === "server-setup") return <ServerSetupScreen onContinue={chooseServer} />;
+    if (authRoute === "first-run-setup") {
+      return <FirstRunSetupScreen serverUrl={serverUrl} onComplete={login} onChangeServer={() => setAuthRoute("server-setup")} />;
+    }
     if (authRoute === "password-login") {
       return (
         <LoginScreen
@@ -428,7 +600,16 @@ export default function App() {
   }
 
   if (profileError) {
-    return <ProfileSelectionScreen session={session} onSelect={activateProfile} />;
+    return (
+      <ProfileSelectionScreen
+        session={session}
+        onSelect={activateProfile}
+        onChangeServer={changeServer}
+        onSignOut={signOut}
+        onActiveProfileDeleted={clearDeletedProfile}
+        fullScreen
+      />
+    );
   }
 
   if (!session.profileId) {
@@ -450,8 +631,28 @@ export default function App() {
         session={session}
         item={route.item}
         startPosition={route.startPosition}
-        onBack={() => leavePlayer(route)}
-        onEnded={route.shuffleId ? () => void advanceShuffleRoute(route.shuffleId!, route.item) : undefined}
+        choices={route.choices}
+        resolveNextEpisode={() => resolveNextEpisode(route.item)}
+        autoAdvanceCount={route.autoAdvanceCount ?? 0}
+        shuffle={route.shuffleId ? { id: route.shuffleId, scopeLabel: route.shuffleScope, next: route.shuffleNext } : undefined}
+        onShuffleAdvance={(autoAdvanceCount) => {
+          publishWatchState(applyWatchedState(route.item, true));
+          void advanceShuffleRoute(route.shuffleId!, route.item, autoAdvanceCount);
+        }}
+        onPlayNext={(next, autoAdvanceCount) => {
+          if (route.shuffleId && session) void deleteShuffle(session, route.shuffleId).catch(() => undefined);
+          publishWatchState(applyWatchedState(route.item, true));
+          const parentSeries = route.returnTo?.series ?? { Id: route.item.SeriesId ?? "", Name: route.item.SeriesName ?? "Series", Type: "Series" };
+          setRoute({ name: "player", item: next, startPosition: 0, autoAdvanceCount, returnTo: { series: parentSeries, selectedEpisode: next } });
+        }}
+        onBack={(elapsed) => {
+          publishWatchState(applyResumeState(route.item, elapsed));
+          leavePlayer(route);
+        }}
+        onEnded={route.shuffleId ? () => void advanceShuffleRoute(route.shuffleId!, route.item) : () => {
+          publishWatchState(applyWatchedState(route.item, true));
+          leavePlayer(route);
+        }}
       />
     );
   }
@@ -462,7 +663,6 @@ export default function App() {
     const seconds = Math.floor(resumeAt % 60);
     const destination = route.returnTo;
     return <main className="play-choice-shell">
-      <button data-tv-focusable="true" className="tv-button secondary top-back" onClick={() => setRoute(destination ? { name: "series", item: destination.series, selectedEpisode: destination.selectedEpisode } : { name: "details", item: route.item })}>‹ Back</button>
       <section className="play-choice-card">
         <div className="eyebrow">Continue watching</div>
         <h1>{route.item.Name}</h1>
@@ -475,14 +675,31 @@ export default function App() {
     </main>;
   }
 
+  if (route.name === "person") {
+    return (
+      <PersonScreen
+        session={session}
+        personId={route.personId}
+        name={route.personName}
+        onOpen={openItem}
+        onBack={() => setRoute(route.back)}
+      />
+    );
+  }
+
   if (route.name === "series") {
     return (
       <SeriesScreen
+        key={route.item.Id}
         session={session}
         series={route.item}
         initialEpisode={route.selectedEpisode}
-        onSelectEpisode={(episode) => setRoute({ name: "series", item: route.item, selectedEpisode: episode })}
-        onOpenEpisode={(episode) => requestPlayback(episode, { series: route.item, selectedEpisode: episode })}
+        restoreCastIndex={route.castIndex}
+        onOpenPerson={(person, index) => setRoute({ name: "person", personId: person.personId, personName: person.name, back: { ...route, castIndex: index } })}
+        onPlayExtra={playExtra}
+        onPlayEpisode={(episode, startPosition, choices) => setRoute({ name: "player", item: episode, startPosition, choices, returnTo: { series: route.item, selectedEpisode: episode } })}
+        onShuffle={startShuffle}
+        onOpen={openItem}
         onBack={() => setRoute({ name: "main" })}
       />
     );
@@ -493,14 +710,21 @@ export default function App() {
       <DetailsScreen
         session={session}
         item={route.item}
-        onPlay={() => requestPlayback(route.item)}
+        restoreCastIndex={route.castIndex}
+        onOpenPerson={(person, index) => setRoute({ name: "person", personId: person.personId, personName: person.name, back: { ...route, castIndex: index } })}
+        onPlayExtra={playExtra}
+        onPlay={(startPosition, choices) => setRoute({ name: "player", item: route.item, startPosition, choices })}
+        onOpen={openItem}
         onBack={() => setRoute({ name: "main" })}
       />
     );
   }
 
   let body;
-  if (section === "home") body = <HomeScreen session={session} onOpen={openItem} />;
+  if (sectionBrowse && (section === "home" || section === "movies" || section === "series" || section === "music" || section === "audiobooks")) {
+    body = <SectionBrowseScreen key={`${sectionBrowse.libraryId ?? "home"}-${sectionBrowse.sectionId}`} session={session} args={sectionBrowse} onOpen={openItem} />;
+  }
+  else if (section === "home") body = <HomeScreen session={session} onOpen={openItem} onExplore={openSectionBrowse} />;
   else if (section === "forYou") body = <ForYouScreen session={session} onOpen={openItem} />;
   else if (section === "search") body = <SearchScreen session={session} onOpen={openItem} />;
   else if (section === "favorites" || section === "watchlist") {
@@ -508,11 +732,21 @@ export default function App() {
   }
   else if (section === "history") body = <HistoryScreen session={session} onOpen={openItem} />;
   else if (section === "collections") body = <CollectionsScreen session={session} onOpen={openItem} />;
-  else if (section === "profiles") body = <ProfileSelectionScreen session={session} onSelect={activateProfile} />;
+  else if (section === "profiles") {
+    body = (
+      <ProfileSelectionScreen
+        session={session}
+        onSelect={activateProfile}
+        onChangeServer={changeServer}
+        onSignOut={signOut}
+        onActiveProfileDeleted={clearDeletedProfile}
+      />
+    );
+  }
   else if (section === "settings") {
-    body = <SettingsScreen session={session} onSignOut={signOut} onChangeServer={changeServer} />;
+    body = <SettingsScreen session={session} onSignOut={signOut} onChangeServer={changeServer} onSwitchProfile={() => setSection("profiles")} />;
   } else if (section === "library") {
-    body = <LibraryScreen session={session} libraries={libraries} selectableLibraries onOpen={openItem} onShuffleLibrary={shuffleLibrary} />;
+    body = <LibraryScreen key="all" session={session} libraries={libraries} selectableLibraries onOpen={openItem} onShuffle={startShuffle} />;
   }   else if (section === "calendar") body = <CalendarScreen session={session} onOpen={openItem} />;
   else if (section === "requests") body = <RequestsScreen session={session} />; else {
     const sectionLibraries = librariesForSection(section, libraries);
@@ -523,32 +757,87 @@ export default function App() {
       ? sectionLibraries.filter(library => library.id === defaultSeriesLibraryId)
       : sectionLibraries;
     if (!matchingLibraries.length) {
-      body = <div className="screen-state">Loading library…</div>;
-    } else if ((section === "movies" || section === "series") && libraryLanding === "recommended") {
+      body = <LoadingState label="Loading library" />;
+    } else if (libraryLanding === "collections") {
+      const mixedTypes = section === "movies" ? ["Movie"] : section === "series" ? ["Series"] : undefined;
+      body = browseDetail?.kind === "collection" ? (
+        <LibraryScreen
+          key={`collection-${browseDetail.collection.id}`}
+          session={session}
+          libraries={[browseDetail.library]}
+          itemTypes={browseDetail.library.type.trim().toLowerCase() === "mixed" ? mixedTypes : undefined}
+          onOpen={openItem}
+          onShuffle={startShuffle}
+          collection={{ id: browseDetail.collection.id, name: browseDetail.collection.name, source: browseDetail.collection.kind === "user_collection" ? "user_collection" : "library_collection" }}
+          header={<div className="library-header-row"><h1 className="library-header-title">{browseDetail.collection.name}</h1></div>}
+        />
+      ) : (
+        <LibraryCollectionsScreen
+          session={session}
+          libraries={matchingLibraries}
+          scopeKey={`${session.serverUrl}|${session.profileId ?? ""}|${section}|${matchingLibraries.map(library => library.id).join(",")}`}
+          onOpen={({ library, collection }) => setBrowseDetail({ kind: "collection", library, collection })}
+        />
+      );
+    } else if (section === "audiobooks" && (libraryLanding === "authors" || libraryLanding === "series")) {
+      const groupKind: GroupKind = libraryLanding === "authors" ? "author" : "series";
+      const library = matchingLibraries[0];
+      body = browseDetail?.kind === "group" && browseDetail.groupKind === groupKind ? (
+        <LibraryScreen
+          key={`group-${groupKind}-${browseDetail.group.name}`}
+          session={session}
+          libraries={[browseDetail.library]}
+          onOpen={openItem}
+          onShuffle={startShuffle}
+          presetGroups={[{ match: "all", rules: [{ field: groupKind, op: "is", value: browseDetail.group.name }] }]}
+          presetKey={`${groupKind}:${browseDetail.group.name}`}
+          header={
+            <div className="library-header-row">
+              <button type="button" data-tv-focusable="true" className="browse-dropdown-trigger" onClick={() => setBrowseDetail(null)}>
+                <span>{groupKind === "author" ? "All Authors" : "All Series"}</span>
+              </button>
+              <h1 className="library-header-title">{browseDetail.group.name}</h1>
+              <span className="library-header-subtitle">{groupSubtitle(browseDetail.group)}</span>
+            </div>
+          }
+        />
+      ) : (
+        <AudiobookGroupsScreen
+          session={session}
+          library={library}
+          kind={groupKind}
+          onOpen={group => setBrowseDetail({ kind: "group", library, groupKind, group })}
+        />
+      );
+    } else if (libraryLanding === "recommended") {
       body = (
         <LibraryRecommendationsScreen
           session={session}
           title={section === "series" ? matchingLibraries[0].name : sectionTitle(section)}
           libraries={matchingLibraries}
           onOpen={openItem}
+          onExplore={openSectionBrowse}
         />
       );
     } else {
       body = (
         <LibraryScreen
+          key={`${section}-${libraryLanding}-${matchingLibraries.map(library => library.id).join(",")}`}
           session={session}
           libraries={matchingLibraries}
           itemTypes={section === "movies" ? ["Movie"] : section === "series" ? ["Series"] : undefined}
           onOpen={openItem}
-          onShuffleLibrary={shuffleLibrary}
+          onShuffle={startShuffle}
+          presetKey={libraryLanding === "alphabet" ? "alphabet" : undefined}
+          hideControls={libraryLanding === "alphabet"}
         />
       );
     }
   }
 
   return (
-    <div className={`app-shell ${section === "library" || ((section === "movies" || section === "series") && libraryLanding === "browse") ? "app-shell-library" : ""} ${section === "home" && route.name === "main" ? "app-shell-home" : ""}`}>
-      <TopNav
+    <div className={`app-shell ${section === "library" || (["movies", "series", "music", "audiobooks"].includes(section) && (libraryLanding === "browse" || libraryLanding === "alphabet" || browseDetail !== null)) ? "app-shell-library" : ""} ${section === "home" && route.name === "main" && !sectionBrowse ? "app-shell-home" : ""}`}>
+      {section !== "settings" && section !== "profiles" && <TopNav
         active={section}
         libraries={libraries}
         requestsAvailable={requestsAvailable}
@@ -560,6 +849,8 @@ export default function App() {
             setSelectedSeriesLibraryId(libraryId ?? firstSeriesLibrary?.id ?? null);
           }
           setLibraryLanding(landing);
+          setBrowseDetail(null);
+          setSectionBrowse(null);
           setSection(next);
           setRoute({ name: "main" });
         }}
@@ -569,8 +860,11 @@ export default function App() {
         onLibraries={() => { setSection("library"); setRoute({ name: "main" }); }}
         onHistory={() => { setSection("history"); setRoute({ name: "main" }); }}
         onProfiles={() => { setSection("profiles"); setRoute({ name: "main" }); }}
-      />
+        onSignOut={signOut}
+        onChangeServer={changeServer}
+      />}
       {body}
+      {splashVisible ? <StartupSplash onDone={() => { splashPending = false; setSplashVisible(false); }} /> : null}
     </div>
   );
 }

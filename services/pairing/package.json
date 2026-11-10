@@ -1,0 +1,6 @@
+{
+  "name": "com.hopperapp.hopper.service",
+  "version": "1.0.0",
+  "description": "Hopper companion pairing service",
+  "main": "service.js"
+}
