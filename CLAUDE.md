@@ -126,6 +126,7 @@ Keep each concern in its own layer:
 
 ## Branding
 - The working name is **Hopper**. The Silo name and logo are trademarked separately from the AGPL code, and Silo logo assets have been removed from the app. Public store publishing needs permission; the submission status is in `brand/store/LISTING.md`.
+- The Hopper name and artwork are reserved outside the AGPL by `TRADEMARK.md` and `brand/NOTICE` (unregistered ™, no ®). New brand files belong in `brand/`; if artwork goes anywhere else, add it to the "Brand files" table in `TRADEMARK.md` and the list in `brand/NOTICE`.
 - Brand sources and the render pipeline are in `brand/` (see `brand/README.md`). Keep `src/components/HopperMark.tsx` geometry in sync with `brand/hopper-icon.svg`.
 - Render with `brand/render.sh` (headless Chrome). Don't use Quick Look, which distorts non-square SVGs.
 
@@ -146,6 +147,7 @@ There is no change log, handoff or backlog file. The history is the merged pull 
 | `CONTRIBUTING.md` | Setup, browser development, TV deploy, PR conventions | Commands, tooling, scripts or contribution rules change |
 | `docs/MAINTAINING.md` | What the PR automation does and the maintainer's steps | A workflow in `.github/workflows/`, a label or a repository setting changes |
 | `CLAUDE.md` | Rules, commands, architecture and procedure for agents | Architecture, commands, rules or this table change |
+| `TRADEMARK.md`, `brand/NOTICE` | What brand files are reserved outside the AGPL, and the name and fork policy | Brand files are added, moved or renamed, or the app ID changes |
 | `brand/README.md`, `brand/store/LISTING.md` | Brand sources, render pipeline, store listing and submission checklist | Artwork, the render pipeline or the listing changes |
 | `.claude/skills/*/SKILL.md` | Agent skills | The procedure a skill describes changes |
 

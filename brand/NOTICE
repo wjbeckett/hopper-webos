@@ -1,0 +1,26 @@
+HOPPER BRAND ASSETS: NOTICE
+===========================
+
+The artwork in this directory and its subdirectories (the Hopper mark, wordmark,
+icons, splash and store artwork, as SVG sources and rendered PNGs) is:
+
+    Copyright (c) 2026 the Hopper maintainer (github.com/wjbeckett).
+    All rights reserved.
+
+The same applies to public/icon.png, public/largeIcon.png, public/splash.png and
+the SVG paths and gradients in src/components/HopperMark.tsx.
+
+This artwork is NOT licensed under the GNU Affero General Public License
+(AGPL-3.0-or-later) that covers Hopper's source code, or under any other
+open-source licence. It is reserved under AGPL-3.0 section 7(e).
+
+brand/render.sh and the rest of the repository remain under the AGPL.
+
+If you distribute a fork or a modified version, you must remove or replace this
+artwork. You must also not use the Hopper name as its identity. You may not
+publish a Hopper-branded app to any app store without written permission.
+
+The screenshots in store/screenshots/ show third-party content (open movies and
+public-domain titles) and are included only to document the app.
+
+See TRADEMARK.md at the repository root for the full policy.

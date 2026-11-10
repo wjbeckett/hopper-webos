@@ -105,3 +105,5 @@ Maintainers: the full process is in [`docs/MAINTAINING.md`](docs/MAINTAINING.md)
 ## Brand assets
 
 To change the icon, splash or store artwork, see [`brand/README.md`](brand/README.md).
+
+The Hopper name and artwork are not under the AGPL. Contributions to the artwork are welcome. A fork you distribute needs its own name, artwork and app ID; see [`TRADEMARK.md`](TRADEMARK.md).

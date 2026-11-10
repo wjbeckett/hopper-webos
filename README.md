@@ -87,6 +87,8 @@ The Hopper icon, splash and store artwork are made from SVG sources in [`brand/`
 
 Hopper is free software, licensed under the [GNU Affero General Public License v3.0 or later](LICENSE) (`AGPL-3.0-or-later`), the same licence as Silo. You can use, study, change and share it. If you distribute a changed version, or run one as a network service, you must make its source available under the same licence.
 
+The licence covers the code, not the brand. The Hopper™ name, mark and artwork are reserved. Forks you distribute need their own name and icon, and publishing to an app store as Hopper needs permission. See [TRADEMARK.md](TRADEMARK.md).
+
 The bundled Inter fonts are under the SIL Open Font License (`public/fonts/OFL.txt`).
 
-The Silo name and logo are trademarks of their owners and are not part of this project.
+The Silo name and logo are trademarks of Silo Media L.L.C. They are not part of this project.
