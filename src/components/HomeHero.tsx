@@ -351,7 +351,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero({ ra
           />
         ) : null}
         <div className="home-backdrop-scrim" />
-        <div className="home-backdrop-vignette" />
       </div>
       )}
       {focusedItem ? (

@@ -4,9 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type Hls from "hls.js";
 import { pinFocusedRailItem } from "../navigation/spatial";
 import { bestVersionForDevice, getMarkers, getTrickplay, getWatchDetail, playbackUrl, replanPlaybackV3, reportProgress, saveAudioPreference, saveSubtitlePreference, startPlaybackV3, stopPlayback, stopPlaybackKeepalive, type AudioTrack, type FileMarkers, type MarkerSegment, type PlaybackChoices, type PlaybackPlan, type Quality, type SubtitleInventory, type Trickplay, type WatchDetail } from "../api/playback";
-import type { Session, SiloItem } from "../types";
+import type { HomeRail, Session, SiloItem } from "../types";
 import { getEffectiveSettings, putScopedSetting } from "../api/settings";
 import { artUrl, getHomeRails, getShuffle, skipShuffle } from "../api/silo";
+import { cachedHomeRails, storeHomeRails } from "../core/homeRailsCache";
 import { parseSubtitleAppearance, SUBTITLE_APPEARANCE_CHOICES, SUBTITLE_APPEARANCE_FIELDS, subtitleChoiceLabel, subtitleCueCss } from "../core/subtitleStyle";
 import { putDeviceSubtitleAppearance, putProfileSubtitleAppearance, type SubtitleAppearance } from "../api/settings";
 import { applySubtitleDelay, attachSidecarSubtitle, sidecarSubtitleArtifact } from "../core/subtitleSidecar";
@@ -21,6 +22,8 @@ import { delayLabel, localAudioSyncMs, localDolbyVisionEnabled, localHdrEnabled,
 
 type PlaybackState = { plan: PlaybackPlan; playbackAttemptId: string; planAttemptId: string; attemptedKeys: string[] };
 const ACTIVE_PLAYBACK_KEY = "silo-webos-active-playback-v1";
+/** Start offsets up to this long are played through rather than seeked over (see installPlan). */
+const START_SEEK_MIN_SECONDS = 3;
 
 // Seek grammar mirrors the Android TV player exactly (TvSeekRateLadder):
 // a signed 1x..32x ladder, a 100 ms tick carrying 2.0s of content per tick
@@ -388,7 +391,14 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       streamHeaders: Object.keys(next.plan.stream.headers ?? {})
     });
     const begin = () => {
-      if (next.plan.timeline.player_start_seconds > 0) video.currentTime = next.plan.timeline.player_start_seconds;
+      // The stream starts on a keyframe a little before the requested position, and
+      // player_start_seconds is the gap. Measured once on a webOS 22 TV: with a 1.9 s gap
+      // seeked over, 5 s passed between the metadata and the first frame although 6 s was
+      // already buffered. A seek makes the TV flush and restart its decoder. So small gaps
+      // are played through (playback starts that much earlier, inside the resume rewind) and
+      // only a real jump seeks. Whether this removes the whole wait is not yet confirmed.
+      const startAt = next.plan.timeline.player_start_seconds;
+      if (startAt > START_SEEK_MIN_SECONDS) video.currentTime = startAt;
       void video.play().catch(() => setHud(true));
     };
     const isHls = next.plan.stream.protocol.toLowerCase() === "hls" || /mpegurl/i.test(next.plan.stream.mime_type ?? "") || /\.m3u8(?:\?|$)/i.test(streamUrl);
@@ -529,10 +539,14 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     void putScopedSetting(session, "playback.auto_play_next", "profile_device", next).catch(() => undefined);
   }, [autoPlayNext, session]);
 
+  // On Deck comes from Home's rows. Use the copy Home already holds; fetching all of Home
+  // here (a dozen requests) competed with the stream for the network and the CPU exactly
+  // while it was starting. Only when there is no copy, fetch once playback is under way.
+  const needsOnDeckFetch = item.Type === "Episode" && !cachedHomeRails(session);
   useEffect(() => {
     if (item.Type !== "Episode") { setOnDeckItems([]); return; }
     let alive = true;
-    void getHomeRails(session).then(rails => {
+    const fill = (rails: HomeRail[]) => {
       if (!alive) return;
       const currentSeries = item.SeriesId;
       const items = rails.filter(rail => /continue|in.progress|next.up/i.test(rail.id + " " + rail.title))
@@ -541,9 +555,13 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         .filter((candidate, index, all) => all.findIndex(other => other.Id === candidate.Id) === index)
         .slice(0, 12);
       setOnDeckItems(items);
-    }).catch(() => { if (alive) setOnDeckItems([]); });
+    };
+    const cached = cachedHomeRails(session);
+    if (cached) fill(cached);
+    else if (playing) void getHomeRails(session).then(rails => fill(storeHomeRails(session, rails))).catch(() => { if (alive) setOnDeckItems([]); });
     return () => { alive = false; };
-  }, [item.Id, session]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.Id, session, needsOnDeckFetch && playing]);
 
   const showShuffleMessage = useCallback((message: string) => {
     window.clearTimeout(shuffleMessageTimer.current);

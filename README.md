@@ -72,6 +72,7 @@ Hopper is an independent, community-built client. It is not affiliated with or e
 - **TV models:** playback has been tested on one LG TV (webOS 22). Other webOS versions and codecs haven't been fully tested.
 - **Connection errors:** losing the network or having your session expire needs clearer recovery screens.
 - **Audio delay** can only delay audio by 0 to 1000 ms. It can't move audio earlier.
+- **Dolby audio** (AC-3 and E-AC-3) is converted to AAC by the server. LG's browser can't play it next to video in the way Silo streams it, so it is not passed through to a soundbar or receiver.
 - **Not implemented yet:** "Translate description" on details pages.
 - **Watch Party** isn't available. It's experimental and switched off in the official Android TV app too.
 

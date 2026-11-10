@@ -3,49 +3,10 @@ import { getHomeRails } from "../api/silo";
 import { FeaturedRailsScreen } from "../components/FeaturedRailsScreen";
 import { focusFirstContentCard } from "../navigation/spatial";
 import { arrangeHomeRails, readHomeSectionLayout } from "../core/homeSections";
+import { cachedHomeRails, homeRailsKey, storeHomeRails } from "../core/homeRailsCache";
 import { useWatchStateRefresh } from "../core/watchState";
 import type { HomeRail, Session, SiloItem } from "../types";
 import { LoadingState } from "../components/LoadingState";
-
-/**
- * The last Home rows per server and profile. Home unmounts whenever a details page or the
- * player opens; without this, every Back refetched the rows behind a loading screen. With it,
- * Home is shown at once from memory and refreshed in the background.
- */
-const railsCache = new Map<string, HomeRail[]>();
-const cacheKey = (session: Session) => `${session.serverUrl}|${session.userId}|${session.profileId ?? ""}`;
-
-/**
- * Keeps the objects from `previous` wherever the refreshed data is identical, and returns
- * `previous` itself when nothing changed. Home is refreshed on a timer and on server events;
- * handing React the same rows and items means a refresh with no changes re-renders nothing.
- */
-function keepUnchanged(previous: HomeRail[], next: HomeRail[]): HomeRail[] {
-  const before = new Map(previous.map(rail => [rail.id, rail] as const));
-  let same = previous.length === next.length;
-  const merged = next.map((rail, railIndex) => {
-    const old = before.get(rail.id);
-    if (!old) { same = false; return rail; }
-    const oldItems = new Map(old.items.map(item => [item.Id, item] as const));
-    let itemsSame = old.items.length === rail.items.length;
-    const items = rail.items.map((item, index) => {
-      const oldItem = oldItems.get(item.Id);
-      if (oldItem && JSON.stringify(oldItem) === JSON.stringify(item)) {
-        if (old.items[index] !== oldItem) itemsSame = false;
-        return oldItem;
-      }
-      itemsSame = false;
-      return item;
-    });
-    if (itemsSame && JSON.stringify({ ...old, items: undefined }) === JSON.stringify({ ...rail, items: undefined })) {
-      if (previous[railIndex] !== old) same = false;
-      return old;
-    }
-    same = false;
-    return { ...rail, items: itemsSame ? old.items : items };
-  });
-  return same ? previous : merged;
-}
 
 export function HomeScreen({
   session,
@@ -56,36 +17,31 @@ export function HomeScreen({
   onOpen: (item: SiloItem) => void;
   onExplore?: (rail: HomeRail) => void;
 }) {
-  const key = cacheKey(session);
-  const [rails, setRails] = useState<HomeRail[]>(() => railsCache.get(key) ?? []);
+  const key = homeRailsKey(session);
+  const [rails, setRails] = useState<HomeRail[]>(() => cachedHomeRails(session) ?? []);
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(() => !railsCache.has(key));
+  const [loading, setLoading] = useState(() => !cachedHomeRails(session));
 
   useEffect(() => {
     let alive = true;
-    const cached = railsCache.get(key);
+    const cached = cachedHomeRails(session);
     if (cached) setRails(cached);
     setLoading(!cached);
     getHomeRails(session)
       .then((next) => {
-        const merged = keepUnchanged(railsCache.get(key) ?? [], next);
-        railsCache.set(key, merged);
+        const merged = storeHomeRails(session, next);
         if (alive) { setRails(merged); setError(""); }
       })
       // A failed refresh keeps the rows already on screen.
-      .catch((err) => { if (alive && !railsCache.has(key)) setError(err instanceof Error ? err.message : "Failed to load home"); })
+      .catch((err) => { if (alive && !cachedHomeRails(session)) setError(err instanceof Error ? err.message : "Failed to load home"); })
       .finally(() => alive && setLoading(false));
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
   const refreshRails = useCallback(() => getHomeRails(session)
-    .then(next => {
-      const merged = keepUnchanged(railsCache.get(key) ?? [], next);
-      railsCache.set(key, merged);
-      setRails(merged);
-    })
-    .catch(() => undefined), [session, key]);
+    .then(next => setRails(storeHomeRails(session, next)))
+    .catch(() => undefined), [session]);
 
   useWatchStateRefresh(refreshRails, 300, 20_000);
 

@@ -128,6 +128,14 @@ export function FeaturedRailsScreen({
     }
   }
 
+  // Rows gaining or losing their cards can change height above the focused row. Put the
+  // focused row back at the top of the band, without animating.
+  useLayoutEffect(() => {
+    const card = focusedCardRef.current?.element;
+    if (card?.isConnected && document.activeElement === card) keepFocusedRailInView(card, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live]);
+
   // Back from a details page: return to the card that was focused, without animating there.
   useLayoutEffect(() => {
     if (!restorePending.current || !restore) return;

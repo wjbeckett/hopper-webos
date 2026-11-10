@@ -17,6 +17,11 @@ const CW_WARM_COUNT = 10;
  */
 const WINDOW_POSTER = 8;
 const WINDOW_WIDE = 5;
+/**
+ * Track heights by row id, remembered across mounts. A row that renders no cards reserves
+ * this height, so rows below it stay where they were when the screen is rebuilt after Back.
+ */
+const knownHeights = new Map<string, number>();
 
 export const MediaRail = memo(function MediaRail({
   rail,
@@ -56,9 +61,11 @@ export const MediaRail = memo(function MediaRail({
   const trackRef = useRef<HTMLDivElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
   /** Height of the track with cards in it, kept so the row holds its place while it has none. */
-  const liveHeight = useRef(0);
+  const liveHeight = useRef(knownHeights.get(rail.id) ?? 0);
   useLayoutEffect(() => {
-    if (live && trackRef.current) liveHeight.current = trackRef.current.offsetHeight;
+    if (!live || !trackRef.current) return;
+    liveHeight.current = trackRef.current.offsetHeight;
+    knownHeights.set(rail.id, liveHeight.current);
   });
 
   // One stable handler per item, so a card re-renders only when its own data changes.
