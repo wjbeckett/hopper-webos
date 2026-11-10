@@ -17,8 +17,6 @@ function rgba(hex: string, opacity: number) {
   return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${Math.min(100, Math.max(0, opacity)) / 100})`;
 }
 
-const POSITION_BOTTOM: Record<SubtitleAppearance["position"], string> = { bottom: "5%", "lower-third": "20%", top: "78%" };
-
 export function subtitleCueCss(appearance: SubtitleAppearance) {
   const outline = appearance.textOutline ? `-1px -1px 0 ${appearance.textOutlineColor},1px -1px 0 ${appearance.textOutlineColor},-1px 1px 0 ${appearance.textOutlineColor},1px 1px 0 ${appearance.textOutlineColor}` : "";
   const shadow = appearance.backgroundStyle === "shadow" ? "0 2px 6px rgba(0,0,0,.95)" : appearance.backgroundStyle === "outline" ? "-2px 0 #000,2px 0 #000,0 -2px #000,0 2px #000" : "";

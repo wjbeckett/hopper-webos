@@ -59,8 +59,7 @@ html[data-text-scale="x-large"] { font-size: 20px; }
 html[data-text-weight="strong"] { --font-weight-ui: 520; --font-weight-medium-ui: 600; --font-weight-bold-ui: 800; }
 html[data-high-contrast="true"] { --muted-foreground: var(--foreground); }
 html[data-high-contrast="true"] .eyebrow,
-html[data-high-contrast="true"] .media-card-meta,
-html[data-high-contrast="true"] .timeline-meta { opacity: 1; }
+html[data-high-contrast="true"] .media-card-meta { opacity: 1; }
 
 * { box-sizing: border-box; }
 
@@ -185,24 +184,11 @@ input:focus {
   color: #ffc0c0;
 }
 
-.home-shell {
-  min-height: 100vh;
-  padding: 46px 60px 72px;
-  background: linear-gradient(#0c111b, #080b11 28%);
-}
-
-.topbar, .section-heading {
+.section-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-}
-
-.topbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  opacity: .84;
 }
 
 .section-heading {
@@ -211,12 +197,6 @@ input:focus {
 
 .section-heading h2 { margin: 0; font-size: 1.6rem; }
 .section-heading span { opacity: .55; }
-
-.media-grid {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 22px;
-}
 
 .media-card {
   position: relative;
@@ -289,7 +269,7 @@ input:focus {
 }
 
 .details-content h1 { font-size: 4rem; }
-.details-year { opacity: .65; margin: 8px 0 22px; }
+
 .details-overview { line-height: 1.55; font-size: 1.08rem; opacity: .88; }
 .details-actions { display: flex; gap: 14px; }
 
@@ -300,38 +280,12 @@ input:focus {
   font-family: Inter, sans-serif;
 }
 .details-content { padding-top: 112px; }
-.player-back { pointer-events: auto; }
-.play-choice-shell { position: fixed; inset: 0; display: grid; place-items: center; padding: 48px; background: radial-gradient(circle at 50% 35%, rgba(70,76,96,.34), transparent 40%), #080b11; }
-.play-choice-card { width: min(720px, 82vw); padding: 42px; border-radius: 26px; background: rgba(255,255,255,.075); box-shadow: 0 24px 80px rgba(0,0,0,.48); text-align: center; }
-.play-choice-card h1 { margin: 8px 0; font-size: 2.6rem; }
-.play-choice-card p { margin: 10px 0 28px; color: rgba(255,255,255,.72); font-size: 1.2rem; }
-.play-choice-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; }
 
 .player {
   width: 100%;
   height: 100%;
   object-fit: contain;
 }
-
-.player-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 34px 42px;
-  background: linear-gradient(rgba(0,0,0,.75), transparent);
-  pointer-events: none;
-}
-
-.player-overlay .tv-button { pointer-events: auto; }
-
-@media (max-width: 1400px) {
-  .media-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-}
-
 
 .pair-shell {
   min-height: 100vh;
@@ -444,7 +398,6 @@ input:focus {
   line-height: 1.4;
   opacity: .58;
 }
-
 
 /* 0.2 TV application shell */
 .app-shell {
@@ -1075,11 +1028,6 @@ input:focus {
   box-shadow: none;
 }
 
-.hero-copy {
-  padding: 30px 0 26px;
-}
-
-.hero-copy h1,
 .screen-title h1 {
   font-size: 3.2rem;
   margin: 6px 0;
@@ -1326,13 +1274,6 @@ input:focus {
   opacity: .8;
   max-width: 680px;
 }
-.selected-episode-info h2 { margin: 8px 0; font-size: 1.55rem; }
-.selected-episode-info h2 span { margin-right: 8px; color: rgba(255,255,255,.58); font-size: .82em; }
-.selected-episode-info { height: clamp(168px, 22vh, 230px); display: flex; flex-direction: column; align-items: flex-start; overflow: hidden; }
-.selected-episode-info h2 { flex: 0 0 auto; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.selected-episode-info p { flex: 1 1 auto; min-height: 0; margin: 6px 0 8px; display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-height: 1.45; }
-.selected-episode-info .tv-button { margin: 8px 12px 10px 0; }
-.selected-episode-info .episode-play-ready { box-shadow: 0 0 0 3px rgba(255,255,255,.42); }
 
 .series-body {
   position: relative;
@@ -1375,13 +1316,8 @@ input:focus {
 .episode-tile:focus .episode-tile-art { box-shadow: 0 0 26px rgba(255,255,255,.38), 0 10px 24px rgba(0,0,0,.46); }
 
 @media (max-height: 760px) {
-  .selected-episode-info { height: 150px; }
-  .selected-episode-info p { -webkit-line-clamp: 2; }
-  .series-copy { padding-top: 94px; padding-bottom: 28px; }
-}
 
-@media (min-height: 1000px) {
-  .selected-episode-info p { -webkit-line-clamp: 5; }
+  .series-copy { padding-top: 94px; padding-bottom: 28px; }
 }
 
 .player-chrome {
@@ -1816,7 +1752,7 @@ input:focus {
 .player-hud-readonly { display: flex; min-height: 68px; align-items: center; justify-content: space-between; gap: 20px; padding: 0 20px; border-radius: 20px; }
 .player-hud-readonly span { color: rgba(237,237,237,.60); font-size: 24.08px; }
 .player-hud-readonly strong { max-width: 64%; overflow: hidden; font-size: 24.08px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
-.player-hud-empty { margin: 20px; color: rgba(237,237,237,.60); font-size: 24.08px; }
+
 .player-hud-note { margin: 16px 20px; color: rgba(237,237,237,.60); font-size: 24.08px; line-height: 30.96px; }
 .option-row { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 16px; margin: 7px 0; padding: 15px 17px; border: 0; border-radius: 13px; color: white; background: rgba(255,255,255,.07); text-align: left; font: inherit; }
 .option-row small { color: rgba(255,255,255,.55); }
@@ -1851,27 +1787,6 @@ input:focus {
   max-width: 1100px;
 }
 
-.settings-panel {
-  margin-top: 24px;
-  padding: 26px;
-  border-radius: 20px;
-  background: rgba(255,255,255,.055);
-}
-
-.settings-panel h2 {
-  margin: 0 0 8px;
-}
-
-.settings-panel p {
-  opacity: .65;
-}
-
-.codec-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
 .codec {
   padding: 8px 12px;
   border-radius: 10px;
@@ -1880,13 +1795,7 @@ input:focus {
   font-weight: 750;
 }
 
-.codec.yes { opacity: 1; }
 .codec.no { opacity: .36; }
-
-.settings-actions {
-  display: flex;
-  gap: 12px;
-}
 
 .wide-login-card {
   width: min(760px, 86vw);
@@ -2952,7 +2861,6 @@ body {
 }
 
 .screen-title h1,
-.hero-copy h1,
 .search-intro h1 {
   margin: 6px 0 0;
   font-size: clamp(2.35rem, 3.1vw, 3.25rem);
@@ -3654,12 +3562,6 @@ body {
   font-size: clamp(3rem, 4.5vw, 5rem);
   letter-spacing: -.04em;
   line-height: 1.02;
-}
-
-.details-year {
-  margin: 10px 0 24px;
-  color: var(--muted-foreground);
-  font-size: 1rem;
 }
 
 .details-overview {
@@ -4708,7 +4610,6 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 .home-sections-button:focus,
 .detail-facts-table:focus,
 .person-bio:focus,
-.player-hud .option-row:focus,
 .option-row:focus,
 .player-next-up-toggle:focus {
   box-shadow: 0 0 0 2px rgba(255,255,255,.88), 0 0 24px rgba(255,255,255,.28) !important;
@@ -4768,7 +4669,6 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 .explore-all-card:focus .explore-all-icon { background: rgba(255,255,255,.24); }
 .explore-all-icon svg { width: 24px; height: 24px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .explore-all-label { color: #fff; font-size: .95rem; font-weight: 600; }
-
 
 /* Profile management (Android TvProfileSelectionScreen manage mode + TvProfileForm). */
 .profile-selection-card { position: relative; }
@@ -4933,7 +4833,6 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 .profile-form-libraries { display: grid; gap: 4px; }
 .profile-form-retry { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .profile-form-submit { align-self: flex-start; }
-
 
 /* Chrome 87 (webOS 22) lacks CSS aspect-ratio (added in 88): without it every
    artwork box collapses to 0 height. Give the boxes their height with the

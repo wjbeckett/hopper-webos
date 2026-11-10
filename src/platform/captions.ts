@@ -8,10 +8,6 @@ const COLORS: Record<string, string> = { white: "#ffffff", black: "#000000", red
 const OPACITY: Record<string, number> = { solid: 100, translucent: 60, transparent: 0, flash: 100 };
 const SIZES: Record<string, SubtitleAppearance["fontSize"]> = { small: "small", standard: "large", large: "xlarge" };
 
-export function deviceCaptionsAvailable() {
-  return Boolean((window as unknown as { webOS?: WebOSBridge }).webOS?.service);
-}
-
 function readDeviceCaptions(): Promise<Record<string, string> | null> {
   const bridge = (window as unknown as { webOS?: WebOSBridge }).webOS;
   if (!bridge?.service) return Promise.resolve(null);

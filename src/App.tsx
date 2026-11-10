@@ -56,7 +56,6 @@ type DetailRoute =
   | { name: "details"; item: SiloItem; castIndex?: number }
   | { name: "series"; item: SiloItem; selectedEpisode?: SiloItem; castIndex?: number }
   | { name: "person"; personId?: string; personName: string; back: DetailRoute }
-  | { name: "play-choice"; item: SiloItem; returnTo?: { series: SiloItem; selectedEpisode: SiloItem } }
   | { name: "player"; item: SiloItem; startPosition?: number; autoAdvanceCount?: number; choices?: PlaybackChoices; returnTo?: { series: SiloItem; selectedEpisode: SiloItem }; shuffleId?: string; shuffleNext?: SiloItem; shuffleScope?: string };
 
 type BrowseDetail =
@@ -69,7 +68,7 @@ const NAVIGATION_KEY = "silo-webos-navigation-v1";
 type SavedNavigation = { serverUrl: string; profileId: string; section: AppSection; route: DetailRoute };
 
 function safeBrowsingRoute(route: DetailRoute): DetailRoute {
-  if (route.name === "player" || route.name === "play-choice") {
+  if (route.name === "player") {
     return route.returnTo
       ? { name: "series", item: route.returnTo.series, selectedEpisode: route.returnTo.selectedEpisode }
       : { name: "details", item: route.item };
@@ -380,9 +379,6 @@ export default function App() {
       if (route.name === "person") {
         setRoute(route.back);
         event.preventDefault();
-      } else if (route.name === "play-choice") {
-        setRoute(route.returnTo ? { name: "series", item: route.returnTo.series, selectedEpisode: route.returnTo.selectedEpisode } : { name: "details", item: route.item });
-        event.preventDefault();
       } else if (route.name !== "main") {
         setRoute({ name: "main" });
         event.preventDefault();
@@ -496,12 +492,6 @@ export default function App() {
     if (!nextSeason?.IndexNumber) return null;
     const nextSeasonEpisodes = await getEpisodes(session, current.SeriesId, nextSeason.IndexNumber);
     return firstEpisodeOfSeason(nextSeasonEpisodes);
-  }
-
-  function requestPlayback(item: SiloItem, returnTo?: { series: SiloItem; selectedEpisode: SiloItem }) {
-    const position = (item.UserData?.PlaybackPositionTicks ?? 0) / 10_000_000;
-    if (position >= 30) setRoute({ name: "play-choice", item, returnTo });
-    else setRoute({ name: "player", item, startPosition: 0, returnTo });
   }
 
   function playExtra(trailer: { contentId?: string; title: string }) {
@@ -662,24 +652,6 @@ export default function App() {
     );
   }
 
-  if (route.name === "play-choice") {
-    const resumeAt = (route.item.UserData?.PlaybackPositionTicks ?? 0) / 10_000_000;
-    const minutes = Math.floor(resumeAt / 60);
-    const seconds = Math.floor(resumeAt % 60);
-    const destination = route.returnTo;
-    return <main className="play-choice-shell">
-      <section className="play-choice-card">
-        <div className="eyebrow">Continue watching</div>
-        <h1>{route.item.Name}</h1>
-        <p>Resume from {minutes}:{String(seconds).padStart(2, "0")}</p>
-        <div className="play-choice-actions">
-          <button autoFocus data-tv-focusable="true" className="tv-button" onClick={() => setRoute({ name: "player", item: route.item, startPosition: resumeAt, returnTo: destination })}>▶ Resume</button>
-          <button data-tv-focusable="true" className="tv-button secondary" onClick={() => setRoute({ name: "player", item: route.item, startPosition: 0, returnTo: destination })}>↻ Play From Start</button>
-        </div>
-      </section>
-    </main>;
-  }
-
   if (route.name === "person") {
     return (
       <PersonScreen
@@ -687,7 +659,6 @@ export default function App() {
         personId={route.personId}
         name={route.personName}
         onOpen={openItem}
-        onBack={() => setRoute(route.back)}
       />
     );
   }
@@ -705,7 +676,6 @@ export default function App() {
         onPlayEpisode={(episode, startPosition, choices) => setRoute({ name: "player", item: episode, startPosition, choices, returnTo: { series: route.item, selectedEpisode: episode } })}
         onShuffle={startShuffle}
         onOpen={openItem}
-        onBack={() => setRoute({ name: "main" })}
       />
     );
   }
@@ -720,7 +690,6 @@ export default function App() {
         onPlayExtra={playExtra}
         onPlay={(startPosition, choices) => setRoute({ name: "player", item: route.item, startPosition, choices })}
         onOpen={openItem}
-        onBack={() => setRoute({ name: "main" })}
       />
     );
   }
@@ -862,7 +831,6 @@ export default function App() {
         onProfile={() => setSection("settings")}
         onFavorites={() => { setSection("favorites"); setRoute({ name: "main" }); }}
         onWatchlist={() => { setSection("watchlist"); setRoute({ name: "main" }); }}
-        onLibraries={() => { setSection("library"); setRoute({ name: "main" }); }}
         onHistory={() => { setSection("history"); setRoute({ name: "main" }); }}
         onProfiles={() => { setSection("profiles"); setRoute({ name: "main" }); }}
         onSignOut={signOut}

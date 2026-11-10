@@ -75,3 +75,4 @@ The maintainer's step-by-step, including what is automatic and what is manual, i
 - **TV helper scripts:** ad-hoc CDP scripts used for screenshots and server switching lived in `/tmp/cdp/` on the last workstation. They are not in the repo and may be gone. Anything that touches the TV's `localStorage` must back it up first and keep `silo-webos-device-id`.
 - **Tool runner:** shell heredocs have hung the agent tool runner. Use file edits or `sed`/`perl` instead.
 - **Personal data:** never commit personal server URLs, tokens or `localStorage` backups.
+- **Unused code fails the build** (since the 2026-11-10 cleanup, branch `chore/pre-public-cleanup`): `noUnusedLocals` and `noUnusedParameters` are on. `getBrowseCatalogPage` and `getBrowseFilterOptions` in `src/api/silo.ts` are unused on purpose (parked for Global Browse).

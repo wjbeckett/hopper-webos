@@ -64,10 +64,6 @@ export function thumbhashToDataURL(hash: string | null | undefined): string | nu
   return decoded;
 }
 
-export function thumbhashUsable(hash: string | null | undefined): boolean {
-  return thumbhashToDataURL(hash) !== null;
-}
-
 function decodeThumbhash(hash: string): string | null {
   if (typeof document === "undefined") return null;
   const bytes = decodeBase64(hash);
@@ -277,6 +273,3 @@ export function onNavigationSettled(listener: () => void): () => void {
 
 /** Milliseconds of wait that still present instantly (Android: 100ms). */
 export const INSTANT_REVEAL_MS = 100;
-/** Fade the full image in over this long once presented (Android: 300ms). */
-export const REVEAL_CROSSFADE_MS = 300;
-

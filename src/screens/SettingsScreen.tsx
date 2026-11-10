@@ -22,6 +22,7 @@ import { clearClientLogs, exportClientLogs, getClientLogCount, getClientLogEntri
 import { LoadingState } from "../components/LoadingState";
 import { TvButton } from "../components/TvButton";
 import type { Session } from "../types";
+import { LOCAL_SETTINGS_STORAGE } from "../core/playerSettings";
 
 type Category = "general" | "playback" | "subtitles" | "diagnostics" | "server";
 type Choice = { label: string; value: unknown; detail?: string };
@@ -53,8 +54,6 @@ const languageSetByKey: Record<string, string> = {
   "catalog.metadata_language": "catalog_metadata_languages"
 };
 
-const LOCAL_SETTINGS_STORAGE = "silo-webos-local-settings";
-
 function readLocalSettings(): Record<string, unknown> {
   try {
     const parsed = JSON.parse(localStorage.getItem(LOCAL_SETTINGS_STORAGE) ?? "{}");
@@ -82,7 +81,6 @@ const BITRATE_CHOICES_KBPS = [200000, 100000, 60000, 40000, 20000, 15000, 10000,
 const SEEK_CHOICES = [5, 10, 15, 30, 45, 60, 90];
 const RESUME_REWIND_OPTIONS = [0, 3, 5, 7, 10, 15, 20, 30];
 const PASS_OUT_OPTIONS = [0, 2, 3, 4, 5];
-const NEXT_UP_OPTIONS = [0, 10, 30, 60, 120];
 const DEVICE_DEFAULTS: Record<string, unknown> = {
   "player.dolby_vision_enabled": true,
   "player.dv_profile7_hdr10_fallback": false,
@@ -362,10 +360,8 @@ export function SettingsScreen({
   const [launchBehavior, setLaunchBehavior] = useState<ProfileLaunchBehavior>(readProfileLaunchBehavior);
   const [launchPicker, setLaunchPicker] = useState(false);
   const [homeEditor, setHomeEditor] = useState(false);
-  const [profileSubtitleAppearance, setProfileSubtitleAppearance] = useState<SubtitleAppearance>(DEFAULT_SUBTITLE_APPEARANCE);
   const railRef = useRef<HTMLDivElement | null>(null);
   const activeServer = serverRegistry.active();
-  const returnFocusRef = useRef<string | null>(null);
 
   const allKeys = useMemo(() => [...Object.values(keysByCategory).flat().flatMap(group => group.keys), "ui.card_presentation", "ui.title_art", "ui.theme_music_enabled", "ui.theme_music_loop", "playback.subtitle_appearance", "playback.preferred_quality", "playback.max_bitrate_kbps", "playback.audio_language", "playback.buffering_quality_mode", "playback.next_up_prompt_seconds", "playback.intro_skip_mode", "playback.auto_play_next", "playback.auto_skip_credits", "playback.auto_skip_recap", "player.dolby_vision_enabled", "player.dv_profile7_hdr10_fallback", "player.match_frame_rate", "player.resume_rewind_seconds", "player.passout_threshold", "player.video_skip_back_seconds", "player.video_skip_forward_seconds", "player.audiobook_skip_back_seconds", "player.audiobook_skip_forward_seconds"], []);
 
@@ -402,7 +398,6 @@ export function SettingsScreen({
         if (parsedAppearance && typeof parsedAppearance === "object") {
           const normalized = { ...DEFAULT_SUBTITLE_APPEARANCE, ...(parsedAppearance as Partial<SubtitleAppearance>) };
           setSubtitleAppearance(normalized);
-          setProfileSubtitleAppearance(normalized);
         }
         const cardValue = effective.get("ui.card_presentation")?.value;
         if (cardValue && typeof cardValue === "object" && "poster_size" in cardValue) {
@@ -690,7 +685,6 @@ export function SettingsScreen({
     const limitShown = limit != null && (!buffering || bufferingMode !== "never");
     const dolbyOn = Boolean(settingValue("player.dolby_vision_enabled"));
     const budgetHidden = (!buffering || bufferingMode === "never") && limit != null;
-    const resolutionChoices = RESOLUTION_OPTIONS.map(option => ({ label: option.label, value: option.value, detail: resolutionDescription(option.value) }));
     return (
       <>
         <section className="settings-group">
@@ -971,7 +965,6 @@ export function SettingsScreen({
             const value = effective.get("playback.subtitle_appearance")?.value;
             const restored = value && typeof value === "object" ? { ...DEFAULT_SUBTITLE_APPEARANCE, ...(value as Partial<SubtitleAppearance>) } : DEFAULT_SUBTITLE_APPEARANCE;
             setSubtitleAppearance(restored);
-            setProfileSubtitleAppearance(restored);
           }
         } catch (reason) { setSubtitleDeviceOnly(!next); setError(reason instanceof Error ? reason.message : "Could not change subtitle scope."); }
       }}><span>Only on This Device</span><strong>{subtitleDeviceOnly ? "On" : "Off"}</strong></button>
