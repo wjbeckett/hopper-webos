@@ -17,7 +17,7 @@ Last updated 2026-11-10 (PR automation added; flow flattened to branch → `main
   - `ResumeProgress` time-left ring.
   - Rebrand to Hopper.
   - Aurora hopper icon, splash, store icon, banner and the `brand/render.sh` pipeline.
-  - Animated startup splash that lines up with `public/splash.png`.
+  - Animated startup splash. Reworked on 2026-11-10 (branch `feat/splash-animation`): the native splash is the backdrop only, and the tiles drop into the hopper one at a time.
   - Four store screenshots and a draft listing.
 - **Verified on a physical TV:** BedroomTV, webOS on Chrome 87. The rebranded app installs and launches. The splash animation lands at 754,180 412×521, matching the native splash.
 - **Uncommitted on purpose:** `.claude/settings.json` deletion is unrelated. Do not stage it.
@@ -50,7 +50,7 @@ The maintainer's step-by-step, including what is automatic and what is manual, i
 
 ### Small, ready to pick up
 1. Define `--accent: #2DD4BF` (brand teal) in `src/styles.css` `:root`. Today the ring falls back to `#2f6bff` (`src/styles.css` around line 3974). Check every other `var(--accent, …)` use before changing it.
-2. Cold-relaunch on the paired TV and confirm the real startup splash and the top-nav `HopperLockup` in the live flow. The splash only shows when a server is saved; with no server the app opens on pairing.
+2. Cold-relaunch on the paired TV and confirm the reworked startup splash (backdrop-only native splash, then the animation from an empty stage, smooth on Chrome 87) and the top-nav `HopperLockup` in the live flow. The splash only shows when a server is saved; with no server the app opens on pairing.
 3. Optional: player screenshot via the TV's own screen capture, added to `brand/store/screenshots/05-player.png` and the listing.
 
 ### Larger work (from the roadmap and parity TODO)
