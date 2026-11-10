@@ -24,6 +24,7 @@ render() {
 # Master renders.
 render "$BRAND/hopper-icon.svg" 1024 1024 "$OUT/hopper-icon-1024.png"
 render "$BRAND/hopper-splash.svg" 1920 1080 "$OUT/hopper-splash-1920x1080.png"
+render "$BRAND/hopper-splash-backdrop.svg" 1920 1080 "$OUT/app/splash.png"   # appinfo splashBackground: backdrop only
 render "$BRAND/hopper-store-banner.svg" 1920 1080 "$OUT/store/hopper-store-banner-1920x1080.png"
 
 # Downscales from the 1024 master (sharper than rasterising tiny sizes directly).
@@ -31,7 +32,6 @@ scale() { sips -z "$2" "$2" "$OUT/hopper-icon-1024.png" --out "$3" >/dev/null; }
 scale x 400 "$OUT/store/hopper-icon-400.png"    # LG Seller Lounge store icon
 scale x 130 "$OUT/app/largeIcon.png"            # appinfo largeIcon
 scale x 80  "$OUT/app/icon.png"                 # appinfo icon
-cp "$OUT/hopper-splash-1920x1080.png" "$OUT/app/splash.png"   # appinfo splashBackground
 
 # Install the app assets into the package.
 cp "$OUT/app/icon.png" "$OUT/app/largeIcon.png" "$OUT/app/splash.png" "$ROOT/public/"

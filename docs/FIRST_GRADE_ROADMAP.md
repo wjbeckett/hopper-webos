@@ -120,3 +120,9 @@ Do not expose ebook reading or phone-style downloads management on TV unless pro
   - **Moved:** build, setup, TV deploy and PR conventions to the new `CONTRIBUTING.md`. Brand details to `brand/README.md`.
   - **TODO audit:** ticked the episode long-press menu, which shipped in the 2026-10-29 rebuild (SeriesScreen hold-OK menu: Play, watched, favorite, matching `TvDetailEpisodeRail`). Ticked LAN discovery through phone pairing. Narrowed the audiobook transport item (speed, sleep timer, chapters and skip intervals exist; bookmarks are missing). Narrowed translation to the detail "Translate description". Release blocker 6 now lists what is implemented.
   - **Verification:** source greps against `src/` and the Android reference. Docs only, so no runtime check.
+
+- Startup splash rework (2026-11-10):
+  - **Problem:** LG's native launch splash (`public/splash.png`) showed the finished mark and wordmark, and then the in-app animation rebuilt them from nothing, so a cold launch showed the end before the beginning.
+  - **Native splash:** `public/splash.png` is now the backdrop alone, rendered from the new `brand/hopper-splash-backdrop.svg` by `brand/render.sh`. `brand/hopper-splash.svg` stays as the full artwork and the reference for the animation's resting frame.
+  - **Animation:** the hopper settles, the three tiles fall in one at a time (left, right, centre), tiles and hopper dip and spring back at each landing, the play button pops on the last landing, then the spout glow spreads while the wordmark rises. About 2.2 s plus a short hold (`ANIMATION_MS` 2600). `HopperMark` gained a `hopper-react` group for the landing dip; the nav lockup is unaffected.
+  - **Verification:** `npm run build`, plus frames captured in headless desktop Chrome from the built CSS at 0 to 2600 ms. Not yet watched on a physical TV: the native-to-app hand-off and the animation's smoothness on Chrome 87 still need a cold launch on the TV.
