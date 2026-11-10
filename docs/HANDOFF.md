@@ -19,6 +19,7 @@ Last updated 2026-11-10 (PR automation added; flow flattened to branch → `main
   - Aurora hopper icon, splash, store icon, banner and the `brand/render.sh` pipeline.
   - Animated startup splash. Reworked on 2026-11-10 (branch `feat/splash-animation`): the native splash is the backdrop only, and the tiles drop into the hopper one at a time.
   - Four store screenshots and a draft listing.
+  - Licensed `AGPL-3.0-or-later` (branch `chore/agpl-license`, PR #11). Open: whether to reserve the Hopper name and `brand/` artwork with a `TRADEMARK.md`, as Silo does.
 - **Verified on a physical TV:** BedroomTV, webOS on Chrome 87. The rebranded app installs and launches. The splash animation lands at 754,180 412×521, matching the native splash.
 - **Uncommitted on purpose:** `.claude/settings.json` deletion is unrelated. Do not stage it.
 

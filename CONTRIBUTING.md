@@ -82,7 +82,7 @@ WEBOS_DEVICE=livingroom npm run webos:inspect  # open LG Web Inspector for the a
 
 ## Pull requests
 
-All changes reach `main` through a pull request from their own branch.
+All changes reach `main` through a pull request from their own branch. By opening one, you agree that your contribution is licensed under `AGPL-3.0-or-later`, like the rest of the project (see [`LICENSE`](LICENSE)).
 
 1. **Fork the repository** and create a branch from `main`: `git checkout -b fix/short-description origin/main`. (Maintainers branch in the main repository.)
 2. **Keep changes focused.** One feature or fix per pull request.
