@@ -51,3 +51,11 @@ This is a 10-foot UI. Every interactive element must be reachable with Up/Down/L
 
 ## Branding
 The Silo name/logo are trademarked separately from the AGPL code. Development can use a working name, but public store publishing needs the appropriate permission.
+
+The working name is **Hopper** (`com.hopperapp.hopper`). Silo logo assets have been removed from the app. Brand sources and the render pipeline live in `brand/` (see `brand/README.md`); keep `src/components/HopperMark.tsx` geometry in sync with `brand/hopper-icon.svg`. Store submission status is in `brand/store/LISTING.md`. Start any new session with `docs/HANDOFF.md`.
+
+## webOS runtime gotchas (verified on Chrome 87 TVs)
+- No CSS `:has()`.
+- CSS transforms on SVG elements need `transform-box: fill-box`.
+- Video renders on a hardware layer, so inspector screenshots show a blank player.
+- Render brand SVGs with `brand/render.sh` (headless Chrome), not Quick Look.

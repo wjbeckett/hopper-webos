@@ -1,6 +1,6 @@
 # Android TV parity TODO
 
-Status as of 2026-11-05. Compare against `silo-android/androidTvApp/` before implementing each item, then update this list and `FIRST_GRADE_ROADMAP.md` with source/build/browser/physical-TV verification status. The Android TV client is the behavior and design reference; do not label work complete from compilation alone.
+Status as of 2026-11-10. No parity items changed since 2026-11-06. Recent work covered performance, the Hopper rebrand and store assets, which are logged in `FIRST_GRADE_ROADMAP.md`. Compare against `silo-android/androidTvApp/` before implementing each item, then update this list and `FIRST_GRADE_ROADMAP.md` with source/build/browser/physical-TV verification status. The Android TV client is the behavior and design reference; do not label work complete from compilation alone.
 
 ## Completed this pass
 

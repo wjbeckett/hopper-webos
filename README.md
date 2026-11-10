@@ -1,9 +1,29 @@
+<p align="center">
+  <img src="brand/out/store/hopper-store-banner-1920x1080.png" alt="Hopper for LG webOS" width="100%">
+</p>
+
+<p align="center">
+  <img src="brand/out/store/hopper-icon-400.png" alt="Hopper icon" width="96"><br>
+  <strong>Hopper</strong> · a remote-first Silo client for LG TVs<br>
+  <code>com.hopperapp.hopper</code> · v0.3.0 · React 19 + TypeScript + Vite
+</p>
+
 # Hopper for LG webOS
 
 Hopper is an independent, community-built LG webOS TV client for the [Silo](https://silo.tv/) self-hosted media server. It is not affiliated with or endorsed by the Silo project; "Silo" and the Silo logo are trademarks of their owners and are used here only to describe compatibility. It is designed as a 10-foot interface: every primary action is usable with a TV remote, while mouse and keyboard support make browser development convenient.
 
 > [!IMPORTANT]
-> This project is under active development and is not store-ready. Native Silo authentication, catalog, and playback contracts still need validation against a live server, and playback needs testing across multiple LG webOS generations.
+> This project is under active development. The store assets and a draft LG Content Store listing are ready (see [Store submission](#store-submission)), but publishing is blocked on trademark and permission checks. Playback still needs testing across several LG webOS generations, and many workflows have only been build-checked.
+
+## Screenshots
+
+| Home | Details |
+| --- | --- |
+| ![Home](brand/store/screenshots/01-home.png) | ![Details](brand/store/screenshots/02-details.png) |
+| **Movies** | **Series** |
+| ![Movies](brand/store/screenshots/03-movies.png) | ![Series](brand/store/screenshots/04-series.png) |
+
+These were captured on an LG TV against the public Silo demo server (`demo.siloserver.org`), using public-domain and Blender open-movie content.
 
 ## Highlights
 
@@ -28,15 +48,29 @@ Hopper is an independent, community-built LG webOS TV client for the [Silo](http
 - Audio track, subtitle track, file version, and quality selection
 - Profile appearance themes and text preferences
 - Android TV-style Settings for General, Playback, Subtitles, local Diagnostics log viewing/ZIP export, and Server; diagnostic logs remain on-device and are never uploaded to Silo
+- Time-left ring on Continue Watching, the Home hero and the Details metadata row
+- Startup splash animated over a pre-rendered Home, matching the native LG launch splash
 - Build, package, install, launch, and inspect helpers for LG TVs
 
 ## Project status
 
-The current development version is `0.2.0-dev`.
+The current version is `0.3.0`: app ID `com.hopperapp.hopper`, pairing service `com.hopperapp.hopper.service`.
 
-The main workflows are implemented and compile successfully, but the application has not yet reached a stable release. In particular, the native Silo API payloads and playback routes must be exercised against a live Silo installation, and codec/container support must be verified on physical LG hardware.
+| Area | State |
+| --- | --- |
+| Core browsing (Home, libraries, Browse, Details, Series, Search) | Implemented; Home, Browse, Details and Continue Watching tuned and checked on a physical TV (webOS, Chrome 87) |
+| Playback (protocol v3, HLS, tracks, skip markers, Up Next) | Implemented; daily use on one TV, codec matrix across webOS generations not qualified |
+| Profiles (pick, PIN, create, edit, delete) | Implemented; create/edit/delete build-checked only |
+| Audiobooks | Detail hero done; dedicated multi-part audio player outstanding |
+| Hopper brand (icon, splash, store art) | Done and verified on TV |
+| Store listing and screenshots | Drafted; submission blocked on the [pre-submit checklist](brand/store/LISTING.md#before-you-submit) |
+| Automated tests | None yet |
 
-See [the first-grade client roadmap](docs/FIRST_GRADE_ROADMAP.md) for the release blockers and longer-term parity targets.
+Detailed status:
+
+- [`docs/FIRST_GRADE_ROADMAP.md`](docs/FIRST_GRADE_ROADMAP.md): verified features, release blockers and the change log.
+- [`docs/ANDROID_PARITY_TODO.md`](docs/ANDROID_PARITY_TODO.md): prioritised Android TV parity gaps.
+- [`docs/HANDOFF.md`](docs/HANDOFF.md): current state and next steps for whoever picks the work up next.
 
 ## Tech stack
 
@@ -215,7 +249,8 @@ Only Silo's native API is used. Jellyfin-compatible endpoints, headers, models, 
 ## Project structure
 
 ```text
-public/                  webOS metadata and application icons
+brand/                   Hopper SVG sources, render.sh, rendered PNGs, store listing and screenshots
+public/                  webOS metadata (appinfo.json), icons, splash, fonts
 scripts/                 setup, packaging, deployment, and inspection helpers
 src/api/                 native Silo API and playback contracts
 src/components/          reusable 10-foot UI components
@@ -228,16 +263,46 @@ docs/                    roadmap and project documentation
 
 Architecture boundaries are deliberate: API access belongs in `src/api`, LG-specific behavior in `src/platform`, and remote focus logic in `src/navigation`. UI components should not contain raw API URLs.
 
+## Branding
+
+The Hopper mark shows poster tiles dropping into an aurora-gradient hopper (teal `#5EEAD4` to violet `#818CF8` to rose `#F472B6`). The hopper carries a negative-space play button, on a navy `#0E1030` background.
+
+| What | Where |
+| --- | --- |
+| SVG sources | `brand/hopper-icon.svg`, `brand/hopper-splash.svg`, `brand/hopper-store-banner.svg` |
+| Render pipeline | `brand/render.sh` (headless Google Chrome + macOS `sips`), which also copies `icon.png`, `largeIcon.png` and `splash.png` into `public/` |
+| In-app mark | `src/components/HopperMark.tsx` (same geometry, viewBox `180 110 664 840`), plus `HopperLockup` in the top nav |
+| Startup animation | `src/components/StartupSplash.tsx`; its resting frame lines up with `public/splash.png` |
+
+If you change the artwork, edit the SVG and `HopperMark.tsx` together, then run `brand/render.sh`. See [`brand/README.md`](brand/README.md).
+
+## Store submission
+
+Everything for the LG Content Store is in `brand/`:
+
+- Store icon (400×400) and hero banner (1920×1080) in `brand/out/store/`
+- Four 1920×1080 screenshots in `brand/store/screenshots/`
+- A draft listing, the reviewer test account and a pre-submit checklist in [`brand/store/LISTING.md`](brand/store/LISTING.md)
+
+Publishing is blocked until these are done:
+
+1. The demo server operator agrees that LG reviewers can use `demo`/`demo`, and keeps the server up during review.
+2. Permission to name Silo in the listing.
+3. A check of the asset specs against the current LG Seller Lounge guide.
+4. Trademark and store-name clearance for "Hopper".
+5. A privacy policy URL.
+
 ## Current limitations
 
-- The native Silo contracts have not yet been validated end-to-end against the target live server.
+- The native Silo contracts have only been exercised against two servers, not validated across server versions.
 - Playback behavior has not yet been qualified across old and current LG webOS models.
-- Token refresh and single-flight retry are not implemented.
-- Household profile selection and PIN entry are not implemented.
-- Network-loss recovery and expired-session UX need work.
-- Subtitle styling and quick-subtitle pickers are incomplete; trickplay previews, intro/credits skip pills, and the rebuilt player chrome need device qualification.
+- Token refresh is implemented (`POST /api/v2/auth/refresh`, single-flight per session). Expired-session and network-loss recovery UX still need work.
+- The audiobook player still shares the video player: no multi-part timeline, chapters, bookmarks, sleep timer or speed control.
+- Episode long-press actions, detail translation controls and invite-code sign-up are not implemented.
+- Audio delay is 0 to 1000 ms only. WebAudio cannot advance audio.
 - Automated tests for navigation, auth, parsing, and player state are not yet present.
-- Store assets, accessibility review, privacy copy, trademark permission, and LG certification remain outstanding.
+- Accessibility review and LG certification remain outstanding.
+- `--accent` is not defined, so the progress ring falls back to `#2f6bff` instead of brand teal.
 
 ## Contributing
 
