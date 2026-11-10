@@ -15,7 +15,7 @@
       are animated by the compositor and keep moving while the main thread works.
 
       The animation starts when #boot-splash gets the "play" class (script below), once the
-      page has loaded and painted. src/core/bootSplash.ts removes the splash when it is done.
+      page is visible and has painted. src/core/bootSplash.ts removes the splash when it is done.
 
       Geometry: the mark is brand/hopper-icon.svg (viewBox 180 110 664 840) drawn at 412x521,
       so 1 SVG unit = 0.62px. Keep the shapes in step with src/components/HopperMark.tsx.
@@ -146,11 +146,17 @@
       </div>
     </div>
     <script>
-      // Start the splash animation only when the page is loaded, visible and has painted,
-      // so its clock starts with the first frame the viewer can see. ES5 on purpose.
+      // Start the splash animation only when the page is on screen and has painted, so its
+      // clock starts with a frame the viewer can see. ES5 on purpose.
       (function () {
         var splash = document.getElementById("boot-splash");
         if (!splash) return;
+        // Launch timeline in ms since navigation, for checking a launch on a TV.
+        var log = window.__bootSplashLog = [];
+        function note(name) { log.push([name, Math.round(performance.now())]); }
+        note(document.hidden ? "parsed-hidden" : "parsed-visible");
+        document.addEventListener("visibilitychange", function () { note(document.hidden ? "hidden" : "visible"); });
+        window.addEventListener("load", function () { note("load"); });
         function play() {
           if (window.__bootSplashStart != null) return;
           requestAnimationFrame(function () {
@@ -158,22 +164,27 @@
               if (window.__bootSplashStart != null) return;
               splash.className += " play";
               window.__bootSplashStart = performance.now();
+              note("play");
               try { window.dispatchEvent(new Event("boot-splash-start")); } catch (error) { /* older engines */ }
             });
           });
         }
+        // webOS loads the page hidden behind its own launch splash and marks it visible when
+        // it shows the app (about 0.2 to 0.4 s in on webOS 22). Wait for that, plus a short
+        // margin for the system's hand-over, then start. This does not wait for the load
+        // event: the layers are animated by the compositor, so the animation can run while
+        // the bundle loads.
+        var VISIBLE_MARGIN_MS = 250;
+        var armed = false;
         function whenVisible() {
-          if (!document.hidden) { play(); return; }
-          document.addEventListener("visibilitychange", function onShow() {
-            if (document.hidden) return;
-            document.removeEventListener("visibilitychange", onShow);
-            play();
-          });
+          if (armed || document.hidden) return;
+          armed = true;
+          setTimeout(play, VISIBLE_MARGIN_MS);
         }
-        // src/core/bootSplash.ts calls this if the load event is slow to arrive.
-        window.__bootSplashPlay = whenVisible;
-        if (document.readyState === "complete") whenVisible();
-        else window.addEventListener("load", whenVisible);
+        document.addEventListener("visibilitychange", whenVisible);
+        whenVisible();
+        // src/core/bootSplash.ts calls this if the page is never reported visible.
+        window.__bootSplashPlay = play;
       })();
     </script>
     <div id="root"></div>

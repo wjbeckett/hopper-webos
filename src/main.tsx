@@ -2,7 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./styles.css";
-import { releaseBootSplashWhenDone } from "./core/bootSplash";
+import { afterBootSplashStarts, releaseBootSplashWhenDone } from "./core/bootSplash";
 import { serverRegistry } from "./core/serverRegistry";
 
 // webOS TVs run an old Chromium (87 on webOS 22) on a weak GPU. This class
@@ -11,8 +11,10 @@ if (/Web0S|webOS/i.test(navigator.userAgent)) document.documentElement.classList
 
 releaseBootSplashWhenDone(Boolean(serverRegistry.active()?.session));
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+afterBootSplashStarts(() => {
+  ReactDOM.createRoot(document.getElementById("root")!).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  );
+});
