@@ -23,7 +23,7 @@ If you change the artwork, update the SVG and `HopperMark.tsx` together.
 
 | File | Size | Use |
 |---|---|---|
-| `hopper-icon.svg` | 1024×1024 | Master icon (also copied to `public/hopper-mark.svg`) |
+| `hopper-icon.svg` | 1024×1024 | Master icon |
 | `hopper-splash.svg` | 1920×1080 | Launch splash / app background |
 | `hopper-store-banner.svg` | 1920×1080 | Store hero / promo image |
 

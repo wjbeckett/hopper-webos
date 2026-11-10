@@ -8,14 +8,6 @@ export function isTvHiddenMediaType(type?: string): boolean {
   return ebookLikeTypes.has((type ?? "").trim().toLowerCase());
 }
 
-export function isAudiobookMediaType(type?: string): boolean {
-  return ["audiobook", "audiobooks"].includes((type ?? "").trim().toLowerCase());
-}
-
-export function hasTvHiddenMediaType(type?: string): boolean {
-  return isTvHiddenMediaType(type);
-}
-
 export function filterTvVisibleTypes<T extends { Type?: string }>(items: T[]): T[] {
   return items.filter((item) => !isTvHiddenMediaType(item.Type));
 }

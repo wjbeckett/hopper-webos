@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
   INSTANT_REVEAL_MS,
-  REVEAL_CROSSFADE_MS,
   isNavigating,
   isScrolling,
   isTvDevice,

@@ -175,7 +175,6 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const hlsRef = useRef<Hls | null>(null);
   const sidecarTrack = useRef<TextTrack | null>(null);
   const closedSessions = useRef(new Set<string>());
-  const endedHandled = useRef(false);
   const stateRef = useRef<PlaybackState | undefined>(undefined);
   const qualityRef = useRef("auto");
   const [detail, setDetail] = useState<WatchDetail>();
@@ -1183,11 +1182,6 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     focusHudEntry(target);
   }
 
-  function selectHudTab(tab: typeof hudTab) {
-    setHudTab(tab);
-    focusHudEntry(tab);
-  }
-
   const hasSidecarSubtitle = Boolean(plan && sidecarSubtitleArtifact(plan));
   const timingActions = timingActionsFor(syncUi, plan?.subtitle.inventory.find(track => track.track_id === plan.selected_tracks.subtitle?.id)?.sync_key);
 
@@ -1663,7 +1657,6 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const subtitleValue = activeSubtitle ? subtitleName(activeSubtitle) : "Off";
   const previewCard = tileBackground(320, 180);
   const holdCard = cleanSeek ? tileBackground(480, 270) : null;
-  const holdTile = cleanSeek && trickplay ? trickplayTileAt(trickplay, cleanSeek.preview) : null;
   const pillFill = pill?.secondsRemaining != null ? 1 - pill.secondsRemaining / INTRO_PROMPT_SECONDS : null;
 
   // Segmented track: chapter starts become 2px gaps (dropped when a title has
@@ -1887,7 +1880,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
           {timingActions.canReset ? <button data-tv-focusable="true" data-hud-row="subtitle-reset" className="option-row" onClick={() => { if (!timingActions.forbidden && !timingActions.busy && !timingActions.inProgress) void syncStore.current?.resetTiming(timingActions.key); }}><span>Reset timing</span></button> : null}
           {timingActions.inProgress && timingActions.percent != null ? <div className="player-hud-sync"><div className="ai-translate-bar"><div style={{ width: `${timingActions.percent}%` }} /></div>{timingActions.phaseLabel ? <p className="player-hud-note">{timingActions.phaseLabel}</p> : null}</div> : null}
           {(() => { const text = timingActions.forbidden ? FORBIDDEN_MESSAGE : timingActions.error ?? timingActions.result?.text ?? timingActions.note; const color = timingActions.forbidden ? undefined : timingActions.error ? "#FCA5A5" : timingActions.result?.warning ? "#FDE68A" : undefined; return text ? <p className="player-hud-note" style={color ? { color } : undefined}>{text}</p> : null; })()}
-        </> : null}</> : appearance && styleView === "list" ? <>{SUBTITLE_APPEARANCE_FIELDS.map(([key, label], i) => <button key={key} data-tv-focusable="true" data-style-key={key} className="option-row" onClick={() => setStyleView(key)}><span>{label}</span><small>{subtitleChoiceLabel(key, appearance[key])}</small></button>)}<div className="subtitle-settings-preview" style={{ color: appearance.fontColor, opacity: appearance.textOpacity / 100, fontFamily: appearance.fontFamily }}>Subtitle preview</div></> : appearance && styleView && styleView !== "list" ? SUBTITLE_APPEARANCE_CHOICES[styleView].map(choice => <button key={String(choice.value)} data-tv-focusable="true" className="option-row" onClick={() => changeAppearance(styleView, choice.value)}><span>{choice.label}</span>{choice.value === appearance[styleView] ? <small>Current</small> : null}</button>) : null}</div> : null}
+        </> : null}</> : appearance && styleView === "list" ? <>{SUBTITLE_APPEARANCE_FIELDS.map(([key, label]) => <button key={key} data-tv-focusable="true" data-style-key={key} className="option-row" onClick={() => setStyleView(key)}><span>{label}</span><small>{subtitleChoiceLabel(key, appearance[key])}</small></button>)}<div className="subtitle-settings-preview" style={{ color: appearance.fontColor, opacity: appearance.textOpacity / 100, fontFamily: appearance.fontFamily }}>Subtitle preview</div></> : appearance && styleView && styleView !== "list" ? SUBTITLE_APPEARANCE_CHOICES[styleView].map(choice => <button key={String(choice.value)} data-tv-focusable="true" className="option-row" onClick={() => changeAppearance(styleView, choice.value)}><span>{choice.label}</span>{choice.value === appearance[styleView] ? <small>Current</small> : null}</button>) : null}</div> : null}
         {hudTab === "Chapters" ? <div className="player-hud-list"><div className="player-hud-eyebrow">Chapters</div>{chapters.map((chapter, i) => <button data-tv-focusable="true" className="option-row" key={`${chapter.index}-${chapter.start_seconds}`} onClick={() => { seekToPosition(chapter.start_seconds); setPanel(null); revealHud(); }}><span>{chapter.title || `Chapter ${i + 1}`}</span><small>{formatClock(chapter.start_seconds)}</small></button>)}</div> : null}
       </div>
       {hudPicker ? <div className="player-hud-picker-scrim" onClick={event => { if (event.target === event.currentTarget) { setHudPicker(null); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-hud-row="${hudPicker.returnKey}"]`)?.focus()); } }}><section className="player-hud-picker" role="dialog" aria-label={hudPicker.title}><h2>{hudPicker.title}</h2><div className="player-hud-picker-hint">Choose an option</div>{hudPicker.choices.map(choice => <button key={choice.value} data-tv-focusable="true" data-picker-value={choice.value} className={`option-row ${choice.value === hudPicker.selected ? "selected" : ""}`} onClick={() => chooseHudPicker(choice.value)}><span>{choice.label}</span>{choice.value === hudPicker.selected ? <small>✓</small> : null}</button>)}</section></div> : null}

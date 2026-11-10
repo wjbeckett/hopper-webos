@@ -1,4 +1,5 @@
-const LOCAL_SETTINGS_STORAGE = "silo-webos-local-settings";
+/** localStorage key for device-local settings (shared with the Settings screen). */
+export const LOCAL_SETTINGS_STORAGE = "silo-webos-local-settings";
 
 export type IntroSkipMode = "never" | "ask" | "always";
 export type MarkerAction = "ignore" | "offer" | "skip";

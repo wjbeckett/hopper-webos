@@ -6,12 +6,11 @@ import { focusFirstContentCard } from "../navigation/spatial";
 import type { Session, SiloItem } from "../types";
 import { LoadingState } from "../components/LoadingState";
 
-export function PersonScreen({ session, personId, name, onOpen, onBack }: {
+export function PersonScreen({ session, personId, name, onOpen }: {
   session: Session;
   personId?: string;
   name: string;
   onOpen: (item: SiloItem) => void;
-  onBack: () => void;
 }) {
   const [person, setPerson] = useState<PersonDetail | null>(null);
   const [items, setItems] = useState<SiloItem[]>([]);

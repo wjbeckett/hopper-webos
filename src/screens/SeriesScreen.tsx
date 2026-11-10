@@ -22,7 +22,6 @@ type Props = {
   restoreCastIndex?: number;
   onOpenPerson: (person: DetailPerson, index: number) => void;
   onPlayExtra: (trailer: DetailTrailer) => void;
-  onBack: () => void;
 };
 
 
@@ -88,7 +87,7 @@ function resolveNextUp(episodes: SiloItem[]) {
   return episodes.find(isInProgress) ?? episodes.find(episode => !isWatched(episode)) ?? episodes[0];
 }
 
-export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, onShuffle, onOpen, restoreCastIndex, onOpenPerson, onPlayExtra, onBack }: Props) {
+export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, onShuffle, onOpen, restoreCastIndex, onOpenPerson, onPlayExtra }: Props) {
   const [show, setShow] = useState(series);
   const [seasons, setSeasons] = useState<SiloItem[]>([]);
   const [episodesBySeason, setEpisodesBySeason] = useState<Record<number, SiloItem[]>>({});

@@ -283,7 +283,6 @@ export function PlaybackOptionsDialog({ session, detail, choices, onChange, onCl
   const seriesKey = detail?.series_id ?? detail?.content_id;
   const audioTracks = active?.audio_tracks ?? [];
   const subtitleTracks = active?.subtitle_tracks ?? [];
-  const subtitleSelections = combinedSubtitleIndexes(subtitleTracks);
 
   function apply(next: PlaybackChoices) {
     if (seriesKey) {

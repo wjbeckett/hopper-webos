@@ -1248,18 +1248,6 @@ type NativeCollection = {
   kind?: string;
 };
 
-type NativeCollectionGroup = {
-  name?: string;
-  kind?: string;
-  collections?: NativeCollection[];
-};
-
-type NativeCollectionsResponse = NativeCollection[] | {
-  collections?: NativeCollection[];
-  groups?: NativeCollectionGroup[];
-  ungrouped?: { collections?: NativeCollection[] };
-};
-
 function toCollection(item: NativeCollection, groupName?: string, groupKind?: string): SiloCollection {
   const rawKind = item.kind ?? groupKind;
   return {
@@ -1271,30 +1259,6 @@ function toCollection(item: NativeCollection, groupName?: string, groupKind?: st
     kind: rawKind === "user_collections" || rawKind === "user_collection" ? "user_collection" : "regular",
     groupName
   };
-}
-
-export async function getLibraryCollections(session: Session, libraryId: number): Promise<SiloCollection[]> {
-  const data = await requestV2<NativeCollectionsResponse>(session, `/library/${libraryId}/collections`);
-  if (Array.isArray(data)) return data.map((item) => toCollection(item));
-  if (data.groups?.length || data.ungrouped) {
-    return [
-      ...(data.groups ?? []).flatMap((group) =>
-        (group.collections ?? []).map((item) => toCollection(item, group.name, group.kind))
-      ),
-      ...(data.ungrouped?.collections ?? []).map((item) => toCollection(item))
-    ];
-  }
-  return (data.collections ?? []).map((item) => toCollection(item));
-}
-
-export async function getCollectionItems(session: Session, collection: SiloCollection): Promise<SiloItem[]> {
-  const params = new URLSearchParams({
-    source: collection.kind === "user_collection" ? "user_collection" : "library_collection",
-    collection_id: collection.id,
-    limit: "100",
-    skip_total: "true"
-  });
-  return unpack(await requestV2<NativeList>(session, `/catalog?${params}`)).Items;
 }
 
 export async function getFavorites(session: Session): Promise<SiloItem[]> {
