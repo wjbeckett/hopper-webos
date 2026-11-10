@@ -7,7 +7,12 @@ name: Claude PR review
 #
 # The Claude action only runs when this file in the pull request is identical to
 # the copy on main. A pull request that changes this file is therefore not
-# reviewed by it (the check goes green with no comment); that is expected.
+# reviewed by it; that is expected.
+#
+# The last step ("Report review status") makes every outcome visible on the PR.
+# If the review was skipped, failed or ended without a summary, it posts a short
+# status comment as github-actions saying why. It deletes that comment once a
+# later run posts a Claude summary.
 #
 # Setup (once):
 #   1. Install the Claude GitHub App on this repository: https://github.com/apps/claude
@@ -78,7 +83,14 @@ jobs:
             printf '%s\n' "${PR_BODY:-(The pull request has no description.)}"
           } > .claude-review/pr-description.md
 
-      - uses: anthropics/claude-code-action@v1
+      # Used by the last step to tell a summary posted by this run from an old one.
+      - name: Record start time
+        id: start
+        run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Claude review
+        id: claude
+        uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -183,3 +195,110 @@ jobs:
             there, and apply them as a final pass on your prose. Leave code,
             suggestion blocks, file paths, commands and the structure above exact.
             Do not write the review anywhere other than GitHub comments.
+
+      # Runs after every outcome so a missing review is never silent. Comments as
+      # github-actions[bot], so it never collides with Claude's own `--edit-last`.
+      - name: Report review status
+        if: always()
+        uses: actions/github-script@v8
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_REF: ${{ github.base_ref }}
+          STARTED_AT: ${{ steps.start.outputs.at }}
+          CLAUDE_OUTCOME: ${{ steps.claude.outcome }}
+          CLAUDE_CONCLUSION: ${{ steps.claude.outputs.conclusion }}
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+          JOB_STATUS: ${{ job.status }}
+        with:
+          script: |
+            const fs = require('fs');
+            const { execFileSync } = require('child_process');
+            const { owner, repo } = context.repo;
+            const number = Number(process.env.PR_NUMBER);
+            const sha = process.env.HEAD_SHA.slice(0, 7);
+            const MARKER = '<!-- hopper-review-status -->';
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+
+            // Never let anything that looks like a credential reach a comment.
+            const clean = (value) =>
+              String(value == null ? '' : value)
+                .replace(/sk-ant-[A-Za-z0-9_-]+/g, '[redacted]')
+                .replace(/gh[pousr]_[A-Za-z0-9]{20,}/g, '[redacted]')
+                .slice(0, 600);
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number: number, per_page: 100,
+            });
+            const status = comments.find((c) => c.user.type === 'Bot' && c.body.includes(MARKER));
+
+            // Success means this run posted or updated the Claude summary.
+            const startedAt = Date.parse(process.env.STARTED_AT || '') || 0;
+            const summaryPosted = comments.some((c) =>
+              c.user.login === 'claude[bot]' &&
+              c.body.startsWith('## Claude review') &&
+              Date.parse(c.updated_at) >= startedAt - 60 * 1000);
+
+            if (summaryPosted) {
+              if (status) await github.rest.issues.deleteComment({ owner, repo, comment_id: status.id });
+              core.info('Claude summary posted by this run.');
+              return;
+            }
+
+            // Did this PR change the workflow file? Then the action skips itself.
+            let workflowChanged = false;
+            try {
+              execFileSync('git', ['diff', '--quiet', `origin/${process.env.BASE_REF}`, 'HEAD', '--',
+                '.github/workflows/claude-review.yml']);
+            } catch (error) {
+              workflowChanged = error.status === 1;
+            }
+
+            // The last result message from Claude, if Claude started at all.
+            let detail = '';
+            const file = process.env.EXECUTION_FILE;
+            if (file && fs.existsSync(file)) {
+              try {
+                const log = JSON.parse(fs.readFileSync(file, 'utf8'));
+                const last = (Array.isArray(log) ? log : []).filter((m) => m && m.type === 'result').pop();
+                if (last) {
+                  detail = [last.subtype, last.is_error ? 'is_error' : '', `turns: ${last.num_turns ?? "?"}`,
+                    typeof last.result === 'string' ? last.result : ''].filter(Boolean).join(' · ');
+                }
+              } catch (error) {
+                core.warning(`Could not read the execution file: ${error.message}`);
+              }
+            }
+
+            const outcome = process.env.CLAUDE_OUTCOME;
+            let reason;
+            if (process.env.JOB_STATUS === 'cancelled') {
+              reason = 'was **cancelled**, by a newer push or the 30-minute limit.';
+            } else if (!outcome || outcome === 'skipped') {
+              reason = 'did **not start**: an earlier step failed (checkout, `npm ci`). See the run log.';
+            } else if (outcome === 'success' && !file && workflowChanged) {
+              reason = 'was **skipped** because this PR changes `.github/workflows/claude-review.yml`. ' +
+                'The action only runs when that file matches `main`. Expected; reviews resume after merge.';
+            } else if (outcome === 'success' && !file) {
+              reason = 'was **skipped** by the Claude action before Claude ran (usually workflow validation). ' +
+                'Push again, or close and reopen the PR, to retry.';
+            } else if (outcome === 'failure') {
+              reason = '**failed**. A run that ends in about a second after 1 turn at $0 cost usually means the usage ' +
+                'limit was hit or `CLAUDE_CODE_OAUTH_TOKEN` is invalid; replace it with a new `claude setup-token`.';
+            } else {
+              reason = 'finished but **posted no summary**.';
+            }
+
+            const body = [
+              MARKER,
+              `**Claude review status** for ${sha}: the review ${reason}`,
+              detail ? `\n\`\`\`\n${clean(detail)}\n\`\`\`` : '',
+              `\n[Run log](${runUrl}). This comment is removed once a later run posts a Claude review.`,
+            ].filter(Boolean).join('\n');
+
+            if (status) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: status.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number: number, body });
+            }
+

@@ -72,7 +72,7 @@ To review any pull request on demand through the read-only path: **Actions → P
 | **Build** (`ci.yml`) | Every PR, and pushes to `main` | `npm ci` and `npm run build`. No secrets, so it is safe on outside code. |
 | **PR intake** (`pr-intake.yml`), `triage` job | Every PR | Adds labels and welcomes outside contributors. Never checks out PR code. |
 | **PR intake**, `external-review` job | PRs from forks, and manual runs | Read-only Claude review. Cannot build, run or push. |
-| **Claude PR review** (`claude-review.yml`) | PRs from branches in this repository | Full Claude review: runs the build, pushes small `review: ` fixes, comments. |
+| **Claude PR review** (`claude-review.yml`) | PRs from branches in this repository | Full Claude review: runs the build, pushes small `review: ` fixes, comments. If no review is posted (skipped, failed, cancelled), a **Claude review status** comment says why; it is deleted once a review is posted. |
 
 ## Labels
 
@@ -137,6 +137,6 @@ While the repository is private, forks can only be made by people you have given
 
 ## Changing the workflows
 
-- `claude-review.yml` only runs when the copy in the PR is identical to the copy on `main`. So a PR that changes that file is not reviewed by it: the check goes green in seconds with no comment. That is expected. Reviews resume once the change is merged.
+- `claude-review.yml` only runs when the copy in the PR is identical to the copy on `main`. So a PR that changes that file is not reviewed by it: the check goes green in seconds and a **Claude review status** comment says it was skipped. That is expected. Reviews resume once the change is merged.
 - `pr-intake.yml` always runs the copy on `main`, so a change takes effect after it is merged. To try a change first, use **Run workflow** and pick your branch.
 - Issue forms and the PR template take effect from `main`.
