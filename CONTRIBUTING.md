@@ -82,13 +82,25 @@ WEBOS_DEVICE=livingroom npm run webos:inspect  # open LG Web Inspector for the a
 
 ## Pull requests
 
-1. Branch from `dev` and open the pull request into `dev`. `main` only changes through a release pull request from `dev`, after testing on a TV.
-2. Keep changes focused. One feature or fix per pull request.
-3. Run `npm run build`. It must pass, because there is no separate lint or test step yet.
-4. Say how you tested the change: browser, live Silo server, or physical LG TV (with the model or webOS version).
-5. Don't include personal server URLs, tokens or screenshots of private libraries.
+All changes go into `dev`. `main` only receives releases from `dev`, after testing on a TV.
 
-An automated Claude review runs on every non-draft pull request from a branch in this repository. It posts inline suggestions and a summary of what it checked. On pull requests into `dev` it may also push small fix commits (prefixed `review: `) to your branch, so pull before you add more commits.
+1. **Fork the repository** and create a branch from `dev`: `git checkout -b fix/short-description origin/dev`. (Maintainers branch in the main repository.)
+2. **Keep changes focused.** One feature or fix per pull request.
+3. **Run `npm run build`.** It must pass, because there is no separate lint or test step yet.
+4. **Open the pull request into `dev`** and fill in the template. Say how you tested the change: browser, live Silo server, or physical LG TV (with the model or webOS version). A pull request opened against `main` is moved to `dev` automatically.
+5. **Leave "Allow edits by maintainers" ticked** so small fixes can be pushed to your branch.
+6. Don't include personal server URLs, tokens or screenshots of private libraries.
+
+### What happens after you open it
+
+- **Build** type-checks and builds your branch. On your first pull request a maintainer may need to approve the run.
+- **Labels** for size and area are added automatically.
+- **Automated review:** Claude reviews the change against the conventions above and posts a summary of what it checked, plus inline suggestions you can apply from the **Files changed** tab. On your first pull request a maintainer starts it; after that it runs on every push. It reads your diff but never builds or runs your code.
+- **TV testing:** a maintainer tests the change on LG hardware before merging, so clear steps in the "Needs checking on a TV" section speed things up.
+
+The review is a first pass, not the final word. If you think a suggestion is wrong, say so in the thread.
+
+Maintainers: the full process is in [`docs/MAINTAINING.md`](docs/MAINTAINING.md).
 
 ## Brand assets
 
