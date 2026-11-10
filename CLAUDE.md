@@ -24,7 +24,7 @@ WEBOS_DEVICE=livingroom npm run webos:deploy           # build, package IPK (app
 WEBOS_DEVICE=livingroom npm run webos:inspect          # LG Web Inspector
 npm run webos:check                                    # verify node/ares tooling and devices
 ```
-- There is no linter and no test suite yet. `npm run build`, which type-checks, is the check to run before committing.
+- There is no linter and no test suite yet. `npm run build`, which type-checks, is the check to run before committing. It fails on unused locals, imports and parameters (`noUnusedLocals`, `noUnusedParameters`); prefix a parameter you must keep with `_`.
 - `WEBOS_APP_ID` overrides the app ID for launch and inspect.
 - In the browser, arrow keys move focus, Enter selects, and Escape or Backspace act as Back.
 - During `vite dev`, `POST /__client-log` echoes client logs to the terminal.
@@ -64,7 +64,7 @@ Keep each concern in its own layer:
   - `events.ts` is the realtime socket (`user_state`/`catalog` events).
   - `settings.ts` resolves effective server and profile settings.
   - `subtitles.ts` and `diagnostics.ts` cover their own areas.
-- **Playback** should direct play when the TV supports it, but it must always be negotiated through Silo PlaybackInfo/device profiles. Treat `directVideoUrl()` as temporary scaffolding.
+- **Playback** should direct play when the TV supports it, but it must always be negotiated through Silo PlaybackInfo/device profiles.
 
 ### Navigation
 - **`src/navigation/spatial.ts`** is one global keydown handler. It covers D-pad movement, the top nav, library grids, rails (`RAIL_SELECTOR` pins the focused card), modals (`[data-modal="true"]`) and Back.

@@ -15,7 +15,6 @@ export function TopNav({
   onProfile,
   onFavorites,
   onWatchlist,
-  onLibraries,
   onHistory,
   onProfiles,
   onSignOut,
@@ -30,7 +29,6 @@ export function TopNav({
   onProfile: () => void;
   onFavorites: () => void;
   onWatchlist: () => void;
-  onLibraries: () => void;
   onHistory: () => void;
   onProfiles: () => void;
   onSignOut: () => void;

@@ -5,7 +5,6 @@ import { PlaybackOptionsDialog, PlaybackSummary, useWatchDetail } from "../compo
 import { GearIcon, MoreIcon, PlayIcon, RestartIcon, WatchlistIcon } from "../components/icons";
 import { MediaRail } from "../components/MediaRail";
 import { ResumeProgress } from "../components/ResumeProgress";
-import { TvButton } from "../components/TvButton";
 import type { PlaybackChoices } from "../api/playback";
 import type { DetailPerson, DetailTrailer } from "../api/silo";
 import type { Session, SiloItem } from "../types";
@@ -19,7 +18,6 @@ type Props = {
   restoreCastIndex?: number;
   onOpenPerson: (person: DetailPerson, index: number) => void;
   onPlayExtra: (trailer: DetailTrailer) => void;
-  onBack: () => void;
 };
 
 function clock(seconds: number) {
@@ -52,7 +50,7 @@ function typeLabel(type?: string) {
   return type ?? "";
 }
 
-export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex, onOpenPerson, onPlayExtra, onBack }: Props) {
+export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex, onOpenPerson, onPlayExtra }: Props) {
   const [detail, setDetail] = useState(item);
   const [favorite, updateFavorite] = useState(false);
   const [watchlist, updateWatchlist] = useState(false);

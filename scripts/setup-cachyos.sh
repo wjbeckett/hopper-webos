@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "Silo webOS - CachyOS bootstrap"
+echo "Hopper - CachyOS bootstrap"
 echo
 
 if ! command -v pacman >/dev/null 2>&1; then

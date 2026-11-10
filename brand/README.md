@@ -23,7 +23,7 @@ If you change the artwork, update the SVG and `HopperMark.tsx` together.
 
 | File | Size | Use |
 |---|---|---|
-| `hopper-icon.svg` | 1024×1024 | Master icon (also copied to `public/hopper-mark.svg`) |
+| `hopper-icon.svg` | 1024×1024 | Master icon |
 | `hopper-splash.svg` | 1920×1080 | Full splash artwork: backdrop, mark and wordmark. Reference for the resting frame of the startup animation |
 | `hopper-splash-backdrop.svg` | 1920×1080 | The same backdrop with no mark or wordmark: LG's native launch splash. Keep its gradients identical to `hopper-splash.svg` and `.startup-splash` in `src/styles.css` |
 | `hopper-store-banner.svg` | 1920×1080 | Store hero / promo image |
