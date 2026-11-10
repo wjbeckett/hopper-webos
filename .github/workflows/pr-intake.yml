@@ -311,7 +311,7 @@ jobs:
                   code, no unexpected new dependencies or changes to build scripts
                   and workflows.
                10. Docs: every doc the change makes out of date is updated (see "Docs to
-                   keep current" in CLAUDE.md), nothing overclaims parity.
+                   keep current" in CLAUDE.md), nothing claims more than was verified.
                11. PR description: says how the change was tested (build, browser,
                    live server, physical TV).
                Use "N/A" when a check does not apply and "Not verified" when you

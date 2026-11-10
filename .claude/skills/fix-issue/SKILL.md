@@ -46,12 +46,12 @@ Read every open issue, including its comments. For each one, work out:
 
 | Field | Values |
 | --- | --- |
-| Type | bug, parity gap (Android TV does it, Hopper doesn't), feature request, question, not actionable |
+| Type | bug, missing feature (the official TV clients have it, Hopper doesn't), feature request, question, not actionable |
 | Area | `api`, `playback`, `navigation`, `platform`, `pairing service`, `ui/styles`, `docs/brand` |
 | Severity | blocks use, wrong behaviour, cosmetic |
 | Effort | small (one file, clear cause), medium, large (design needed) |
 | Verifiable by | build only, browser, live Silo server, physical TV |
-| Notes | duplicates, missing information, already fixed on `main`, already tracked in `docs/ANDROID_PARITY_TODO.md` or `docs/HANDOFF.md` |
+| Notes | duplicates, missing information, already fixed on `main`, already tracked in `docs/BACKLOG.md` or `docs/HANDOFF.md` |
 
 Spend a few minutes in the code for each issue so the effort estimate is based on what's actually there, not on the title. Check whether `main` already fixes it.
 
@@ -79,7 +79,7 @@ Then report to the maintainer:
 - how it can be verified, and what only a TV can confirm
 - anything uncertain
 
-Stop here if the issue isn't a code problem, needs information from the reporter, needs a design decision, or would change behaviour the maintainer chose on purpose (see "Explicitly not outstanding" in `docs/ANDROID_PARITY_TODO.md`, and `docs/RECONSTRUCTION.md`). Offer a draft reply to the reporter instead.
+Stop here if the issue isn't a code problem, needs information from the reporter, needs a design decision, or would change behaviour the maintainer chose on purpose (see "Where Hopper differs" and "Not planned" in `docs/BACKLOG.md`, and `docs/RECONSTRUCTION.md`). Offer a draft reply to the reporter instead.
 
 ## Stage 3: Fix
 
@@ -114,7 +114,7 @@ The build must pass. Beyond that, check the change in a browser if a dev server 
 Update every doc the fix makes out of date, in the same branch. `CLAUDE.md` lists them under "Docs to keep current". At the least:
 
 - `docs/HANDOFF.md`: what changed and how it was verified
-- `docs/ANDROID_PARITY_TODO.md` if a parity item changed
+- `docs/BACKLOG.md` if a backlog item or a feature's verification level changed
 - `README.md` if a user-visible feature or limitation changed
 - `README.md` only if a user-visible feature or known limitation changed
 
