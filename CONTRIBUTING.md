@@ -82,10 +82,13 @@ WEBOS_DEVICE=livingroom npm run webos:inspect  # open LG Web Inspector for the a
 
 ## Pull requests
 
-1. Keep changes focused. One feature or fix per pull request.
-2. Run `npm run build`. It must pass, because there is no separate lint or test step yet.
-3. Say how you tested the change: browser, live Silo server, or physical LG TV (with the model or webOS version).
-4. Don't include personal server URLs, tokens or screenshots of private libraries.
+1. Branch from `dev` and open the pull request into `dev`. `main` only changes through a release pull request from `dev`, after testing on a TV.
+2. Keep changes focused. One feature or fix per pull request.
+3. Run `npm run build`. It must pass, because there is no separate lint or test step yet.
+4. Say how you tested the change: browser, live Silo server, or physical LG TV (with the model or webOS version).
+5. Don't include personal server URLs, tokens or screenshots of private libraries.
+
+An automated Claude review runs on every non-draft pull request from a branch in this repository. It posts inline suggestions and a summary of what it checked. On pull requests into `dev` it may also push small fix commits (prefixed `review: `) to your branch, so pull before you add more commits.
 
 ## Brand assets
 
