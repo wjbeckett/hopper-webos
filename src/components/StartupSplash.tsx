@@ -4,8 +4,8 @@ import { HopperMark } from "./HopperMark";
 /** Safety net: never hold the app behind the splash longer than this. */
 const MAX_SPLASH_MS = 6000;
 const FADE_MS = 400;
-/** Length of the brand animation (see `.startup-splash` keyframes in styles.css). */
-const ANIMATION_MS = 2200;
+/** Length of the brand animation plus a short hold on the finished mark (timeline in styles.css). */
+const ANIMATION_MS = 2600;
 
 /**
  * Cold-launch splash. It covers the real app, which keeps rendering underneath, so Home

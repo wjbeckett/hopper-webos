@@ -5007,7 +5007,8 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
      (full-bleed rendered the logo about 4x too large). min(25% of width, 440). */
   display: grid;
   place-items: center;
-  /* Same backdrop as public/splash.png (LG's native launch splash), so the hand-off is seamless. */
+  /* Same backdrop as public/splash.png (LG's native launch splash, which carries no artwork),
+     so the hand-off is seamless and the animation starts from an empty stage. */
   background:
     radial-gradient(circle at 50% 43.5%, rgba(129, 140, 248, .45), rgba(129, 140, 248, 0) 420px),
     radial-gradient(620px 420px at 260px 180px, rgba(45, 212, 191, .22), rgba(45, 212, 191, 0)),
@@ -5018,11 +5019,19 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 }
 .startup-splash.leaving { opacity: 0; }
 
-/* Hopper brand animation: tiles tumble in one by one, hopper settles, play pops,
-   spout glows, word rises. Geometry matches public/splash.png (mark 412x521, word 112px). */
+/* Hopper brand animation. The native LG splash (public/splash.png) is this backdrop with
+   no artwork, so the mark builds up from nothing:
+     0ms     hopper settles in
+     360ms   three tiles fall in one at a time (left, right, centre); the hopper dips
+             and springs back as each one lands (714ms, 974ms, 1234ms)
+     1234ms  play button pops on the last landing
+     1500ms  spout glow spreads while the word rises
+   Keep the landing times below in step with the tile delays (delay + 68% of 520ms), and
+   ANIMATION_MS in StartupSplash.tsx with the total length.
+   The resting frame matches brand/hopper-splash.svg (mark 412x521, word 112px). */
 .startup-splash-brand {
   display: flex; flex-direction: column; align-items: center; gap: 64px;
-  /* splash.png puts the mark top at y=180; plain centring lands at ~192. */
+  /* The splash artwork puts the mark top at y=180; plain centring lands at ~192. */
   transform: translateY(-12px);
 }
 .startup-splash-mark { width: 412px; height: 521px; overflow: visible; }
@@ -5032,51 +5041,72 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
   line-height: 1;
   font-weight: 700;
   letter-spacing: 2px;
-  animation: hopper-word 500ms ease-out 1100ms both;
+  animation: hopper-word 600ms cubic-bezier(.2, .8, .3, 1) 1500ms both;
 }
 /* Chrome 87: SVG CSS transforms need fill-box to resolve transform-origin per element. */
 .startup-splash-mark .hopper-tile,
+.startup-splash-mark .hopper-react,
 .startup-splash-mark .hopper-body,
 .startup-splash-mark .hopper-play,
 .startup-splash-mark .hopper-glow { transform-box: fill-box; }
 .startup-splash-mark .hopper-body {
   transform-origin: 50% 100%;
-  animation: hopper-drop 650ms cubic-bezier(.2, .9, .3, 1.25) both;
+  animation: hopper-drop 460ms cubic-bezier(.2, .9, .3, 1.25) both;
+}
+/* Tiles and hopper take each landing together, squashing towards the spout. */
+.startup-splash-mark .hopper-react {
+  transform-origin: 50% 100%;
+  animation:
+    hopper-hit 250ms ease-out 714ms,
+    hopper-hit 250ms ease-out 974ms,
+    hopper-hit 300ms ease-out 1234ms;
 }
 .startup-splash-mark .hopper-tile {
   transform-origin: 50% 50%;
-  animation: hopper-tile 560ms cubic-bezier(.25, 1.1, .4, 1) both;
+  animation: hopper-tile 520ms linear both;
 }
-.startup-splash-mark .hopper-tile-a { animation-delay: 380ms; }
-.startup-splash-mark .hopper-tile-c { animation-delay: 500ms; }
-.startup-splash-mark .hopper-tile-b { animation-delay: 620ms; }
+.startup-splash-mark .hopper-tile-a { animation-delay: 360ms; }
+.startup-splash-mark .hopper-tile-c { animation-delay: 620ms; }
+.startup-splash-mark .hopper-tile-b { animation-delay: 880ms; }
 .startup-splash-mark .hopper-play {
   transform-origin: 50% 50%;
-  animation: hopper-play 420ms cubic-bezier(.3, 1.6, .5, 1) 820ms both;
+  animation: hopper-play 420ms cubic-bezier(.3, 1.6, .5, 1) 1234ms both;
 }
 .startup-splash-mark .hopper-glow {
   transform-origin: 50% 50%;
-  animation: hopper-glow 600ms ease-out 900ms both;
+  animation: hopper-glow 700ms ease-out 1500ms both;
 }
 @keyframes hopper-drop {
   0% { opacity: 0; transform: translateY(-60px) scaleY(1.08); }
   60% { opacity: 1; transform: translateY(0) scaleY(.94); }
   100% { opacity: 1; transform: translateY(0) scaleY(1); }
 }
+/* Falls from above the mark gathering speed, sinks a little past its resting place on
+   landing (68%), then settles. Distances are SVG user units (1 unit = 0.62px here). */
 @keyframes hopper-tile {
-  from { opacity: 0; transform: translateY(-160px) rotate(-18deg); }
-  to { opacity: 1; transform: translateY(0) rotate(0); }
+  0% { opacity: 0; transform: translateY(-320px) rotate(-16deg); animation-timing-function: cubic-bezier(.45, 0, .85, .55); }
+  18% { opacity: 1; }
+  68% { opacity: 1; transform: translateY(14px) rotate(2deg); animation-timing-function: ease-out; }
+  84% { opacity: 1; transform: translateY(-5px) rotate(-.5deg); animation-timing-function: ease-in-out; }
+  100% { opacity: 1; transform: translateY(0) rotate(0); }
+}
+@keyframes hopper-hit {
+  0% { transform: translateY(0) scale(1, 1); }
+  28% { transform: translateY(9px) scale(1.022, .962); }
+  62% { transform: translateY(-3px) scale(.994, 1.012); }
+  100% { transform: translateY(0) scale(1, 1); }
 }
 @keyframes hopper-play {
   from { opacity: 0; transform: scale(.3); }
   to { opacity: 1; transform: scale(1); }
 }
 @keyframes hopper-glow {
-  from { opacity: 0; transform: scaleX(.4); }
-  to { opacity: 1; transform: scaleX(1); }
+  0% { opacity: 0; transform: scale(.3, .6); }
+  60% { opacity: 1; transform: scale(1.08, 1.04); }
+  100% { opacity: 1; transform: scale(1, 1); }
 }
 @keyframes hopper-word {
-  from { opacity: 0; transform: translateY(14px); }
+  from { opacity: 0; transform: translateY(18px); }
   to { opacity: 1; transform: translateY(0); }
 }
 

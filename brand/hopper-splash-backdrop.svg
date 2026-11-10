@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <!-- Native launch splash (public/splash.png): the hopper-splash.svg backdrop with no mark and no
+       word. LG shows it before the app loads; the in-app startup animation then builds the mark on the
+       same backdrop. Keep the gradients identical to hopper-splash.svg and .startup-splash in styles.css. -->
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="45%" r="70%">
+      <stop offset="0" stop-color="#1B1F4B"/>
+      <stop offset="0.6" stop-color="#0E1030"/>
+      <stop offset="1" stop-color="#07081A"/>
+    </radialGradient>
+    <radialGradient id="halo" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#818CF8" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#818CF8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="tealGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#2DD4BF" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#2DD4BF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="roseGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#F472B6" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#F472B6" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+  <!-- Ambient colour washes in the corners echo the three tiles. -->
+  <ellipse cx="260" cy="180" rx="620" ry="420" fill="url(#tealGlow)"/>
+  <ellipse cx="1680" cy="940" rx="640" ry="420" fill="url(#roseGlow)"/>
+  <circle cx="960" cy="470" r="420" fill="url(#halo)"/>
+</svg>
