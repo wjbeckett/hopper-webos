@@ -27,6 +27,7 @@ import { ProfileSelectionScreen } from "./screens/ProfileSelectionScreen";
 import { RequestsScreen } from "./screens/RequestsScreen";
 import { SearchScreen } from "./screens/SearchScreen";
 import { SeriesScreen } from "./screens/SeriesScreen";
+import { SignupScreen } from "./screens/SignupScreen";
 import { PhoneSetupScreen } from "./screens/PhoneSetupScreen";
 import { ServerSetupScreen } from "./screens/ServerSetupScreen";
 import { pairingAvailable } from "./platform/pairing";
@@ -49,7 +50,7 @@ import { installClientLogCapture } from "./core/clientLogs";
 
 installClientLogCapture();
 
-type AuthRoute = "phone-setup" | "server-setup" | "first-run-setup" | "device-login" | "password-login";
+type AuthRoute = "phone-setup" | "server-setup" | "first-run-setup" | "device-login" | "password-login" | "signup";
 type DetailRoute =
   | { name: "main" }
   | { name: "details"; item: SiloItem; castIndex?: number }
@@ -579,12 +580,16 @@ export default function App() {
     if (authRoute === "first-run-setup") {
       return <FirstRunSetupScreen serverUrl={serverUrl} onComplete={login} onChangeServer={() => setAuthRoute("server-setup")} />;
     }
+    if (authRoute === "signup") {
+      return <SignupScreen serverUrl={serverUrl} onComplete={login} onBackToLogin={() => setAuthRoute("password-login")} />;
+    }
     if (authRoute === "password-login") {
       return (
         <LoginScreen
           serverUrl={serverUrl}
           onLogin={login}
           onDeviceLogin={() => setAuthRoute("device-login")}
+          onCreateAccount={() => setAuthRoute("signup")}
           onChangeServer={() => setAuthRoute("server-setup")}
         />
       );

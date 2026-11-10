@@ -49,7 +49,7 @@ The maintainer's step-by-step, including what is automatic and what is manual, i
 - A privacy policy URL.
 
 ### Small, ready to pick up
-1. Define `--accent: #2DD4BF` (brand teal) in `src/styles.css` `:root`. Today the ring falls back to `#2f6bff` (`src/styles.css` around line 3974). Check every other `var(--accent, …)` use before changing it.
+1. Done on branch `feat/parity-quick-wins` (2026-11-10): `--accent` is brand teal `#2DD4BF`.
 2. Cold-relaunch on the paired TV and confirm the reworked startup splash (backdrop-only native splash, then the animation from an empty stage, smooth on Chrome 87) and the top-nav `HopperLockup` in the live flow. The splash only shows when a server is saved; with no server the app opens on pairing.
 3. Optional: player screenshot via the TV's own screen capture, added to `brand/store/screenshots/05-player.png` and the listing.
 
@@ -57,12 +57,14 @@ The maintainer's step-by-step, including what is automatic and what is manual, i
 - Dedicated audiobook player:
   - Whole-book multi-part timeline and resume.
   - Chapters, bookmarks, sleep timer, speed and skip intervals.
-- "Translate description" on detail pages; invite-code sign-up; audiobook bookmarks.
+- "Translate description" on detail pages (needs the metadata-AI capability probe, pending-translation fields and a polled job; verify on a server with AI configured). Audiobook bookmarks.
+- Invite-code sign-up is implemented on branch `feat/parity-quick-wins` (`SignupScreen`). Still to do: a real sign-up on a live server with sign-ups enabled, and a remote/keyboard check on a TV.
+- Music library Genres tab (Android `TvLibraryTab.Genres`).
 - Expired-session and network-loss UX. Token refresh itself is implemented in `src/api/silo.ts`.
 - Codec/container matrix on an older and a current webOS generation.
 - Automated tests (none exist): API parsing, auth state, navigation geometry, player state.
 - Side-by-side Android TV comparison of every destination, run on a physical LG TV. Confirm playback, remote focus and device-specific capabilities.
-- Evaluate Android TV's Watch Party, which is experimental and disabled in Android release builds. Don't claim parity unless the full server-backed room workflow and remote focus/back behaviour are implemented.
+- Watch Party: evaluated 2026-11-10 and not implemented, by decision. Android hides it behind a Settings → Experimental toggle that is off by default in release builds (details in `ANDROID_PARITY_TODO.md`).
 
 ## Working notes
 - **Before you change anything:** read the matching Android source in `silo-android/androidTvApp/`. Make targeted edits only. Work on a branch off `main` (see Development procedure in `CLAUDE.md`). Run `npm run build`, then commit and push the branch after each verified step, and get it into `main` through a pull request. Update the roadmap and parity TODO with what was verified and how (build, browser or physical TV).
