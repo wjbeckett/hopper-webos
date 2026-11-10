@@ -1,6 +1,6 @@
 ---
 name: fix-issue
-description: Triage Hopper's GitHub issues, investigate one, code the fix on a branch off dev, and draft a pull request into dev for the maintainer to open. Use this whenever the user mentions GitHub issues, a bug report, an issue number (e.g. "#12", "issue 12"), triage, "what should I work on", "fix this issue", or asks for a PR for a reported problem, even if they don't name the skill. Run with no argument to triage all open issues, or with an issue number to go straight to investigating it.
+description: Triage Hopper's GitHub issues, investigate one, code the fix on a branch off main, and draft a pull request into main for the maintainer to open. Use this whenever the user mentions GitHub issues, a bug report, an issue number (e.g. "#12", "issue 12"), triage, "what should I work on", "fix this issue", or asks for a PR for a reported problem, even if they don't name the skill. Run with no argument to triage all open issues, or with an issue number to go straight to investigating it.
 argument-hint: "[issue number]"
 ---
 
@@ -11,10 +11,10 @@ This skill takes a GitHub issue on `wjbeckett/hopper-webos` from report to a pul
 The branch flow is:
 
 ```
-fix/<number>-<slug>  ──PR──►  dev  ──release PR after TV testing──►  main
+fix/<number>-<slug>  ──pull request──►  main
 ```
 
-`dev` is where work lands. `main` only moves through a `dev` → `main` PR once the maintainer has tested on a TV. Never branch from, or target, `main` for a fix.
+`main` is the only long-lived branch. Every fix goes on its own branch and reaches `main` through a pull request; never commit to `main` directly.
 
 Before anything else, read `docs/HANDOFF.md` (as `CLAUDE.md` requires) so you know the current state and what is deliberately left alone.
 
@@ -51,9 +51,9 @@ Read every open issue, including its comments. For each one, work out:
 | Severity | blocks use, wrong behaviour, cosmetic |
 | Effort | small (one file, clear cause), medium, large (design needed) |
 | Verifiable by | build only, browser, live Silo server, physical TV |
-| Notes | duplicates, missing information, already fixed on `dev`, already tracked in `docs/ANDROID_PARITY_TODO.md` or the roadmap |
+| Notes | duplicates, missing information, already fixed on `main`, already tracked in `docs/ANDROID_PARITY_TODO.md` or the roadmap |
 
-Spend a few minutes in the code for each issue so the effort estimate is based on what's actually there, not on the title. Check whether `dev` already fixes it.
+Spend a few minutes in the code for each issue so the effort estimate is based on what's actually there, not on the title. Check whether `main` already fixes it.
 
 Report a table, most worthwhile first, then recommend one issue to start on and say why. A good first pick is a real bug with a clear cause that can be checked in a browser.
 
@@ -83,11 +83,11 @@ Stop here if the issue isn't a code problem, needs information from the reporter
 
 ## Stage 3: Fix
 
-Start from a fresh `dev` so the PR contains only this fix:
+Start from a fresh `main` so the PR contains only this fix:
 
 ```bash
-git fetch origin dev
-git checkout -b fix/<number>-<short-slug> origin/dev
+git fetch origin main
+git checkout -b fix/<number>-<short-slug> origin/main
 ```
 
 If the working tree has uncommitted changes, stop and ask rather than stashing or discarding them.
@@ -130,7 +130,7 @@ The maintainer opens the PR. Don't create it unless they ask.
 
 Give them:
 
-1. The compare link: `https://github.com/wjbeckett/hopper-webos/compare/dev...fix/<number>-<short-slug>?expand=1`
+1. The compare link: `https://github.com/wjbeckett/hopper-webos/compare/main...fix/<number>-<short-slug>?expand=1`
 2. The title, under about 70 characters, saying what changed: `Fix <symptom> (#<number>)`
 3. The body, in a fenced block they can paste, using this template:
 
@@ -159,12 +159,12 @@ Fixes #<number>
 <Which docs changed, or "None needed".>
 ```
 
-Tick only the boxes that are true. The TV steps matter most: the maintainer tests on hardware before `dev` goes to `main`, and good steps save them working it out again.
+Tick only the boxes that are true. The TV steps matter most: the maintainer tests on hardware before merging, and good steps save them working it out again.
 
-If they ask you to open the PR, target `dev` and open it as a draft:
+If they ask you to open the PR, target `main` and open it as a draft:
 
 ```bash
-gh pr create --base dev --head fix/<number>-<short-slug> --draft --title "<title>" --body-file <file>
+gh pr create --base main --head fix/<number>-<short-slug> --draft --title "<title>" --body-file <file>
 ```
 
 The automated reviewer skips drafts and runs when the PR is marked ready for review. It may push small fix commits to the branch, so pull before adding more commits.

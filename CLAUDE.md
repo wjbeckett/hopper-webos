@@ -33,19 +33,21 @@ npm run webos:check                                    # verify node/ares toolin
 Every change follows the same path, whatever its size: code, docs, brand assets and workflow files alike.
 
 ```
-new branch off dev  ──PR──►  dev  ──release PR after TV testing──►  main
+new branch off main  ──pull request──►  main
 ```
 
-1. **Branch off the latest `dev`.** `git fetch origin dev && git checkout -b <type>/<slug> origin/dev`. Use `fix/<issue-number>-<slug>` for a GitHub issue, otherwise `feat/`, `chore/` or `docs/` plus a short slug. One feature or fix per branch.
-2. **Work on the branch.** Never commit directly to `dev` or `main`, and never branch from or target `main` for a change. Run `npm run build`, then commit and push the branch after each verified step.
-3. **Open a pull request into `dev`.** The maintainer opens and merges it; draft the title and body for them unless they ask you to open it. Say how the change was tested: build, browser, live server or physical TV.
-4. **Automation runs on the PR.** `ci.yml` builds it and `pr-intake.yml` labels it. `claude-review.yml` reviews every non-draft PR from a branch in this repository: on PRs into `dev` it may push small `review: ` fix commits to the branch, so pull before adding commits, and on PRs into `main` it only comments. PRs from forks get a read-only review from `pr-intake.yml` instead.
-5. **Release to `main` through a PR from `dev`,** only after the maintainer has tested `dev` on a physical TV. Nothing reaches `main` any other way.
+`main` is the only long-lived branch. There is no `dev` branch.
 
-- **Issue fixes** use the `fix-issue` skill (`.claude/skills/fix-issue/SKILL.md`), which follows this procedure: triage, investigate, fix on a branch off `dev`, then draft the PR.
-- **Maintainer steps, labels and the fork PR process** are in `docs/MAINTAINING.md`. Keep it in step with the workflows in `.github/workflows/`.
+1. **Branch off the latest `main`.** `git fetch origin main && git checkout -b <type>/<slug> origin/main`. Use `fix/<issue-number>-<slug>` for a GitHub issue, otherwise `feat/`, `chore/` or `docs/` plus a short slug. One feature or fix per branch.
+2. **Work on the branch.** Never commit directly to `main`. Run `npm run build`, then commit and push the branch after each verified step.
+3. **Open a pull request into `main`.** The maintainer opens and merges it; draft the title and body for them (following `.github/pull_request_template.md`) unless they ask you to open it. Say how the change was tested: build, browser, live server or physical TV.
+4. **Automation runs on the PR.** `ci.yml` builds it and `pr-intake.yml` labels it. `claude-review.yml` reviews every non-draft PR from a branch in this repository and may push small `review: ` fix commits to the branch, so pull before adding commits. PRs from forks get a read-only review from `pr-intake.yml` instead.
+5. **The maintainer tests on a physical TV before merging** whenever the change affects the app. A release is a tag on a tested `main` commit.
+
+- **Issue fixes** use the `fix-issue` skill (`.claude/skills/fix-issue/SKILL.md`), which follows this procedure: triage, investigate, fix on a branch off `main`, then draft the PR.
+- **Maintainer steps, what is automatic and what is manual, labels and settings** are in `docs/MAINTAINING.md`. Keep it in step with the workflows in `.github/workflows/`.
 - **Fork PRs are untrusted.** `pr-intake.yml` runs with secrets on `pull_request_target`, so it must never check out, install or run pull request code, and Claude there must stay limited to reading files. Don't loosen that without the maintainer's say-so.
-- **Exception, the review workflow file:** the Claude action skips the review (the check still goes green, with no comment) unless `.github/workflows/claude-review.yml` in the PR matches the copy on `main`, the default branch. So a change to that file needs two PRs with identical content, one into `dev` and one from a branch off `main` into `main`. This is the only case where a branch is cut from `main`.
+- **A PR that changes `claude-review.yml` is not reviewed by it.** The Claude action skips the review (the check still goes green, with no comment) unless the file in the PR matches the copy on `main`. That is expected; reviews resume once the change is merged.
 
 ## Architecture
 Keep each concern in its own layer:
@@ -105,7 +107,7 @@ Keep each concern in its own layer:
 
 ## After each verified step
 1. Run `npm run build`.
-2. Commit to the working branch and push it (never directly to `dev` or `main`).
+2. Commit to the working branch and push it (never directly to `main`).
 3. Update `docs/FIRST_GRADE_ROADMAP.md` (status and change log, newest at the bottom) and `docs/ANDROID_PARITY_TODO.md`, saying how each item was verified: build, browser or physical TV.
 4. Refresh `docs/HANDOFF.md` so the next session starts from the current state.
 5. If a user-visible feature shipped or a limitation was removed, update the Features or Known limitations section of `README.md`. The README is public and user-facing: keep build and setup material in `CONTRIBUTING.md`, brand material in `brand/README.md`, and personal device or server details out of both. Update the README Availability table whenever a store submission or release happens.

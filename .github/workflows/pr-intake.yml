@@ -215,6 +215,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      checks: read           # read the Build check result for the reviewer
     env:
       PR_NUMBER: ${{ needs.triage.outputs.number }}
       HEAD_SHA: ${{ needs.triage.outputs.head_sha }}

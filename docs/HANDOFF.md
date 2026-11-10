@@ -1,6 +1,6 @@
 # Handoff: Hopper for LG webOS
 
-Last updated 2026-11-10 (issue-fix skill, automated PR review, build check and fork PR intake added).
+Last updated 2026-11-10 (PR automation added; flow flattened to branch → `main`, `dev` retired).
 
 ## Read first (in order)
 1. `CLAUDE.md`: hard rules (no bulk overwrites; Android TV is the reference; native Silo API only), architecture, TV navigation rules and webOS gotchas.
@@ -11,7 +11,7 @@ Last updated 2026-11-10 (issue-fix skill, automated PR review, build check and f
 
 ## Where things stand
 - **App:** Hopper, `com.hopperapp.hopper` v0.3.0, pairing service `com.hopperapp.hopper.service`. React 19 + TS + Vite, packaged with `@webos-tools/cli`.
-- **Recent work** (all on `dev`):
+- **Recent work** (all on `main`):
   - Browse, Continue Watching and Details performance.
   - Faster playback start.
   - `ResumeProgress` time-left ring.
@@ -23,19 +23,19 @@ Last updated 2026-11-10 (issue-fix skill, automated PR review, build check and f
 - **Uncommitted on purpose:** `.claude/settings.json` deletion is unrelated. Do not stage it.
 
 ## Issue and PR workflow (added 2026-11-10)
-The maintainer's step-by-step is `docs/MAINTAINING.md`; contributors read `CONTRIBUTING.md`.
-- **Flow for every change:** new branch off `dev` → PR into `dev` → release PR `dev` → `main` after TV testing. No direct commits to `dev` or `main`. The full procedure is in `CLAUDE.md` under Development procedure.
-- **`fix-issue` skill** (`.claude/skills/fix-issue/`): triages open issues, investigates, fixes on a branch off `dev` and drafts the PR. `.gitignore` lets `.claude/skills/` through; the rest of `.claude/` stays ignored. Not yet used on a real issue.
-- **`claude-review.yml`** (PRs from branches in this repo): reviews non-draft PRs into `dev` (may push `review: ` fix commits) and `main` (comment only).
+The maintainer's step-by-step, including what is automatic and what is manual, is `docs/MAINTAINING.md`. Contributors read `CONTRIBUTING.md`.
+- **Flow for every change:** new branch off `main` → PR into `main`. `main` is the only long-lived branch; the `dev` branch was retired on 2026-11-10 and everything on it was merged into `main`. No direct commits to `main`. The full procedure is in `CLAUDE.md` under Development procedure.
+- **`fix-issue` skill** (`.claude/skills/fix-issue/`): triages open issues, investigates, fixes on a branch off `main` and drafts the PR. `.gitignore` lets `.claude/skills/` through; the rest of `.claude/` stays ignored. Not yet used on a real issue.
+- **`claude-review.yml`** (PRs from branches in this repo): full review that may push `review: ` fix commits.
   - Confirmed on PR #3: runs end to end, updates one summary comment per PR, and reads the PR description from `.claude-review/pr-description.md`.
-  - It must be identical on `main`, the default branch, or the action skips the review with a green check and no comment.
-  - Still unconfirmed: that a `review: ` fix commit lands on the PR branch and does not start a second review. PR #3 had nothing to fix.
-- **`ci.yml`:** Build check (`npm ci`, `npm run build`) on every PR and on pushes to `dev` and `main`. No secrets.
-- **`pr-intake.yml`:** `triage` labels every PR (size, area, `external`), moves fork PRs from `main` to `dev` and welcomes outside contributors. `external-review` is a read-only Claude review for fork PRs: Claude gets the base branch plus the diff as a file and can only read; a script posts the result. First-time contributors need the `claude-review` label once.
-  - Checked so far: workflow lint, and the two inline scripts against a mocked GitHub API. Not yet run on GitHub. No fork PR exists to test with; use "Run workflow" with a PR number to exercise the review path.
-  - Unverified assumptions to watch on the first run: that the Claude action accepts `workflow_dispatch` and `pull_request_target` with `github_token` and no `id-token` permission, and that `structured_output` is populated (the post step falls back to the execution file).
-- **Issue forms and PR template** in `.github/`. They take effect from `main`.
-- **Before going public:** branch protection on `dev` and `main` requiring the `build` check, and the fork-workflow approval setting. See `docs/MAINTAINING.md`.
+  - A PR that changes this file is not reviewed by it (the action requires the file to match `main`).
+  - Still unconfirmed: that a `review: ` fix commit lands on the PR branch and does not start a second review. No PR has needed a fix yet.
+- **`ci.yml`:** Build check (`npm ci`, `npm run build`) on every PR and on pushes to `main`. No secrets. Confirmed on PR #3.
+- **`pr-intake.yml`:** `triage` labels every PR (size, area, `external`) and welcomes outside contributors. `external-review` is a read-only Claude review for fork PRs: Claude gets `main` plus the diff as a file and can only read; a script posts the result. First-time contributors need the `claude-review` label once.
+  - Confirmed on GitHub with a manual run against PR #3 (Actions → PR intake → Run workflow): triage labelled the PR, Claude ran with read-only tools, returned its structured result, and the script posted the summary as `github-actions[bot]`.
+  - Still unconfirmed: a real fork PR (none exists yet), the `claude-review` label path, and inline comments (that review had no findings; the script falls back to listing them in the summary if GitHub rejects them).
+- **Issue forms and PR template** in `.github/`.
+- **Needs the maintainer when the repository goes public:** branch protection on `main` requiring the `build` check (GitHub does not offer it on a private repository on the free plan), and the fork-workflow approval setting. Steps are in `docs/MAINTAINING.md` under Settings.
 
 ## Open items
 
@@ -63,7 +63,7 @@ The maintainer's step-by-step is `docs/MAINTAINING.md`; contributors read `CONTR
 - Evaluate Android TV's Watch Party, which is experimental and disabled in Android release builds. Don't claim parity unless the full server-backed room workflow and remote focus/back behaviour are implemented.
 
 ## Working notes
-- **Before you change anything:** read the matching Android source in `silo-android/androidTvApp/`. Make targeted edits only. Work on a branch off `dev` (see Development procedure in `CLAUDE.md`). Run `npm run build`, then commit and push the branch after each verified step, and get it into `dev` through a pull request. Update the roadmap and parity TODO with what was verified and how (build, browser or physical TV).
+- **Before you change anything:** read the matching Android source in `silo-android/androidTvApp/`. Make targeted edits only. Work on a branch off `main` (see Development procedure in `CLAUDE.md`). Run `npm run build`, then commit and push the branch after each verified step, and get it into `main` through a pull request. Update the roadmap and parity TODO with what was verified and how (build, browser or physical TV).
 - **webOS Chrome 87:**
   - No `:has()`.
   - SVG CSS transforms need `transform-box: fill-box`.

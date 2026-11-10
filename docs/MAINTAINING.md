@@ -1,56 +1,75 @@
 # Maintaining Hopper
 
-How changes get from an idea to `main`, what the automation does, and what is left for the maintainer. Contributor-facing instructions are in [`CONTRIBUTING.md`](../CONTRIBUTING.md).
+What the automation does on its own, and what is left for the maintainer. Contributor-facing instructions are in [`CONTRIBUTING.md`](../CONTRIBUTING.md).
 
 ```
-branch off dev (yours, or a contributor's fork)  ──PR──►  dev  ──release PR after TV testing──►  main
+new branch off main (yours, or a contributor's fork)  ──pull request──►  main
 ```
 
-## What runs on a pull request
+There is one long-lived branch, `main`. Every change arrives through a pull request, and nothing is committed to `main` directly.
+
+## At a glance: automatic or manual
+
+| Step | Your own PR | PR from a fork |
+| --- | --- | --- |
+| Create the branch and make the change | **You** (or `/fix-issue`) | Contributor |
+| Open the pull request | **You** | Contributor |
+| Build check | Automatic | Automatic. **You** click **Approve and run** for a first-time contributor |
+| Size, area and `external` labels | Automatic | Automatic |
+| Welcome comment explaining the process | Not posted | Automatic |
+| Claude review: summary comment and inline suggestions | Automatic | Automatic for returning contributors. **You** add the `claude-review` label once for a first-time contributor |
+| Small fixes pushed to the branch | Automatic (`review: ` commits) | Not possible. The contributor applies suggestions, or **you** push to their branch |
+| Re-review after each push | Automatic | Automatic once the first review has run |
+| Read the review and decide | **You** | **You** |
+| Test on a TV | **You**, when the change affects the app | **You** |
+| Merge | **You** | **You** |
+| Delete the branch after merging | Automatic if enabled (see Settings) | Not needed |
+
+## Your own change, step by step
+
+1. **You:** branch off `main`: `git fetch origin main && git checkout -b <type>/<slug> origin/main`. For a GitHub issue, run `/fix-issue <number>` in Claude Code and it does steps 1 to 3 and drafts the PR text.
+2. **You:** make the change and run `npm run build`.
+3. **You:** commit, push the branch, and open a pull request into `main`. Fill in the template.
+4. **Automatic:** **Build** runs, the PR is labelled, and **Claude PR review** starts. It takes a few minutes.
+5. **Automatic:** the reviewer posts one **Claude review** comment (verdict, a table of what it checked, what it changed) and inline suggestions. It may push `review: ` commits with small fixes.
+6. **You:** pull, so you have any `review: ` commits. Read the summary, then apply or dismiss the inline suggestions. Each push is reviewed again and the same comment is updated.
+7. **You:** if the change affects the app, test on a TV from the PR branch: `WEBOS_DEVICE=<name> npm run webos:deploy`.
+8. **You:** merge.
+
+Draft pull requests are not reviewed. Marking one ready for review starts the review.
+
+## A pull request from a fork, step by step
+
+1. **Automatic:** the PR is labelled (`external`, size, area) and the contributor gets a comment explaining what happens next.
+2. **Automatic, or you:** **Build** runs. For a first-time contributor GitHub holds it until you click **Approve and run** on the PR.
+3. **Automatic, or you:**
+   - *Returning contributor* (has had a PR merged): the Claude review runs straight away.
+   - *First-time contributor:* the PR gets the `awaiting-review-approval` label. Glance at the diff for anything obviously hostile, then add the `claude-review` label. The review runs now and after every later push.
+4. **Automatic:** the reviewer posts a **Claude review** comment and inline suggestions. It reads the diff only; it does not build or run the contributor's code, and it cannot push to a fork.
+5. **Contributor:** applies the suggestions from the **Files changed** tab. Each push is reviewed again.
+   - To fix something yourself: `gh pr checkout <number>`, commit and push. This works when the contributor left **Allow edits by maintainers** ticked.
+6. **You:** test on a TV: `gh pr checkout <number>`, then `WEBOS_DEVICE=<name> npm run webos:deploy`.
+7. **You:** merge.
+
+To review any pull request on demand through the read-only path: **Actions → PR intake → Run workflow**, and enter the PR number.
+
+## Issues
+
+- **Automatic:** issues opened from the bug or feature form are labelled `bug` or `enhancement`. The bug form requires the TV model, webOS version and steps.
+- **You:** run `/fix-issue` in Claude Code to triage open issues. It lists them by severity and effort, investigates the one you pick, fixes it on a branch and drafts the PR. There is no automatic issue bot.
+
+## Releases
+
+`main` is always the latest accepted code. To cut a release, tag a commit on `main` that you have tested on a TV, and update the README Availability table.
+
+## What each workflow does
 
 | Workflow | Runs on | What it does |
 | --- | --- | --- |
-| **Build** (`ci.yml`) | Every PR, and pushes to `dev` and `main` | `npm ci` and `npm run build`. No secrets, so it is safe on outside code. |
-| **PR intake** (`pr-intake.yml`), `triage` job | Every PR | Adds size, area and `external` labels. Moves fork PRs opened against `main` over to `dev`. Welcomes outside contributors. Never checks out PR code. |
-| **PR intake**, `external-review` job | PRs from forks | Read-only Claude review: a summary comment with a checks table, plus inline suggestions. Cannot build, run or push. |
-| **Claude PR review** (`claude-review.yml`) | PRs from branches in this repository | Full Claude review. Into `dev` it also pushes small `review: ` fix commits. Into `main` it only comments. |
-
-Draft PRs are not reviewed. Marking a PR ready for review starts the review.
-
-## Your own change
-
-1. Branch off `dev`: `git fetch origin dev && git checkout -b <type>/<slug> origin/dev`. For a GitHub issue, run `/fix-issue <number>` in Claude Code and it does this for you.
-2. Make the change, run `npm run build`, commit and push the branch.
-3. Open a PR into `dev`. The template asks how it was tested.
-4. Wait for **Build** and **Claude PR review**. Pull before adding commits, because the reviewer may have pushed `review: ` fixes.
-5. Read the review summary. Apply or dismiss any inline suggestions.
-6. Test on a TV if the change needs it (`WEBOS_DEVICE=<name> npm run webos:deploy` from the PR branch).
-7. Merge.
-
-## A pull request from a fork
-
-What happens without you:
-
-- The PR is labelled, and moved to `dev` if it was opened against `main`.
-- The contributor gets a comment explaining the process.
-- **Build** runs. For a first-time contributor GitHub may hold it until you click **Approve and run** (see Settings below).
-- If the author has had a PR merged before, the Claude review runs on open and on every push.
-
-What you do:
-
-1. **First-time contributor only:** the PR gets the `awaiting-review-approval` label. Glance at the diff for anything obviously hostile, then add the `claude-review` label. The review runs now and on every later push to that PR.
-2. Read the **Claude review** comment: the verdict, the checks table, and the "Still needs a TV" steps.
-3. The contributor applies the inline suggestions from the **Files changed** tab. The reviewer cannot push to a fork. If you would rather fix it yourself, `gh pr checkout <number>`, commit and push; this works when the contributor left **Allow edits by maintainers** ticked.
-4. Test on a TV: `gh pr checkout <number>`, then `WEBOS_DEVICE=<name> npm run webos:deploy`.
-5. Merge into `dev`.
-
-To review any PR on demand through the read-only path, open **Actions → PR intake → Run workflow** and enter the PR number.
-
-## Releasing
-
-1. Open a PR from `dev` into `main`.
-2. **Claude PR review** runs as a release check, comment only.
-3. Merge once everything going out has been tested on a TV. Update the README Availability table for the release.
+| **Build** (`ci.yml`) | Every PR, and pushes to `main` | `npm ci` and `npm run build`. No secrets, so it is safe on outside code. |
+| **PR intake** (`pr-intake.yml`), `triage` job | Every PR | Adds labels and welcomes outside contributors. Never checks out PR code. |
+| **PR intake**, `external-review` job | PRs from forks, and manual runs | Read-only Claude review. Cannot build, run or push. |
+| **Claude PR review** (`claude-review.yml`) | PRs from branches in this repository | Full Claude review: runs the build, pushes small `review: ` fixes, comments. |
 
 ## Labels
 
@@ -58,39 +77,60 @@ To review any PR on demand through the read-only path, open **Actions → PR int
 | --- | --- | --- |
 | `external` | Triage | PR from a fork |
 | `awaiting-review-approval` | Triage | Fork PR from a first-time contributor; add `claude-review` to start the review |
-| `claude-review` | You | You approve automated review of this fork PR |
+| `claude-review` | **You** | You approve automated review of this fork PR |
 | `size/XS` … `size/XL` | Triage | Changed lines, not counting `package-lock.json` |
 | `area: …`, `documentation` | Triage | Which parts of the code the PR touches |
-| `bug`, `enhancement` | Issue forms | Set when an issue is opened from a template |
+| `bug`, `enhancement` | Issue forms | Set when an issue is opened from a form |
 
 Triage creates any label that does not exist yet.
-
-## Issues
-
-Issues come in through the bug and feature forms in `.github/ISSUE_TEMPLATE/`, which collect the TV model, webOS version and steps up front. There is no automatic issue bot. To work through open issues, run `/fix-issue` in Claude Code: it triages them, investigates the one you pick, fixes it on a branch and drafts the PR.
 
 ## Why fork PRs are reviewed differently
 
 A fork PR is code and text from someone outside the project, and the review runs with this repository's Claude token. So for forks:
 
-- Claude never sees PR code as a checkout. It gets the base branch plus the PR as a diff file, and its only tools are reading files. A script posts its result.
-- First-time contributors need the `claude-review` label once, so a stranger cannot spend the Claude subscription's usage or aim crafted text at the reviewer without a maintainer looking first.
-- To review every fork PR with no approval step, set the repository variable `CLAUDE_REVIEW_ALL_FORKS` to `true` (Settings → Secrets and variables → Actions → Variables). The read-only limits still apply.
+- Claude never gets PR code as a checkout. It gets `main` plus the PR as a diff file, and its only tools are reading files. A script posts its result.
+- First-time contributors need the `claude-review` label once, so a stranger cannot spend the Claude subscription's usage, or aim crafted text at the reviewer, without a maintainer looking first.
+- To review every fork PR with no approval step, set the repository variable `CLAUDE_REVIEW_ALL_FORKS` to `true` (**Settings → Secrets and variables → Actions → Variables**). The read-only limits still apply.
 
 ## Settings
 
-Done:
+Already done:
 
 - Claude GitHub App installed, and the `CLAUDE_CODE_OAUTH_TOKEN` secret added. The token comes from `claude setup-token` and uses the maintainer's Claude subscription.
 
-Before going public:
+Recommended now:
 
-- **Settings → Actions → General → Fork pull request workflows:** choose who needs approval before **Build** runs on their PR. "Require approval for first-time contributors" is GitHub's default and costs one click per new contributor.
-- **Settings → Branches:** protect `dev` and `main`: require a pull request and require the `build` check to pass.
-- Leave **Settings → Actions → General → Workflow permissions** on read-only. Each workflow asks for what it needs.
+- **Settings → General → Pull Requests → Automatically delete head branches:** on. Merged branches are removed for you.
+
+### Branch protection for `main`
+
+GitHub only offers this on public repositories, or private ones on a paid plan. Set it up when the repository goes public.
+
+1. **Settings → Branches → Add branch ruleset** (or **Add classic branch protection rule**).
+2. Name it `main`, set enforcement to **Active**, and under target branches choose **Include default branch**.
+3. Turn on:
+   - **Restrict deletions**
+   - **Block force pushes**
+   - **Require a pull request before merging**, with required approvals set to **0**. A sole maintainer cannot approve their own pull request, so any higher number blocks every merge.
+   - **Require status checks to pass**, then add the check named **`build`**. It only appears in the search box after the Build workflow has run at least once.
+4. Leave the bypass list empty so the rule applies to you too, or add the repository admin role if you want an escape hatch.
+5. Save.
+
+Do not add the Claude review as a required check. It does not run on PRs that change its own workflow file, and a required check that never reports blocks the merge.
+
+### Fork pull request workflows
+
+This decides whose pull requests need your click before **Build** runs.
+
+1. **Settings → Actions → General**.
+2. Under **Approval for running fork pull request workflows from contributors**, choose **Require approval for first-time contributors**. This is GitHub's default: one click per new contributor, none after their first merged PR.
+3. Under **Workflow permissions**, keep **Read repository contents and packages permissions**. Each workflow asks for what it needs.
+4. Save.
+
+While the repository is private, forks can only be made by people you have given access to, and **Run workflows from fork pull requests** in the same page controls whether their PRs run workflows at all.
 
 ## Changing the workflows
 
-- `claude-review.yml` only runs when the copy in the PR is identical to the copy on `main`, the default branch. A change to it needs two PRs with the same content, into `dev` and into `main`.
-- `pr-intake.yml` runs from the base branch of the PR, so a change takes effect for PRs into `dev` once it is on `dev`. "Run workflow" uses the copy on the branch you pick, which is how to test a change before merging it.
+- `claude-review.yml` only runs when the copy in the PR is identical to the copy on `main`. So a PR that changes that file is not reviewed by it: the check goes green in seconds with no comment. That is expected. Reviews resume once the change is merged.
+- `pr-intake.yml` always runs the copy on `main`, so a change takes effect after it is merged. To try a change first, use **Run workflow** and pick your branch.
 - Issue forms and the PR template take effect from `main`.
