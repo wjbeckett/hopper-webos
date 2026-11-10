@@ -9,11 +9,11 @@ Hopper (`com.hopperapp.hopper`) is an LG webOS TV client for the Silo media serv
 
 ## Hard rules
 1. **No bulk overwrites.** Never do bulk checkouts, resets, restores, regenerations or whole-tree copies over `src/`. Make targeted edits to specific files, and rewrite a whole file only when that single file needs it. Commit to your working branch and push it after each verified step so work never lives only in the working tree (see Development procedure).
-2. **Android TV is the reference.** The Android TV app in `silo-android/androidTvApp/` sets the design and behaviour for every screen, menu, focus/back flow and server action. That directory is git-ignored and may need a local checkout. Read the relevant Android source before building or changing anything, and match it as closely as webOS allows. Deviate only where the user has explicitly decided to (see `docs/FIRST_GRADE_ROADMAP.md` and `docs/RECONSTRUCTION.md`). Rebuild Android transitions with webOS-safe CSS and DOM behaviour; don't assume Compose behaviour carries over.
+2. **Android TV is the reference.** The Android TV app in `silo-android/androidTvApp/` sets the design and behaviour for every screen, menu, focus/back flow and server action. That directory is git-ignored and may need a local checkout. Read the relevant Android source before building or changing anything, and match it as closely as webOS allows. Deviate only where the user has explicitly decided to (see "Explicitly not outstanding" in `docs/ANDROID_PARITY_TODO.md`, and `docs/RECONSTRUCTION.md`). Rebuild Android transitions with webOS-safe CSS and DOM behaviour; don't assume Compose behaviour carries over.
 3. **Native Silo API only.** Never use Jellyfin-compatible endpoints, headers, models or playback URLs. Mirror Android's documented native Silo contracts rather than inventing routes.
 4. **Diagnostics stay local.** The Silo maintainer won't accept reports from third-party clients. Never integrate with the hosted diagnostics collector, and never imply that the app collects or uploads reports.
 5. **Don't overclaim parity.** Before claiming parity, compare every exposed destination and workflow against Android TV, and name anything unimplemented or not verified against a server.
-6. **Update Documentation.** After every run, update relevant documentation with recent changes or closed off items (Parity TODO, Readme, etc)
+6. **Update the docs in the same change.** Every run that changes the repository, whether a feature, a fix, a cleanup or a workflow change, also updates every doc it makes out of date, in the same branch and pull request. Use the table under "Docs to keep current". A change is not finished, and its PR is not ready, until that is done.
 
 ## Commands
 ```bash
@@ -109,10 +109,25 @@ Keep each concern in its own layer:
 
 ## After each verified step
 1. Run `npm run build`.
-2. Commit to the working branch and push it (never directly to `main`).
-3. Update `docs/FIRST_GRADE_ROADMAP.md` (status and change log, newest at the bottom) and `docs/ANDROID_PARITY_TODO.md`, saying how each item was verified: build, browser or physical TV.
-4. Refresh `docs/HANDOFF.md` so the next session starts from the current state.
-5. If a user-visible feature shipped or a limitation was removed, update the Features or Known limitations section of `README.md`. The README is public and user-facing: keep build and setup material in `CONTRIBUTING.md`, brand material in `brand/README.md`, and personal device or server details out of both. Update the README Availability table whenever a store submission or release happens.
+2. Update the docs the step affects (table below).
+3. Commit to the working branch and push it (never directly to `main`).
+4. When the change is complete, open the pull request (see Development procedure). Its "Docs updated" section lists the docs you changed, or says "None needed" and why.
+
+## Docs to keep current
+There is no change log file. The history is the merged pull requests, so each PR description must say what changed and how it was tested.
+
+| Doc | Holds | Update it when |
+| --- | --- | --- |
+| `docs/HANDOFF.md` | Current state, release blockers, open items, working notes | Every change. Move finished items out, add new open items, and correct anything the change made untrue. Say how each thing was verified: build, browser, live server or physical TV |
+| `docs/ANDROID_PARITY_TODO.md` | Feature gaps against Android TV, what is deliberately not built, and per-item verification status | A gap is closed, narrowed or found, or a decision is made not to build something |
+| `README.md` | What users get: Features, Known limitations, Availability | A user-visible feature ships, a limitation is removed or added, or a store submission or release happens |
+| `CONTRIBUTING.md` | Setup, browser development, TV deploy, PR conventions | Commands, tooling, scripts or contribution rules change |
+| `docs/MAINTAINING.md` | What the PR automation does and the maintainer's steps | A workflow in `.github/workflows/`, a label or a repository setting changes |
+| `CLAUDE.md` | Rules, commands, architecture and procedure for agents | Architecture, commands, rules or this table change |
+| `brand/README.md`, `brand/store/LISTING.md` | Brand sources, render pipeline, store listing and submission checklist | Artwork, the render pipeline or the listing changes |
+| `.claude/skills/*/SKILL.md` | Agent skills | The procedure a skill describes changes |
+
+The README is public and user-facing: keep build and setup material in `CONTRIBUTING.md`, brand material in `brand/README.md`, and personal device or server details out of both.
 
 ## Local notes
 - Never commit personal server URLs, tokens or `localStorage` backups. Any change to a TV's `localStorage` must back it up first and keep `silo-webos-device-id`.

@@ -1,10 +1,10 @@
 # Handoff: Hopper for LG webOS
 
-Last updated 2026-11-10 (PR automation added; flow flattened to branch → `main`, `dev` retired).
+Last updated 2026-11-10 (`docs/FIRST_GRADE_ROADMAP.md` retired; its release blockers moved here).
 
 ## Read first (in order)
 1. `CLAUDE.md`: hard rules (no bulk overwrites; Android TV is the reference; native Silo API only), architecture, TV navigation rules and webOS gotchas.
-2. `docs/FIRST_GRADE_ROADMAP.md`: verified features, release blockers and the change log (newest entries at the bottom).
+2. This file: current state, release blockers and open items. There is no change log file; the history is the merged pull requests (`gh pr list --state merged`).
 3. `docs/ANDROID_PARITY_TODO.md`: prioritised parity gaps.
 4. `brand/README.md` and `brand/store/LISTING.md`: brand pipeline and store submission state.
 5. `CONTRIBUTING.md`: setup, browser dev, TV deploy and PR conventions; `docs/MAINTAINING.md`: what the PR automation does and the maintainer's steps (public-facing; the README is user-facing only and carries the Availability table to update on store submission or release).
@@ -17,16 +17,16 @@ Last updated 2026-11-10 (PR automation added; flow flattened to branch → `main
   - `ResumeProgress` time-left ring.
   - Rebrand to Hopper.
   - Aurora hopper icon, splash, store icon, banner and the `brand/render.sh` pipeline.
-  - Animated startup splash. Reworked on 2026-11-10 (branch `feat/splash-animation`): the native splash is the backdrop only, and the tiles drop into the hopper one at a time.
+  - Animated startup splash. Reworked on 2026-11-10: the native splash is the backdrop only, and the tiles drop into the hopper one at a time.
   - Four store screenshots and a draft listing.
-  - Licensed `AGPL-3.0-or-later` (branch `chore/agpl-license`, PR #11). Open: whether to reserve the Hopper name and `brand/` artwork with a `TRADEMARK.md`, as Silo does.
+  - Licensed `AGPL-3.0-or-later`. Open: whether to reserve the Hopper name and `brand/` artwork with a `TRADEMARK.md`, as Silo does.
 - **Verified on a physical TV:** BedroomTV, webOS on Chrome 87. The rebranded app installs and launches. The splash animation lands at 754,180 412×521, matching the native splash.
 - **Uncommitted on purpose:** `.claude/settings.json` deletion is unrelated. Do not stage it.
 
 ## Issue and PR workflow (added 2026-11-10)
 The maintainer's step-by-step, including what is automatic and what is manual, is `docs/MAINTAINING.md`. Contributors read `CONTRIBUTING.md`.
 - **Flow for every change:** new branch off `main` → PR into `main`. `main` is the only long-lived branch; the `dev` branch was retired on 2026-11-10 and everything on it was merged into `main`. No direct commits to `main`. The full procedure is in `CLAUDE.md` under Development procedure.
-- **Claude Code opens the PR for every change** (rule added 2026-11-10, branch `chore/pr-workflow-unslop`): one branch and one PR per change, opened ready for review once the work is verified and pushed. Commit messages carry no `Co-Authored-By` or "Generated with" lines.
+- **Claude Code opens the PR for every change** (rule added 2026-11-10): one branch and one PR per change, opened ready for review once the work is verified and pushed. Commit messages carry no `Co-Authored-By` or "Generated with" lines.
 - **`unslop` skill** (`.claude/skills/unslop/`, copied from the Silo server repository, AGPL-3.0, see its `SOURCE.md`): a final pass on PR text, issue and PR comments and review text. Both review workflows are told to apply it. Not yet seen running in a workflow.
 - **`fix-issue` skill** (`.claude/skills/fix-issue/`): triages open issues, investigates, fixes on a branch off `main` and opens the PR. `.gitignore` lets `.claude/skills/` through; the rest of `.claude/` stays ignored. Not yet used on a real issue.
 - **`claude-review.yml`** (PRs from branches in this repo): full review that may push `review: ` fix commits.
@@ -40,6 +40,20 @@ The maintainer's step-by-step, including what is automatic and what is manual, i
 - **Issue forms and PR template** in `.github/`.
 - **Needs the maintainer when the repository goes public:** branch protection on `main` requiring the `build` check (GitHub does not offer it on a private repository on the free plan), and the fork-workflow approval setting. Steps are in `docs/MAINTAINING.md` under Settings.
 
+## Release blockers
+What stands between the app and a store release. Update an item when its state changes.
+
+1. **Playback contract:** validate the protocol-v3 planner and replan handling against a live server and the official clients' behaviour.
+2. **Session expiry:** token refresh is implemented (`POST /api/v2/auth/refresh`, single-flight per server and user). Open: a forced-expiry test against a live server, and the expired-session and network-loss screens.
+3. **Catalog contract:** validate the native catalog endpoints and response models against a live server.
+4. **Profiles:** create, edit and delete are implemented and build-checked. Invite-code sign-up is implemented and checked against a mock server. Open: live-server validation and a TV check for all of them.
+5. **Progress reporting:** validate playback progress and stop reporting and the watched thresholds against a live server.
+6. **Subtitles and skip controls:** implemented. Open: cue styling on a TV across webOS versions, and the audio and subtitle pickers against a live server.
+7. **Codec matrix:** validate codecs and containers on at least one older and one current webOS generation.
+8. **Automated tests:** none exist. Needed for navigation geometry, auth state, API parsing and player state.
+9. **Store submission:** icons, splash, banner, four screenshots and a draft listing are done (`brand/store/LISTING.md`). Open: the items under "Blocked on the user" below, an accessibility pass and LG's certification checklist.
+10. **Android TV comparison:** a destination-by-destination comparison on a physical TV has not been done. Known open points: Back does not always return to the originating screen, Home metadata enrichment and LG-remote focus transitions are unverified, and the sampled Home tint depends on artwork CORS behaviour that has not been checked on a TV. Feature gaps are in `docs/ANDROID_PARITY_TODO.md`.
+
 ## Open items
 
 ### Blocked on the user (do not attempt)
@@ -50,16 +64,15 @@ The maintainer's step-by-step, including what is automatic and what is manual, i
 - A privacy policy URL.
 
 ### Small, ready to pick up
-1. Done on branch `feat/parity-quick-wins` (2026-11-10): `--accent` is brand teal `#2DD4BF`.
-2. Cold-relaunch on the paired TV and confirm the reworked startup splash (backdrop-only native splash, then the animation from an empty stage, smooth on Chrome 87) and the top-nav `HopperLockup` in the live flow. The splash only shows when a server is saved; with no server the app opens on pairing.
-3. Optional: player screenshot via the TV's own screen capture, added to `brand/store/screenshots/05-player.png` and the listing.
+1. Cold-relaunch on the paired TV and confirm the reworked startup splash (backdrop-only native splash, then the animation from an empty stage, smooth on Chrome 87) and the top-nav `HopperLockup` in the live flow. The splash only shows when a server is saved; with no server the app opens on pairing.
+2. Optional: player screenshot via the TV's own screen capture, added to `brand/store/screenshots/05-player.png` and the listing.
 
-### Larger work (from the roadmap and parity TODO)
+### Larger work
 - Dedicated audiobook player:
   - Whole-book multi-part timeline and resume.
   - Chapters, bookmarks, sleep timer, speed and skip intervals.
 - "Translate description" on detail pages (needs the metadata-AI capability probe, pending-translation fields and a polled job; verify on a server with AI configured). Audiobook bookmarks.
-- Invite-code sign-up is implemented on branch `feat/parity-quick-wins` (`SignupScreen`). Still to do: a real sign-up on a live server with sign-ups enabled, and a remote/keyboard check on a TV.
+- Invite-code sign-up is implemented (`SignupScreen`). Still to do: a real sign-up on a live server with sign-ups enabled, and a remote/keyboard check on a TV.
 - Music library Genres tab (Android `TvLibraryTab.Genres`).
 - Expired-session and network-loss UX. Token refresh itself is implemented in `src/api/silo.ts`.
 - Codec/container matrix on an older and a current webOS generation.
@@ -68,7 +81,7 @@ The maintainer's step-by-step, including what is automatic and what is manual, i
 - Watch Party: evaluated 2026-11-10 and not implemented, by decision. Android hides it behind a Settings → Experimental toggle that is off by default in release builds (details in `ANDROID_PARITY_TODO.md`).
 
 ## Working notes
-- **Before you change anything:** read the matching Android source in `silo-android/androidTvApp/`. Make targeted edits only. Work on a branch off `main` (see Development procedure in `CLAUDE.md`). Run `npm run build`, then commit and push the branch after each verified step, and get it into `main` through a pull request. Update the roadmap and parity TODO with what was verified and how (build, browser or physical TV).
+- **Before you change anything:** read the matching Android source in `silo-android/androidTvApp/`. Make targeted edits only. Work on a branch off `main` (see Development procedure in `CLAUDE.md`). Run `npm run build`, then commit and push the branch after each verified step, and open a pull request into `main`. In the same change, update every doc it affects (the table under "Docs to keep current" in `CLAUDE.md`), saying what was verified and how (build, browser, live server or physical TV).
 - **webOS Chrome 87:**
   - No `:has()`.
   - SVG CSS transforms need `transform-box: fill-box`.
@@ -78,4 +91,4 @@ The maintainer's step-by-step, including what is automatic and what is manual, i
 - **TV helper scripts:** ad-hoc CDP scripts used for screenshots and server switching lived in `/tmp/cdp/` on the last workstation. They are not in the repo and may be gone. Anything that touches the TV's `localStorage` must back it up first and keep `silo-webos-device-id`.
 - **Tool runner:** shell heredocs have hung the agent tool runner. Use file edits or `sed`/`perl` instead.
 - **Personal data:** never commit personal server URLs, tokens or `localStorage` backups.
-- **Unused code fails the build** (since the 2026-11-10 cleanup, branch `chore/pre-public-cleanup`): `noUnusedLocals` and `noUnusedParameters` are on. `getBrowseCatalogPage` and `getBrowseFilterOptions` in `src/api/silo.ts` are unused on purpose (parked for Global Browse).
+- **Unused code fails the build** (since the 2026-11-10 cleanup): `noUnusedLocals` and `noUnusedParameters` are on. `getBrowseCatalogPage` and `getBrowseFilterOptions` in `src/api/silo.ts` are unused on purpose (parked for Global Browse).

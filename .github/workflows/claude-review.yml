@@ -122,8 +122,9 @@ jobs:
             8. Pairing service (services/pairing): ES5-style, no optional chaining, no ??.
             9. Privacy: no diagnostics upload, no personal server URLs, tokens or private
                library data.
-            10. Docs: the roadmap change log, ANDROID_PARITY_TODO, HANDOFF and README are
-                updated where the change calls for it, and nothing overclaims parity.
+            10. Docs: every doc the change makes out of date is updated in this PR (see
+                "Docs to keep current" in CLAUDE.md: HANDOFF, ANDROID_PARITY_TODO, README,
+                CONTRIBUTING, MAINTAINING, CLAUDE.md), and nothing overclaims parity.
             11. PR description: says how the change was tested (build, browser, live
                 server, physical TV).
 
