@@ -2,6 +2,9 @@
 
 <p align="center"><img src="out/store/hopper-icon-400.png" alt="Hopper icon" width="160"></p>
 
+> [!IMPORTANT]
+> This artwork is not under the AGPL. It is © the Hopper maintainer, all rights reserved (see [`NOTICE`](NOTICE) and [`TRADEMARK.md`](../TRADEMARK.md)). A fork you distribute must replace it.
+
 The mark shows poster tiles dropping into an aurora-gradient hopper. The hopper carries a negative-space play button, and the spout glows where the picture comes out.
 
 | Role | Colour |
@@ -63,4 +66,4 @@ page screenshot doesn't include. To include a player shot, use the TV's own capt
 
 The draft listing text is in `store/LISTING.md`.
 Check the sizes against the current LG Seller Lounge guide before you submit.
-"Hopper" has not been checked for trademark or store conflicts.
+"Hopper" has not been checked for conflicts with existing trademarks or store listings. `TRADEMARK.md` claims only unregistered (™) rights.
