@@ -85,9 +85,31 @@ function pinRailItem(rail: HTMLElement, element: HTMLElement) {
   railAnimations.set(rail, requestAnimationFrame(tick));
 }
 
+/**
+ * Rows marked data-slide (Home's rails) do not scroll. Their strip of cards is translated
+ * with a CSS transition, so a move is one style change and the compositor animates it; a
+ * scripted scroll cost a compositing update and a commit on every frame. Same middle lock
+ * as pinRailItem: the focused card is centred, and the row's ends clamp.
+ */
+function slideRailItem(rail: HTMLElement, element: HTMLElement) {
+  const strip = rail.firstElementChild as HTMLElement | null;
+  const wrap = element.closest<HTMLElement>(".media-card-wrap") ?? element;
+  if (!strip || wrap.parentElement !== strip) return;
+  const style = getComputedStyle(rail);
+  const view = rail.clientWidth - (Number.parseFloat(style.paddingLeft) || 0) - (Number.parseFloat(style.paddingRight) || 0);
+  const maxOffset = Math.max(0, strip.offsetWidth - view);
+  const centre = wrap.offsetLeft + wrap.offsetWidth / 2;
+  const offset = Math.round(Math.max(0, Math.min(maxOffset, centre - view / 2)));
+  if (strip.dataset.offset === String(offset)) return;
+  strip.dataset.offset = String(offset);
+  strip.style.transform = offset ? `translate3d(${-offset}px, 0, 0)` : "";
+  railStepUntil = performance.now() + RAIL_PIN_MS;
+}
+
 export function pinFocusedRailItem(element: HTMLElement) {
   const rail = element.closest<HTMLElement>(RAIL_SELECTOR);
-  if (rail && rail.scrollWidth > rail.clientWidth + 1) pinRailItem(rail, element);
+  if (rail?.dataset.slide === "true") slideRailItem(rail, element);
+  else if (rail && rail.scrollWidth > rail.clientWidth + 1) pinRailItem(rail, element);
 }
 
 /**
@@ -188,6 +210,10 @@ function focusElement(element: HTMLElement) {
     return;
   }
   const rail = element.closest<HTMLElement>(RAIL_SELECTOR);
+  if (rail?.dataset.slide === "true") {
+    slideRailItem(rail, element);
+    return;
+  }
   if (rail && rail.scrollWidth > rail.clientWidth + 1) {
     pinRailItem(rail, element);
     if (!element.closest(".home-rails")) element.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
@@ -724,6 +750,16 @@ export function installSpatialNavigation() {
 
     const mediaRail = current.closest<HTMLElement>(".media-rail");
     if (mediaRail && (direction === "left" || direction === "right")) {
+      // Sliding rows keep every card position in the DOM in order, so the neighbour is the
+      // next position along. No need to measure every card on the screen.
+      const wrap = current.closest<HTMLElement>(".media-card-wrap");
+      if (wrap && current.closest<HTMLElement>(".rail-track")?.dataset.slide === "true") {
+        const sibling = direction === "right" ? wrap.nextElementSibling : wrap.previousElementSibling;
+        const next = sibling?.querySelector<HTMLElement>("[data-tv-focusable='true']:not([disabled])");
+        if (next) focusElement(next);
+        event.preventDefault();
+        return;
+      }
       const railCards = focusables(".media-card").filter(card => card.closest(".media-rail") === mediaRail);
       focusAdjacent(current, railCards, direction);
       event.preventDefault();

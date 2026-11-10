@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { isFavorite, setFavorite, setWatched } from "../api/silo";
 import { applyWatchedState, publishWatchState, subscribeWatchState } from "../core/watchState";
@@ -37,7 +37,7 @@ function subtitle(item: SiloItem) {
   return [item.Type, item.ProductionYear].filter(Boolean).join(" · ") || "Media";
 }
 
-export function MediaCard({ session, item, image, onOpen, landscape = false, variant, square, caption }: Props) {
+export const MediaCard = memo(function MediaCard({ session, item, image, onOpen, landscape = false, variant, square, caption }: Props) {
   const browse = variant === "browse";
   const [live, setLive] = useState(item);
   const progress = Math.max(0, Math.min(100, live.UserData?.PlayedPercentage ?? 0));
@@ -160,4 +160,4 @@ export function MediaCard({ session, item, image, onOpen, landscape = false, var
     ) : null}
     </div>
   );
-}
+});

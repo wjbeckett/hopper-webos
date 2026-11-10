@@ -1,10 +1,9 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { UIEvent } from "react";
-import { backdropUrl, mediaLogoUrl } from "../api/silo";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { backdropUrl } from "../api/silo";
 import { focusFirstContentCard, focusNavigationTarget } from "../navigation/spatial";
 import { subscribeWatchState } from "../core/watchState";
+import { HomeHero, warmBackdrop, type HomeHeroHandle } from "./HomeHero";
 import { MediaRail } from "./MediaRail";
-import { isResumable, ResumeProgress } from "./ResumeProgress";
 import type { HomeRail, Session, SiloItem } from "../types";
 
 type Props = {
@@ -17,105 +16,37 @@ type Props = {
   emptyTitle: string;
   emptyDescription: string;
   emptyMark?: string;
+  /**
+   * Remember which card had focus under this key and return to it when the screen is shown
+   * again with nothing focused (Back from a details page). Omit for no memory.
+   */
+  restoreKey?: string;
 };
 
-const ambientTintCache = new Map<string, string | null>();
+/** Last focused card per restoreKey: the row's id and the card's position in it. */
+const rememberedFocus = new Map<string, { railId: string; index: number }>();
 
 // The screen unmounts while a row's full page is open, so the row to return
 // focus to lives at module level (Android arms an explore-all return the same
 // way). Consumed once by the next mount that finds the row's Explore card.
 let pendingExploreReturn: string | null = null;
 
-function sampleAmbientTint(url: string): Promise<string | null> {
-  if (ambientTintCache.has(url)) return Promise.resolve(ambientTintCache.get(url) ?? null);
-  // TV: a second CORS fetch, a canvas decode and a pixel read per backdrop cost more than the tint adds.
-  if (/Web0S|webOS/i.test(navigator.userAgent)) return Promise.resolve(null);
-
-  return new Promise(resolve => {
-    const cacheFailure = (message: string) => {
-      ambientTintCache.set(url, null);
-      console.warn(message);
-      resolve(null);
-    };
-    const image = new Image();
-    image.crossOrigin = "anonymous";
-    image.onload = () => {
-      try {
-        const canvas = document.createElement("canvas");
-        canvas.width = 64;
-        canvas.height = 36;
-        const context = canvas.getContext("2d", { willReadFrequently: true });
-        if (!context) {
-          cacheFailure("Home backdrop tint unavailable: canvas context could not be created.");
-          return;
-        }
-        context.drawImage(image, 0, 0, canvas.width, canvas.height);
-        const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-        let red = 0;
-        let green = 0;
-        let blue = 0;
-        let count = 0;
-        for (let index = 0; index < pixels.length; index += 4) {
-          if (pixels[index + 3] === 0) continue;
-          red += pixels[index];
-          green += pixels[index + 1];
-          blue += pixels[index + 2];
-          count++;
-        }
-        if (!count) {
-          cacheFailure("Home backdrop tint unavailable: canvas contained no readable pixels.");
-          return;
-        }
-
-        red /= count * 255;
-        green /= count * 255;
-        blue /= count * 255;
-        const luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
-        const scale = luminance <= 0.001
-          ? 0
-          : luminance > 0.22
-            ? 0.22 / luminance
-            : Math.max(1, 0.22 / Math.max(luminance, 0.05));
-        const tint = [
-          red,
-          green,
-          blue
-        ].map(channel => Math.round(Math.max(0, Math.min(1, channel * scale)) * 255)).join(", ");
-        ambientTintCache.set(url, tint);
-        if (ambientTintCache.size > 256) {
-          const oldest = ambientTintCache.keys().next().value;
-          if (oldest) ambientTintCache.delete(oldest);
-        }
-        resolve(tint);
-      } catch {
-        cacheFailure("Home backdrop tint unavailable: canvas sampling failed.");
-      }
-    };
-    image.onerror = () => cacheFailure("Home backdrop tint unavailable: cross-origin image load failed.");
-    image.src = url;
-  });
-}
-
-const warmBackdrops = new Map<string, HTMLImageElement>();
-
-/** LG webOS TV panels: decode, raster and composite budget is far below a desktop browser. */
-const isTv = () => /Web0S|webOS/i.test(navigator.userAgent);
-
 /**
- * TV only (Plex-style): the hero backdrop waits until focus has rested this long,
- * while the title/logo copy still follows focus immediately. Rapid scrolling then
- * never decodes or paints a backdrop it is about to leave.
+ * Only rows near the focused one render their cards; the rest keep their heading and
+ * reserved height. A TV has little to spare for rows nobody can see: every mounted card
+ * costs style, layout, compositing and image memory on each key press.
+ *
+ * NEEDED is what must exist the moment focus lands on a row: the rows on screen. IDLE is
+ * the wider range mounted once the remote has been quiet, so the next press up or down
+ * finds its row already built and the press itself mounts nothing. Rows stay built once
+ * they are, up to MAX_LIVE_ROWS, so going back over them costs nothing either.
  */
-const TV_BACKDROP_SETTLE_MS = 450;
-
-function warmBackdrop(url: string) {
-  if (!url || warmBackdrops.has(url) || isTv()) return Promise.resolve();
-  const image = new Image();
-  image.decoding = "async";
-  warmBackdrops.set(url, image);
-  image.src = url;
-  return image.decode().catch(() => { warmBackdrops.delete(url); });
-}
+const NEEDED_ABOVE = 1;
+const NEEDED_BELOW = 2;
+const IDLE_ABOVE = 2;
+const IDLE_BELOW = 4;
+const LIVE_IDLE_MS = 450;
+const MAX_LIVE_ROWS = 9;
 
 export function FeaturedRailsScreen({
   rails,
@@ -125,34 +56,56 @@ export function FeaturedRailsScreen({
   error,
   emptyTitle,
   emptyDescription,
-  emptyMark = "S"
+  emptyMark = "S",
+  restoreKey
 }: Props) {
-  const [heroImage, setHeroImage] = useState("");
-  const [focusedItem, setFocusedItem] = useState<SiloItem>();
-  const [previousFocusedItem, setPreviousFocusedItem] = useState<SiloItem>();
-  const [marqueeDirection, setMarqueeDirection] = useState<"up" | "down" | "fade">("down");
-  const [failedLogoFor, setFailedLogoFor] = useState<string>();
-  const [loadedLogoFor, setLoadedLogoFor] = useState<string>();
-  const [previousHeroImage, setPreviousHeroImage] = useState("");
-  const [loadedHeroImage, setLoadedHeroImage] = useState("");
-  const [failedHeroImage, setFailedHeroImage] = useState("");
-  const [ambientTint, setAmbientTint] = useState("");
-  const [previousAmbientTint, setPreviousAmbientTint] = useState("");
-  const [loadedAmbientTint, setLoadedAmbientTint] = useState("");
-  const heroTimer = useRef<number | undefined>(undefined);
-  const focusTimer = useRef<number | undefined>(undefined);
-  const marqueeTimer = useRef<number | undefined>(undefined);
-  const ambientTintTimer = useRef<number | undefined>(undefined);
-  const backdropTimer = useRef<number | undefined>(undefined);
-  const [backdropSettling, setBackdropSettling] = useState(false);
-  const focusedItemRef = useRef<SiloItem | undefined>(undefined);
-  const focusedRailIndexRef = useRef<number | undefined>(undefined);
+  const heroRef = useRef<HomeHeroHandle>(null);
   const focusedCardRef = useRef<{ element: HTMLElement; railId: string; index: number } | undefined>(undefined);
   const restoredFocusRef = useRef(false);
   const mainRef = useRef<HTMLElement>(null);
-  const heroImageRef = useRef("");
-  const backdropRef = useRef<HTMLDivElement>(null);
-  const lastHeroSwapAt = useRef(0);
+  /** How far the band's inner block is translated up, in px. */
+  const bandOffset = useRef(0);
+  const lastWheel = useRef(0);
+  // The card to put focus back on, worked out once on mount. Whether to use it is decided
+  // after the first commit (see the effect below), when the previous screen has left the DOM.
+  const [restore] = useState(() => {
+    const remembered = restoreKey ? rememberedFocus.get(restoreKey) : undefined;
+    if (!remembered) return undefined;
+    const railIndex = rails.findIndex(rail => rail.id === remembered.railId);
+    return railIndex >= 0 ? { ...remembered, railIndex } : undefined;
+  });
+  const restorePending = useRef(Boolean(restore));
+  /** Rows that render their cards, by index (inclusive). */
+  const [live, setLive] = useState(() => {
+    const centre = restore?.railIndex ?? 0;
+    return { from: centre - IDLE_ABOVE, to: centre + IDLE_BELOW };
+  });
+  const liveTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(liveTimer.current), []);
+
+  function rowFocused(index: number) {
+    // Grow at once if the rows on screen are not all live; never shrink during a key press.
+    setLive(current => {
+      const from = Math.min(current.from, index - NEEDED_ABOVE);
+      const to = Math.max(current.to, index + NEEDED_BELOW);
+      return from === current.from && to === current.to ? current : { from, to };
+    });
+    window.clearTimeout(liveTimer.current);
+    liveTimer.current = window.setTimeout(() => {
+      setLive(current => {
+        // Grow towards the idle range and keep what is already built: taking rows down costs
+        // as much as putting them up, and a row left alone is free to return to. Past
+        // MAX_LIVE_ROWS, drop rows from the end farther from focus.
+        let from = Math.min(current.from, index - IDLE_ABOVE);
+        let to = Math.max(current.to, index + IDLE_BELOW);
+        while (to - from + 1 > MAX_LIVE_ROWS) {
+          if (index - from > to - index) from += 1;
+          else to -= 1;
+        }
+        return from === current.from && to === current.to ? current : { from, to };
+      });
+    }, LIVE_IDLE_MS);
+  }
   const [watchVersion, setWatchVersion] = useState(0);
   useEffect(() => subscribeWatchState(() => setWatchVersion(version => version + 1)), []);
   const displayRails = useMemo(() => rails.map(rail => {
@@ -160,82 +113,11 @@ export function FeaturedRailsScreen({
     const kept = rail.items.filter(item => item.UserData?.Played !== true);
     return kept.length === rail.items.length ? rail : { ...rail, items: kept };
   }), [rails, watchVersion]);
-  useEffect(() => {
-    let cancelled = false;
-    const urls: string[] = [];
-    const depth = Math.max(0, ...displayRails.map(rail => rail.items.length));
-    for (let index = 0; index < Math.min(depth, 12); index += 1) {
-      for (const rail of displayRails) {
-        const item = rail.items[index];
-        const url = item ? backdropUrl(session, item) : "";
-        if (url && !urls.includes(url)) urls.push(url);
-      }
-    }
-    (async () => {
-      for (let start = 0; start < urls.length && !cancelled; start += 3) {
-        await Promise.all(urls.slice(start, start + 3).map(warmBackdrop));
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [displayRails, session]);
 
-  const itemsById = new Map(displayRails.flatMap(rail => rail.items.map(item => [item.Id, item] as const)));
-
-  function showHero(item: SiloItem, railIndex: number) {
-    const previousItem = focusedItemRef.current;
-    const previousRailIndex = focusedRailIndexRef.current;
-    // TV: swap the hero copy in place; mounting and animating an outgoing copy per focus change costs frames.
-    if (!isTv() && previousItem && (previousItem.Id !== item.Id || previousRailIndex !== railIndex)) {
-      const direction = previousRailIndex !== undefined && railIndex !== previousRailIndex
-        ? railIndex > previousRailIndex ? "down" : "up"
-        : "fade";
-      if (marqueeTimer.current !== undefined) window.clearTimeout(marqueeTimer.current);
-      setPreviousFocusedItem(previousItem);
-      setMarqueeDirection(direction);
-      marqueeTimer.current = window.setTimeout(() => {
-        setPreviousFocusedItem(undefined);
-        marqueeTimer.current = undefined;
-      }, 420);
-    }
-    focusedItemRef.current = item;
-    focusedRailIndexRef.current = railIndex;
-    lastHeroSwapAt.current = performance.now();
-    setFocusedItem(item);
-    const nextImage = backdropUrl(session, item);
-    if (backdropTimer.current !== undefined) window.clearTimeout(backdropTimer.current);
-    backdropTimer.current = undefined;
-    if (!nextImage || nextImage === heroImageRef.current) {
-      setBackdropSettling(false);
-      return;
-    }
-    // First backdrop shows at once; later ones wait for focus to settle on a TV.
-    if (heroImageRef.current && isTv()) {
-      setBackdropSettling(true);
-      backdropTimer.current = window.setTimeout(() => {
-        backdropTimer.current = undefined;
-        setBackdropSettling(false);
-        applyHeroImage(nextImage);
-      }, TV_BACKDROP_SETTLE_MS);
-      return;
-    }
-    applyHeroImage(nextImage);
-  }
-
-  function applyHeroImage(nextImage: string) {
-    // TV: the outgoing backdrop is hidden at once while focus moves, so no "previous" layer lingers.
-    if (heroImageRef.current && !isTv()) {
-      if (heroTimer.current !== undefined) window.clearTimeout(heroTimer.current);
-      setPreviousHeroImage(heroImageRef.current);
-      if (ambientTintTimer.current !== undefined) window.clearTimeout(ambientTintTimer.current);
-      ambientTintTimer.current = undefined;
-      setPreviousAmbientTint(ambientTint);
-    }
-    heroImageRef.current = nextImage;
-    setLoadedHeroImage(warmBackdrops.has(nextImage) && warmBackdrops.get(nextImage)?.complete ? nextImage : "");
-    setFailedHeroImage("");
-    setLoadedAmbientTint("");
-    setHeroImage(nextImage);
-  }
+  const itemsById = useMemo(
+    () => new Map(displayRails.flatMap(rail => rail.items.map(item => [item.Id, item] as const))),
+    [displayRails]
+  );
 
   function warmNeighbours(card: HTMLElement) {
     const wrap = card.closest<HTMLElement>(".media-card-wrap");
@@ -246,32 +128,30 @@ export function FeaturedRailsScreen({
     }
   }
 
-  function previewFocusedItem(item: SiloItem, railIndex: number) {
-    if (focusTimer.current !== undefined) window.clearTimeout(focusTimer.current);
-    focusTimer.current = undefined;
-    if (focusedRailIndexRef.current !== railIndex) {
-      showHero(item, railIndex);
+  // Back from a details page: return to the card that was focused, without animating there.
+  useLayoutEffect(() => {
+    if (!restorePending.current || !restore) return;
+    restorePending.current = false;
+    // Something else holds focus (the top navigation, when Home was chosen from it), or an
+    // Explore return is pending: leave focus alone and build the rows from the top.
+    const active = document.activeElement;
+    const focusHeld = active instanceof HTMLElement && active !== document.body && active.isConnected;
+    if (focusHeld || pendingExploreReturn) {
+      setLive({ from: -IDLE_ABOVE, to: IDLE_BELOW });
       return;
     }
-    const wait = Math.max(0, lastHeroSwapAt.current + 340 - performance.now());
-    if (wait === 0) {
-      showHero(item, railIndex);
-      return;
-    }
-    focusTimer.current = window.setTimeout(() => {
-      showHero(item, railIndex);
-      focusTimer.current = undefined;
-    }, wait);
-  }
-
-  useEffect(() => {
-    if (restoredFocusRef.current) {
-      restoredFocusRef.current = false;
-      return;
-    }
-    const firstItem = displayRails[0]?.items[0];
-    if (firstItem && (!focusedItem || !itemsById.has(focusedItem.Id))) showHero(firstItem, 0);
-  }, [displayRails, session, focusedItem]);
+    const railElement = mainRef.current?.querySelectorAll<HTMLElement>(".media-rail")[restore.railIndex];
+    const rail = displayRails[restore.railIndex];
+    const slot = Math.min(restore.index, Math.max(0, (railElement?.querySelectorAll(".media-card-wrap").length ?? 1) - 1));
+    const target = railElement?.querySelectorAll<HTMLElement>(".media-card-wrap")[slot]?.querySelector<HTMLElement>("[data-tv-focusable='true']");
+    if (!railElement || !target) return;
+    keepFocusedRailInView(target, false);
+    const item = rail?.items[slot];
+    restoredFocusRef.current = true;
+    if (item) heroRef.current?.show(item, restore.railIndex);
+    focusNavigationTarget(target);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Back from a row's full page: land on that row's "Explore all" card.
   useLayoutEffect(() => {
@@ -305,48 +185,40 @@ export function FeaturedRailsScreen({
     if (item && target) {
       focusedCardRef.current = { element: target, railId: record.railId, index: slot };
       restoredFocusRef.current = true;
-      showHero(item, railIndex);
+      heroRef.current?.show(item, railIndex);
       focusNavigationTarget(target);
       return;
     }
     focusFirstContentCard();
   }, [rails]);
 
-  useEffect(() => () => {
-    if (heroTimer.current !== undefined) window.clearTimeout(heroTimer.current);
-    if (focusTimer.current !== undefined) window.clearTimeout(focusTimer.current);
-    if (marqueeTimer.current !== undefined) window.clearTimeout(marqueeTimer.current);
-    if (ambientTintTimer.current !== undefined) window.clearTimeout(ambientTintTimer.current);
-    if (backdropTimer.current !== undefined) window.clearTimeout(backdropTimer.current);
-  }, []);
-
-  function syncBackdropScroll(event: UIEvent<HTMLDivElement>) {
-    const scrollTop = event.currentTarget.scrollTop;
-    const offset = Math.max(-180, scrollTop * -0.22);
-    backdropRef.current?.style.setProperty("--home-backdrop-offset", `${offset}px`);
-  }
-
-  function finishBackdropTransition() {
-    if (heroTimer.current !== undefined) window.clearTimeout(heroTimer.current);
-    heroTimer.current = window.setTimeout(() => {
-      setPreviousHeroImage("");
-      heroTimer.current = undefined;
-    }, 360);
-  }
-
-  function keepFocusedRailInView(card: HTMLElement) {
+  /**
+   * Bring the focused row to the top of the band. The band does not scroll: its inner block
+   * is translated, with a CSS transition, so the move is one style change and the compositor
+   * animates it. Scrolling it from script cost a compositing update and a commit per frame.
+   */
+  function keepFocusedRailInView(card: HTMLElement, animate = true) {
     const rail = card.closest<HTMLElement>(".media-rail");
-    const container = card.closest<HTMLElement>(".home-rails");
-    if (!rail || !container) return;
-
-    if (!card.isConnected) return;
-    const containerRect = container.getBoundingClientRect();
-    const railRect = rail.getBoundingClientRect();
-    const topPadding = Number.parseFloat(getComputedStyle(container).paddingTop) || 0;
-    const railOffset = container.scrollTop + railRect.top - containerRect.top - topPadding;
-    if (Math.abs(railOffset - container.scrollTop) < 2) return;
-    container.scrollTo({ top: Math.max(0, railOffset), behavior: "smooth" });
+    const inner = rail?.parentElement;
+    if (!rail || !inner || !inner.classList.contains("home-rails-inner") || !card.isConnected) return;
+    const offset = Math.max(0, rail.offsetTop);
+    if (bandOffset.current === offset) return;
+    bandOffset.current = offset;
+    if (!animate) inner.classList.add("no-slide");
+    inner.style.transform = offset ? `translate3d(0, ${-offset}px, 0)` : "";
+    if (!animate) {
+      // Apply the jump before transitions are allowed again.
+      void inner.offsetHeight;
+      inner.classList.remove("no-slide");
+    }
+    heroRef.current?.syncScroll(offset);
   }
+
+
+  const exploreRail = useCallback((target: HomeRail) => {
+    pendingExploreReturn = target.id;
+    onExplore?.(target);
+  }, [onExplore]);
 
   return (
     <main
@@ -355,128 +227,67 @@ export function FeaturedRailsScreen({
       onFocusCapture={(event) => {
         const card = (event.target as HTMLElement).closest<HTMLElement>("[data-media-id]");
         const item = card?.dataset.mediaId ? itemsById.get(card.dataset.mediaId) : undefined;
-        const rail = card?.closest<HTMLElement>(".media-rail");
+        const focusable = (event.target as HTMLElement).closest<HTMLElement>("[data-tv-focusable='true']");
+        const rail = focusable?.closest<HTMLElement>(".media-rail");
         const container = rail?.parentElement;
         const railIndex = rail && container
           ? Array.from(container.children).indexOf(rail)
           : -1;
+        if (railIndex >= 0) rowFocused(railIndex);
         if (item && card && railIndex >= 0) {
-          previewFocusedItem(item, railIndex);
+          heroRef.current?.preview(item, railIndex);
           keepFocusedRailInView(card);
           warmNeighbours(card);
         }
         const wrap = card?.closest<HTMLElement>(".media-card-wrap");
-        const track = card?.closest<HTMLElement>(".rail-track");
-        const slot = wrap && track ? Array.from(track.children).indexOf(wrap) : -1;
+        const slot = wrap?.parentElement ? Array.from(wrap.parentElement.children).indexOf(wrap) : -1;
         const railId = rail?.dataset.railId;
-        if (card && railId && slot >= 0) focusedCardRef.current = { element: card, railId, index: slot };
+        if (card && railId && slot >= 0) {
+          focusedCardRef.current = { element: card, railId, index: slot };
+          if (restoreKey) rememberedFocus.set(restoreKey, { railId, index: slot });
+        }
       }}
     >
-      <div ref={backdropRef} className={`home-hero-backdrop ${backdropSettling ? "settling" : ""}`} aria-hidden="true">
-        {previousHeroImage ? (
-          <>
-            <img
-              className={`home-backdrop-image previous direction-${marqueeDirection} ${loadedHeroImage === heroImage ? "transitioning-out" : ""}`}
-              src={previousHeroImage}
-              alt=""
-            />
-            <div
-              className={`home-backdrop-wash previous direction-${marqueeDirection} ${loadedHeroImage === heroImage ? "transitioning-out" : ""}`}
-              style={{ backgroundImage: `url("${previousHeroImage}")` }}
-            />
-          </>
-        ) : null}
-        {heroImage && failedHeroImage !== heroImage ? (
-          <>
-            <img
-              className={`home-backdrop-image current direction-${marqueeDirection} ${loadedHeroImage === heroImage ? "loaded" : ""}`}
-              key={heroImage}
-              src={heroImage}
-              alt=""
-              onLoad={() => {
-                setLoadedHeroImage(heroImage);
-                finishBackdropTransition();
-                void sampleAmbientTint(heroImage).then(tint => {
-                  if (heroImageRef.current !== heroImage) return;
-                  setAmbientTint(tint ?? "");
-                  setLoadedAmbientTint(heroImage);
-                  if (ambientTintTimer.current !== undefined) window.clearTimeout(ambientTintTimer.current);
-                  ambientTintTimer.current = window.setTimeout(() => {
-                    setPreviousAmbientTint("");
-                    ambientTintTimer.current = undefined;
-                  }, 320);
-                });
-              }}
-              onError={() => {
-                setFailedHeroImage(heroImage);
-                setLoadedHeroImage(heroImage);
-                setAmbientTint("");
-                setLoadedAmbientTint(heroImage);
-                if (ambientTintTimer.current !== undefined) window.clearTimeout(ambientTintTimer.current);
-                ambientTintTimer.current = window.setTimeout(() => {
-                  setPreviousAmbientTint("");
-                  ambientTintTimer.current = undefined;
-                }, 320);
-                finishBackdropTransition();
-              }}
-            />
-            <div
-              className={`home-backdrop-wash current direction-${marqueeDirection} ${loadedHeroImage === heroImage ? "loaded" : ""}`}
-              key={`wash-${heroImage}`}
-              style={{ backgroundImage: `url("${heroImage}")` }}
-            />
-          </>
-        ) : null}
-        {previousAmbientTint ? (
-          <div
-            className={`home-backdrop-tint previous ${loadedAmbientTint === heroImage ? "transitioning-out" : ""}`}
-            style={{ backgroundImage: ambientTintGradient(previousAmbientTint) }}
-          />
-        ) : null}
-        {ambientTint ? (
-          <div
-            className={`home-backdrop-tint current ${loadedAmbientTint === heroImage ? "loaded" : ""}`}
-            style={{ backgroundImage: ambientTintGradient(ambientTint) }}
-          />
-        ) : null}
-        <div className="home-backdrop-scrim" />
-        <div className="home-backdrop-vignette" />
-      </div>
-      {focusedItem ? (
-        <section className="home-featured" aria-live="off" aria-label={`${focusedItem.Name} details`}>
-          {previousFocusedItem ? (
-            <FeaturedCopy
-              key={`previous-${previousFocusedItem.Id}`}
-              item={previousFocusedItem}
-              session={session}
-              failedLogoFor={failedLogoFor}
-              loadedLogoFor={loadedLogoFor}
-              className={`previous direction-${marqueeDirection}`}
-            />
-          ) : null}
-          <FeaturedCopy
-            key={`current-${focusedItem.Id}`}
-            item={focusedItem}
-            session={session}
-            failedLogoFor={failedLogoFor}
-            loadedLogoFor={loadedLogoFor}
-            className={previousFocusedItem ? `current rolling direction-${marqueeDirection}` : "current"}
-            onLogoLoad={() => setLoadedLogoFor(focusedItem.Id)}
-            onLogoError={() => setFailedLogoFor(focusedItem.Id)}
-          />
-        </section>
-      ) : null}
+      <HomeHero
+        ref={heroRef}
+        rails={displayRails}
+        session={session}
+        skipInitial={() => {
+          if (!restoredFocusRef.current) return false;
+          restoredFocusRef.current = false;
+          return true;
+        }}
+      />
       {error ? <div className="error">{error}</div> : null}
-      <div className="home-rails" onScroll={syncBackdropScroll}>
-        {displayRails.map(rail => (
+      <div
+        className="home-rails"
+        onWheel={event => {
+          // The band has no scrollbar to drive, so a pointer wheel moves focus a row at a time.
+          const now = performance.now();
+          if (Math.abs(event.deltaY) < 4 || now - lastWheel.current < 220) return;
+          lastWheel.current = now;
+          const key = event.deltaY > 0 ? "ArrowDown" : "ArrowUp";
+          const from = document.activeElement instanceof HTMLElement && event.currentTarget.contains(document.activeElement)
+            ? document.activeElement
+            : event.currentTarget.querySelector<HTMLElement>(".media-card");
+          from?.focus({ preventScroll: true });
+          from?.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+        }}
+      >
+        <div className="home-rails-inner">
+        {displayRails.map((rail, index) => (
           <MediaRail
             key={rail.id}
             rail={rail}
             session={session}
             onOpen={onOpen}
-            onExplore={onExplore ? target => { pendingExploreReturn = target.id; onExplore(target); } : undefined}
+            onExplore={onExplore ? exploreRail : undefined}
+            live={index >= live.from && index <= live.to}
+            initialAnchor={restore && restore.railIndex === index ? restore.index : 0}
+            slide
           />
         ))}
+        </div>
         {!displayRails.length && !error ? (
           <div className="empty-state">
             <span className="empty-state-mark" aria-hidden="true">{emptyMark}</span>
@@ -486,82 +297,5 @@ export function FeaturedRailsScreen({
         ) : null}
       </div>
     </main>
-  );
-}
-
-function ambientTintGradient(tint: string) {
-  return `linear-gradient(to bottom left, rgba(${tint}, 1) 0%, rgba(${tint}, .5) 50%, rgba(${tint}, .18) 100%)`;
-}
-
-function FeaturedCopy({
-  item,
-  session,
-  failedLogoFor,
-  loadedLogoFor,
-  className,
-  onLogoLoad,
-  onLogoError
-}: {
-  item: SiloItem;
-  session: Session;
-  failedLogoFor?: string;
-  loadedLogoFor?: string;
-  className: string;
-  onLogoLoad?: () => void;
-  onLogoError?: () => void;
-}) {
-  // TV (like Plex): a plain text title. No logo fetch or decode per focus change.
-  const logo = isTv() ? "" : mediaLogoUrl(session, item);
-  const hasLogo = Boolean(logo && failedLogoFor !== item.Id);
-  const isEpisode = item.Type?.toLowerCase() === "episode";
-  const title = isEpisode ? item.SeriesName ?? item.Name : item.Name;
-  const genre = item.Genres?.find(value => value.trim());
-  // Time-left ring (as on Details) for anything with an unfinished resume point.
-  const position = (item.UserData?.PlaybackPositionTicks ?? 0) / 10_000_000;
-  const duration = (item.RunTimeTicks ?? 0) / 10_000_000;
-  const resumable = item.UserData?.Played !== true && isResumable(position, duration);
-
-  return (
-    <div className={`home-featured-copy ${className}`} aria-hidden={className.includes("previous")}>
-      <div className={`home-featured-heading ${hasLogo ? "has-logo" : ""}`}>
-        {hasLogo ? (
-          <>
-            <h1 className="home-featured-title fallback-hidden">
-              {title}
-            </h1>
-            <img
-              className={`home-featured-logo ${loadedLogoFor === item.Id ? "loaded" : ""}`}
-              src={logo}
-              alt={title}
-              onLoad={onLogoLoad}
-              onError={onLogoError}
-            />
-          </>
-        ) : <h1 className="home-featured-title">{title}</h1>}
-      </div>
-      <div className="home-featured-metadata">
-        {item.ContentRating ? <span className="home-featured-rating">{item.ContentRating.toUpperCase()}</span> : null}
-        {isEpisode ? (
-          <>
-            {item.ParentIndexNumber != null && item.IndexNumber != null
-              ? <span>S{String(item.ParentIndexNumber).padStart(2, "0")} · E{String(item.IndexNumber).padStart(2, "0")}</span>
-              : null}
-            {item.Name !== item.SeriesName ? <span>{item.Name}</span> : null}
-          </>
-        ) : (
-          <>
-            {item.ProductionYear ? <span>{item.ProductionYear}</span> : null}
-            {item.RuntimeMinutes && item.RuntimeMinutes > 0
-              ? <span>{Math.floor(item.RuntimeMinutes / 60)}h {item.RuntimeMinutes % 60}m</span>
-              : null}
-            {item.ImdbRating ? <span>IMDb {item.ImdbRating.toFixed(1)}</span> : null}
-            {item.TmdbRating && !item.ImdbRating ? <span>TMDB {item.TmdbRating.toFixed(1)}</span> : null}
-            {genre ? <span>{genre}</span> : null}
-          </>
-        )}
-        {resumable ? <ResumeProgress position={position} duration={duration} /> : null}
-      </div>
-      {item.Overview ? <p className="home-featured-overview">{item.Overview}</p> : null}
-    </div>
   );
 }
