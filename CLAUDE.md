@@ -40,11 +40,13 @@ new branch off main  ──pull request──►  main
 
 1. **Branch off the latest `main`.** `git fetch origin main && git checkout -b <type>/<slug> origin/main`. Use `fix/<issue-number>-<slug>` for a GitHub issue, otherwise `feat/`, `chore/` or `docs/` plus a short slug. One feature or fix per branch.
 2. **Work on the branch.** Never commit directly to `main`. Run `npm run build`, then commit and push the branch after each verified step.
-3. **Open a pull request into `main`.** The maintainer opens and merges it; draft the title and body for them (following `.github/pull_request_template.md`) unless they ask you to open it. Say how the change was tested: build, browser, live server or physical TV.
+3. **Open a pull request into `main` for every change.** Once the work is verified and pushed, open the PR yourself with `gh pr create --base main` (ready for review, not a draft, so the build and the automated review run). Do not stop at a pushed branch or a drafted description. Follow `.github/pull_request_template.md` and say how the change was tested: build, browser, live server or physical TV. Several unrelated changes in one session get one branch and one PR each. The maintainer tests and merges.
 4. **Automation runs on the PR.** `ci.yml` builds it and `pr-intake.yml` labels it. `claude-review.yml` reviews every non-draft PR from a branch in this repository and may push small `review: ` fix commits to the branch, so pull before adding commits. PRs from forks get a read-only review from `pr-intake.yml` instead.
 5. **The maintainer tests on a physical TV before merging** whenever the change affects the app. A release is a tag on a tested `main` commit.
 
-- **Issue fixes** use the `fix-issue` skill (`.claude/skills/fix-issue/SKILL.md`), which follows this procedure: triage, investigate, fix on a branch off `main`, then draft the PR.
+- **Issue fixes** use the `fix-issue` skill (`.claude/skills/fix-issue/SKILL.md`), which follows this procedure: triage, investigate, fix on a branch off `main`, then open the PR.
+- **No AI attribution in commits.** Do not add `Co-Authored-By` trailers or "Generated with" lines to commit messages.
+- **Writing for people goes through the `unslop` skill** (`.claude/skills/unslop/SKILL.md`): PR titles and descriptions, issue and PR comments, and review comments and summaries. Write the text, then apply the skill as a final pass before posting. It does not apply to code, commands, logs or quoted text.
 - **Maintainer steps, what is automatic and what is manual, labels and settings** are in `docs/MAINTAINING.md`. Keep it in step with the workflows in `.github/workflows/`.
 - **Fork PRs are untrusted.** `pr-intake.yml` runs with secrets on `pull_request_target`, so it must never check out, install or run pull request code, and Claude there must stay limited to reading files. Don't loosen that without the maintainer's say-so.
 - **A PR that changes `claude-review.yml` is not reviewed by it.** The Claude action skips the review (the check still goes green, with no comment) unless the file in the PR matches the copy on `main`. That is expected; reviews resume once the change is merged.

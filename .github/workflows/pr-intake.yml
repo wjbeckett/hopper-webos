@@ -329,6 +329,10 @@ jobs:
               followed by the word suggestion, the replacement lines, three
               backticks) so the contributor can apply it with one click. No praise,
               no style nitpicks, at most 15 comments.
+            - If `.claude/skills/unslop/SKILL.md` exists, read it and its
+              `references/patterns.md`, and apply them as a final pass on the prose
+              in `summary`, the check notes, `comments` and `needs_tv_testing`. Leave
+              code, suggestion blocks, file paths and commands exact.
             - `needs_tv_testing`: what the maintainer should check on a physical TV or
               a live Silo server before merging, as exact steps. You cannot verify
               anything on hardware, so never say it was.

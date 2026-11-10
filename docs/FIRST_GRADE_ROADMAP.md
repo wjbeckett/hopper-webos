@@ -142,4 +142,10 @@ Do not expose ebook reading or phone-style downloads management on TV unless pro
   - **Kept on purpose:** `getBrowseCatalogPage` and `getBrowseFilterOptions` (parked for Global Browse, see `ANDROID_PARITY_TODO.md`), the `silo-webos-*` localStorage keys (renaming them would sign every TV out), and the `eslint-disable` comments that mark deliberately omitted effect dependencies.
   - **Verification:** `npm run build`, and a pass in desktop Chrome against `demo.siloserver.org`: Home, Movies, Series, a movie details page, a series page, the profile menu and Settings (Playback, Subtitles) rendered with no console errors, and Back returned from details and series. Not run on a TV. The player was not exercised.
 
+- PR and writing conventions (2026-11-10):
+  - **PRs:** Claude Code now opens a pull request for every change itself (ready for review), instead of drafting text for the maintainer to paste. `CLAUDE.md`, the `fix-issue` skill and `docs/MAINTAINING.md` say so.
+  - **Commits:** no `Co-Authored-By` or "Generated with" lines.
+  - **Writing:** the `unslop` skill from the Silo server repository is copied into `.claude/skills/unslop/` (AGPL-3.0, source in its `SOURCE.md`) and is the final pass for PR text, comments and reviews. `claude-review.yml` reads it from the base branch, so a PR cannot change the reviewer's instructions; `pr-intake.yml` reads it from `main`.
+  - **Verification:** docs and workflow prompts only. The two workflow changes have not run yet: a PR that changes `claude-review.yml` is not reviewed by it, and `pr-intake.yml` runs from `main`.
+
 - Licence (2026-11-10): the project is licensed `AGPL-3.0-or-later`, the same as Silo. Added `LICENSE` (the unmodified GNU AGPL v3 text), the `license` field in `package.json`, the README licence section and a contribution-licence line in `CONTRIBUTING.md`. The Silo name and logo stay outside the licence, as before. No decision has been made on reserving the Hopper name and artwork the way Silo's `TRADEMARK.md` reserves its own.
