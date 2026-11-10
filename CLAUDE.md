@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Hopper (`com.hopperapp.hopper`) is an LG webOS TV client for the Silo media server. The goal is a first-class TV client whose features match the official Android TV and Apple tvOS clients. It is built with React 19, TypeScript and Vite and packaged with LG `@webos-tools/cli`. It is a 10-foot UI: every interactive element must be reachable with Up/Down/Left/Right/OK/Back, and mouse/pointer support is secondary.
 
 ## Hard rules
-1. **No bulk overwrites.** Never do bulk checkouts, resets, restores, regenerations or whole-tree copies over `src/`. Make targeted edits to specific files, and rewrite a whole file only when that single file needs it. Commit to `dev` after each verified step so work never lives only in the working tree.
+1. **No bulk overwrites.** Never do bulk checkouts, resets, restores, regenerations or whole-tree copies over `src/`. Make targeted edits to specific files, and rewrite a whole file only when that single file needs it. Commit after each verified step so work never lives only in the working tree: to `dev` for direct work, or to a `fix/<number>-<slug>` branch when fixing a GitHub issue (see Branches and pull requests).
 2. **Android TV is the reference.** The Android TV app in `silo-android/androidTvApp/` sets the design and behaviour for every screen, menu, focus/back flow and server action. That directory is git-ignored and may need a local checkout. Read the relevant Android source before building or changing anything, and match it as closely as webOS allows. Deviate only where the user has explicitly decided to (see `docs/FIRST_GRADE_ROADMAP.md` and `docs/RECONSTRUCTION.md`). Rebuild Android transitions with webOS-safe CSS and DOM behaviour; don't assume Compose behaviour carries over.
 3. **Native Silo API only.** Never use Jellyfin-compatible endpoints, headers, models or playback URLs. Mirror Android's documented native Silo contracts rather than inventing routes.
 4. **Diagnostics stay local.** The Silo maintainer won't accept reports from third-party clients. Never integrate with the hosted diagnostics collector, and never imply that the app collects or uploads reports.
@@ -28,6 +28,11 @@ npm run webos:check                                    # verify node/ares toolin
 - `WEBOS_APP_ID` overrides the app ID for launch and inspect.
 - In the browser, arrow keys move focus, Enter selects, and Escape or Backspace act as Back.
 - During `vite dev`, `POST /__client-log` echoes client logs to the terminal.
+
+## Branches and pull requests
+- **Flow:** `fix/<number>-<slug>` → PR into `dev` → release PR from `dev` into `main` once the change has been tested on a TV. Never branch a fix from `main` or target it.
+- **Issue fixes** go through the `fix-issue` skill (`.claude/skills/fix-issue/SKILL.md`): triage, investigate, fix on a branch off `dev`, then draft the PR for the maintainer to open.
+- **Automated review:** `.github/workflows/claude-review.yml` reviews every non-draft PR into `dev` or `main`. On PRs into `dev` it may push small `review: ` fix commits to the PR branch, so pull before adding commits. On PRs into `main` it only comments.
 
 ## Architecture
 Keep each concern in its own layer:

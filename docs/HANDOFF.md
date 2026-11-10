@@ -1,6 +1,6 @@
 # Handoff: Hopper for LG webOS
 
-Last updated 2026-11-10 (README/CONTRIBUTING split and TODO audit).
+Last updated 2026-11-10 (issue-fix skill and automated PR review added).
 
 ## Read first (in order)
 1. `CLAUDE.md`: hard rules (no bulk overwrites; Android TV is the reference; native Silo API only), architecture, TV navigation rules and webOS gotchas.
@@ -21,6 +21,12 @@ Last updated 2026-11-10 (README/CONTRIBUTING split and TODO audit).
   - Four store screenshots and a draft listing.
 - **Verified on a physical TV:** BedroomTV, webOS on Chrome 87. The rebranded app installs and launches. The splash animation lands at 754,180 412×521, matching the native splash.
 - **Uncommitted on purpose:** `.claude/settings.json` deletion is unrelated. Do not stage it.
+
+## Issue and PR workflow (added 2026-11-10, not yet exercised)
+- **Flow:** `fix/<number>-<slug>` → PR into `dev` → release PR `dev` → `main` after TV testing.
+- **`fix-issue` skill** (`.claude/skills/fix-issue/`): triages open issues, investigates, fixes on a branch off `dev` and drafts the PR. `.gitignore` now lets `.claude/skills/` through; the rest of `.claude/` stays ignored.
+- **`.github/workflows/claude-review.yml`:** reviews non-draft PRs into `dev` (may push `review: ` fix commits) and `main` (comment only).
+- **Needs the maintainer:** install the Claude GitHub App on the repo and add the `CLAUDE_CODE_OAUTH_TOKEN` (or `ANTHROPIC_API_KEY`) secret. Until then the workflow fails at the Claude step. The workflow has only been syntax-checked; confirm on a first real PR that the summary comment appears and that a pushed fix commit does not start a second review.
 
 ## Open items
 

@@ -8,4 +8,5 @@ release/
 .env.*.local
 .DS_Store
 silo-android
-.claude
+.claude/*
+!.claude/skills/
