@@ -1801,6 +1801,107 @@ input:focus {
   width: min(760px, 86vw);
 }
 
+/* Phone setup: copy on the left, three numbered steps with pictures on the right
+   (Android TvMarqueeSetupSteps, at 1080p sizes). */
+.phone-setup-card {
+  width: min(1400px, 92vw);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 72px;
+  padding: 56px 64px;
+}
+.phone-setup-copy { min-width: 0; }
+.phone-setup-copy .pair-status { margin-top: 26px; }
+.phone-setup-alt { margin: 40px 0 0; font-size: .95rem; }
+.phone-setup-alt + .tv-button { margin-top: 12px; }
+.setup-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 12px;
+  display: grid;
+  gap: 30px;
+}
+.setup-step {
+  display: flex;
+  align-items: center;
+  gap: 30px;
+  transition: opacity 240ms ease-out;
+}
+.setup-step-tile {
+  position: relative;
+  flex: none;
+  width: 150px;
+  height: 150px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 30px;
+  background: rgba(255,255,255,.06);
+  transition: border-color 240ms ease-out, box-shadow 240ms ease-out;
+}
+.setup-step-number {
+  position: absolute;
+  top: -14px;
+  left: -14px;
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #f4f4f2;
+  color: #08090a;
+  font-size: 1.5rem;
+  font-weight: 800;
+  box-shadow: 0 4px 12px rgba(0,0,0,.45);
+}
+.setup-step-title {
+  font-family: var(--font-display);
+  font-size: 2.1rem;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  white-space: nowrap;
+}
+.setup-step-phone { width: 62px; height: 100px; }
+.setup-step-done { width: 84px; height: 84px; }
+/* Miniature of the phone app's setup card, with its button ringed. */
+.setup-step-card {
+  width: 112px;
+  padding: 13px 11px 11px;
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 18px;
+  background: rgba(38,38,38,.95);
+}
+.setup-step-card i { display: block; height: 7px; border-radius: 4px; }
+.setup-step-card i:nth-child(1) { width: 70px; background: rgba(255,255,255,.3); }
+.setup-step-card i:nth-child(2) { width: 50px; background: rgba(255,255,255,.16); }
+.setup-step-card em {
+  width: 100%;
+  margin-top: 2px;
+  padding: 4px 0;
+  border-radius: 999px;
+  background: #f4f4f2;
+  color: #08090a;
+  font-size: .82rem;
+  font-style: normal;
+  font-weight: 700;
+  text-align: center;
+  box-shadow: 0 0 0 3px rgba(38,38,38,.95), 0 0 0 6px rgba(45,212,191,.85);
+}
+/* The phone has taken over: the first two steps are done, the last is where the user is. */
+.setup-steps.finishing .setup-step { opacity: .42; }
+.setup-steps.finishing .setup-step-last { opacity: 1; }
+.setup-steps.finishing .setup-step-last .setup-step-tile {
+  border-color: rgba(127,227,161,.7);
+  box-shadow: 0 0 0 3px rgba(127,227,161,.18);
+}
+@media (max-width: 1280px) {
+  .phone-setup-card { grid-template-columns: minmax(0, 1fr); gap: 44px; }
+}
+
 .server-list {
   margin: 28px 0;
   display: grid;

@@ -31,6 +31,8 @@ export function PhoneSetupScreen({
   const [status, setStatus] = useState("Looking for your phone…");
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
+  /** True from the phone's push until that attempt ends: the user is now finishing on the phone. */
+  const [attemptActive, setAttemptActive] = useState(false);
   const attemptRef = useRef(0);
 
   useEffect(() => {
@@ -51,6 +53,7 @@ export function PhoneSetupScreen({
       const current = () => alive && attemptRef.current === attempt;
       setError("");
       setCode("");
+      setAttemptActive(true);
       setStatus("Connecting to your server…");
       let failure = "auth_failed";
       try {
@@ -94,6 +97,7 @@ export function PhoneSetupScreen({
       } catch (cause) {
         if (!current()) return;
         setCode("");
+        setAttemptActive(false);
         setStatus("Looking for your phone…");
         setError(cause instanceof Error ? cause.message : "Pairing failed.");
         await sendPairingMessage({ type: "serverResult", serverURL: push.serverURL, status: "failed", error: failure }).catch(() => undefined);
@@ -115,8 +119,14 @@ export function PhoneSetupScreen({
           for (const event of reply.events) {
             since = Math.max(since, event.seq);
             if (event.type === "message" && event.message.type === "pushServer") void runAttempt(event.message as Push);
-            else if (event.type === "message" && (event.message.type === "cancel" || event.message.type === "done")) attemptRef.current += 1;
-            else if (event.type === "disconnected") attemptRef.current += 1;
+            else if ((event.type === "message" && (event.message.type === "cancel" || event.message.type === "done")) || event.type === "disconnected") {
+              // The phone stopped or went away: drop the attempt and go back to waiting,
+              // so a stale code and "finishing" state don't stay on screen.
+              attemptRef.current += 1;
+              setCode("");
+              setAttemptActive(false);
+              setStatus("Looking for your phone…");
+            }
           }
         } catch { /* keep polling; the service may be restarting */ }
         timer = window.setTimeout(tick, 1000);
@@ -135,15 +145,64 @@ export function PhoneSetupScreen({
 
   return (
     <main className="login-shell server-setup">
-      <section className="login-card wide-login-card">
-        <div className="eyebrow">Hopper for LG webOS</div>
-        <h1>Set up with your phone</h1>
-        <p>Open Silo on your phone, choose “Sign in on TV”, then pick this TV. Nothing to type with the remote.</p>
-        <p className="pair-status">{status}</p>
-        {code ? <div className="pair-code">{code}</div> : null}
-        {error ? <div className="error">{error}</div> : null}
-        <TvButton onClick={onManual}>Enter server address</TvButton>
+      <section className="login-card phone-setup-card">
+        <div className="phone-setup-copy">
+          <div className="eyebrow">Hopper for LG webOS</div>
+          <h1>Set up with your phone</h1>
+          <p>It's the easiest way. There's nothing to type with the remote.</p>
+          <p className="pair-status">{status}</p>
+          {code ? <div className="pair-code">{code}</div> : null}
+          {error ? <div className="error">{error}</div> : null}
+          <p className="phone-setup-alt">No phone nearby?</p>
+          <TvButton onClick={onManual}>Enter server address</TvButton>
+        </div>
+        <SetupSteps finishing={attemptActive} />
       </section>
     </main>
+  );
+}
+
+/**
+ * How to set the TV up from a phone: three numbered steps, each with a small picture of
+ * that action (Android `TvMarqueeSetupSteps`). The wording matches what the Silo phone app
+ * shows: a "Set up" card for a nearby TV, then a code to confirm. Once the phone has
+ * started, the first two steps dim and the last one is marked.
+ */
+function SetupSteps({ finishing }: { finishing: boolean }) {
+  return (
+    <ol className={`setup-steps ${finishing ? "finishing" : ""}`} aria-label="How to set up with your phone">
+      <li className="setup-step">
+        <span className="setup-step-tile">
+          <b className="setup-step-number">1</b>
+          <svg className="setup-step-phone" viewBox="0 0 60 96" aria-hidden="true" focusable="false">
+            <rect x="3" y="3" width="54" height="90" rx="11" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.7)" strokeWidth="3" />
+            <rect x="24" y="9" width="12" height="3" rx="1.5" fill="rgba(255,255,255,.45)" />
+            <rect x="16" y="32" width="28" height="28" rx="7" fill="#2DD4BF" />
+            <path d="M26 39.5v13l11-6.5z" fill="#0E1030" />
+          </svg>
+        </span>
+        <span className="setup-step-title">Open Silo on your phone</span>
+      </li>
+      <li className="setup-step">
+        <span className="setup-step-tile">
+          <b className="setup-step-number">2</b>
+          <span className="setup-step-card" aria-hidden="true">
+            <i /><i />
+            <em>Set up</em>
+          </span>
+        </span>
+        <span className="setup-step-title">Tap Set up</span>
+      </li>
+      <li className="setup-step setup-step-last">
+        <span className="setup-step-tile">
+          <b className="setup-step-number">3</b>
+          <svg className="setup-step-done" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+            <circle cx="24" cy="24" r="22" fill="rgba(127,227,161,.16)" stroke="#7fe3a1" strokeWidth="2.5" />
+            <path d="M14.5 24.5l6.5 6.5 12.5-13.5" fill="none" stroke="#7fe3a1" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+        <span className="setup-step-title">Finish on your phone</span>
+      </li>
+    </ol>
   );
 }
