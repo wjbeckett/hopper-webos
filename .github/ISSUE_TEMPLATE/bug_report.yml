@@ -1,0 +1,68 @@
+name: Bug report
+description: Something in Hopper is broken or behaves wrongly
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please report Hopper problems here, not to the Silo server project: Hopper is a community client.
+        Leave out personal server addresses, tokens and screenshots of private libraries.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Screen by screen, including the remote buttons you pressed.
+      placeholder: |
+        1. Open Movies
+        2. Press Down twice, then OK
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: hopper
+    attributes:
+      label: Hopper version
+      description: Shown in Settings, or the version of the IPK you installed.
+    validations:
+      required: true
+  - type: input
+    id: tv
+    attributes:
+      label: TV model and webOS version
+      placeholder: e.g. LG C2 (OLED55C2), webOS 22
+    validations:
+      required: true
+  - type: input
+    id: server
+    attributes:
+      label: Silo server version
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where does it happen?
+      options:
+        - Sign-in or pairing
+        - Home or libraries
+        - Details, series or episodes
+        - Playback (video, audio, subtitles)
+        - Remote or focus
+        - Settings or profiles
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: For playback problems, the file's container and video, audio and subtitle codecs help a lot.
+    validations:
+      required: false
