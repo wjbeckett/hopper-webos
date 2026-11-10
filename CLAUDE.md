@@ -33,6 +33,7 @@ npm run webos:check                                    # verify node/ares toolin
 - **Flow:** `fix/<number>-<slug>` → PR into `dev` → release PR from `dev` into `main` once the change has been tested on a TV. Never branch a fix from `main` or target it.
 - **Issue fixes** go through the `fix-issue` skill (`.claude/skills/fix-issue/SKILL.md`): triage, investigate, fix on a branch off `dev`, then draft the PR for the maintainer to open.
 - **Automated review:** `.github/workflows/claude-review.yml` reviews every non-draft PR into `dev` or `main`. On PRs into `dev` it may push small `review: ` fix commits to the PR branch, so pull before adding commits. On PRs into `main` it only comments.
+- **The workflow file must be identical on `main`.** The Claude action skips the review (the check still goes green, with no comment) unless `.github/workflows/claude-review.yml` in the PR matches the copy on the default branch. After changing the workflow on `dev`, get the same file onto `main` before expecting reviews to run.
 
 ## Architecture
 Keep each concern in its own layer:

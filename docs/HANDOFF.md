@@ -26,7 +26,9 @@ Last updated 2026-11-10 (issue-fix skill and automated PR review added).
 - **Flow:** `fix/<number>-<slug>` → PR into `dev` → release PR `dev` → `main` after TV testing.
 - **`fix-issue` skill** (`.claude/skills/fix-issue/`): triages open issues, investigates, fixes on a branch off `dev` and drafts the PR. `.gitignore` now lets `.claude/skills/` through; the rest of `.claude/` stays ignored.
 - **`.github/workflows/claude-review.yml`:** reviews non-draft PRs into `dev` (may push `review: ` fix commits) and `main` (comment only).
-- **Needs the maintainer:** install the Claude GitHub App on the repo and add the `CLAUDE_CODE_OAUTH_TOKEN` (or `ANTHROPIC_API_KEY`) secret. Until then the workflow fails at the Claude step. The workflow has only been syntax-checked; confirm on a first real PR that the summary comment appears and that a pushed fix commit does not start a second review.
+- **Setup:** the maintainer has installed the Claude GitHub App and added the `CLAUDE_CODE_OAUTH_TOKEN` secret.
+- **The workflow file must be identical on `main` (the default branch).** The first run, on PR #1, was skipped by the action for this reason: the check went green in 19 seconds with no comment. Any change to the workflow has to reach `main` before reviews run again.
+- **Still unconfirmed:** no review has run end to end yet. On the first real one, check that the summary comment appears, that a `review: ` fix commit lands on the PR branch, and that the fix commit does not start a second review.
 
 ## Open items
 
