@@ -107,10 +107,21 @@ async function writeSealed() {
   localStorage.setItem(SEALED_KEY, JSON.stringify(next));
 }
 
+/** A listener that throws (the registry's own write failing) must not stop the write queue. */
+function notifyHealth() {
+  for (const listener of [...healthListeners]) {
+    try {
+      listener();
+    } catch (error) {
+      console.warn("[Hopper] could not rewrite the saved servers after a sign-in storage change", error);
+    }
+  }
+}
+
 function setHealthy(next: boolean) {
   if (healthy === next) return;
   healthy = next;
-  [...healthListeners].forEach(listener => listener());
+  notifyHealth();
 }
 
 function scheduleSeal() {
@@ -118,7 +129,8 @@ function scheduleSeal() {
   sealQueued = true;
   window.clearTimeout(retryTimer);
   retryTimer = undefined;
-  sealing = sealing.then(async () => {
+  // Never left rejected: a rejected queue would skip every later write.
+  sealing = sealing.catch(() => false).then(async () => {
     sealQueued = false;
     try {
       await writeSealed();
@@ -127,7 +139,9 @@ function scheduleSeal() {
       return true;
     } catch (error) {
       console.warn("[Hopper] could not store the sign-in securely; keeping it in plain storage for now", error);
-      setHealthy(false);
+      // Every failure, not only the first: the plain-storage write may have failed last time too.
+      if (healthy) setHealthy(false);
+      else notifyHealth();
       if (retries < MAX_RETRIES) {
         retries++;
         retryTimer = window.setTimeout(scheduleSeal, RETRY_MS);

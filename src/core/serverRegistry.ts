@@ -62,7 +62,8 @@ function writeAll(entries: ServerEntry[]) {
     const { accessToken, refreshToken, profileToken, ...rest } = entry.session;
     setSecrets(entry.url, { accessToken, refreshToken, profileToken });
     // Plain tokens where the encrypted copy can't be relied on, so the sign-in isn't lost.
-    if (!secure) return entry;
+    // Never the access token: it is renewed from the refresh token, so it needn't survive.
+    if (!secure) return { ...entry, session: { ...entry.session, accessToken: "" } };
     return { ...entry, session: { ...rest, accessToken: "" } };
   });
   localStorage.setItem(REGISTRY_KEY, JSON.stringify(stored));
@@ -134,10 +135,11 @@ export const serverRegistry = {
 
   clearSession(serverUrl: string) {
     const normalized = normalize(serverUrl);
-    unreadable.delete(normalized);
     const entries = readAll().map((entry) =>
       entry.url === normalized ? { ...entry, session: undefined } : entry
     );
+    // After readAll, which would put the stub back.
+    unreadable.delete(normalized);
     writeAll(entries);
   },
 
