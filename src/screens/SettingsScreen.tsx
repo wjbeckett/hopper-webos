@@ -12,6 +12,7 @@ import { getPlaybackConnection, resetLearnedLimit, runSpeedTest } from "../api/p
 import type { PlaybackConnection } from "../api/playbackConnection";
 import { getDeviceId } from "../platform/device";
 import { requestV2 } from "../api/silo";
+import { NetworkError } from "../api/connection";
 import { profileLaunchChoices, readProfileLaunchBehavior, writeProfileLaunchBehavior } from "../core/profileLaunch";
 import type { ProfileLaunchBehavior } from "../core/profileLaunch";
 import { HomeSectionsEditor } from "../components/HomeSectionsEditor";
@@ -317,6 +318,11 @@ export function SettingsScreen({
   const [contract, setContract] = useState<SettingsContract | null>(null);
   const [values, setValues] = useState<Map<string, unknown>>(new Map());
   const [error, setError] = useState("");
+  /** Why the settings contract and values could not be loaded. Only General, Playback and Subtitles need them. */
+  const [loadError, setLoadError] = useState("");
+  const [retrying, setRetrying] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const refocusAfterLoad = useRef(false);
   const [picker, setPicker] = useState<PickerRequest | null>(null);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [diagEligible, setDiagEligible] = useState<boolean | null>(null);
@@ -376,9 +382,13 @@ export function SettingsScreen({
 
   useEffect(() => {
     let alive = true;
+    let loaded = false;
     Promise.all([getSettingsContract(session), getEffectiveSettings(session, allKeys)])
       .then(async ([loadedContract, effective]) => {
         if (!alive) return;
+        loaded = true;
+        setLoadError("");
+        setRetrying(false);
         setContract(loadedContract);
         const resolved = new Map(Array.from(effective.entries()).map(([key, entry]) => [key, entry.value]));
         setSources(new Map(Array.from(effective.entries()).map(([key, entry]) => [key, entry.source ?? ""])));
@@ -421,9 +431,35 @@ export function SettingsScreen({
         const source = effective.get("playback.subtitle_appearance")?.source ?? "";
         setSubtitleDeviceOnly(source === "profile_device" || source === "device");
       })
-      .catch(reason => { if (alive) setError(reason instanceof Error ? reason.message : "Could not load settings."); });
+      .catch(reason => {
+        if (!alive) return;
+        // Once the contract is in, a later step failing is an ordinary error above the pane.
+        if (loaded) { setError(reason instanceof Error ? reason.message : "Could not load settings."); return; }
+        console.warn("[Hopper] settings load failed", reason);
+        setLoadError(reason instanceof NetworkError ? reason.message : "Silo couldn't load these settings.");
+        setRetrying(false);
+      });
     return () => { alive = false; };
-  }, [session.serverUrl, session.profileId, allKeys]);
+  }, [session.serverUrl, session.profileId, allKeys, loadAttempt]);
+
+  // The Try Again row goes away once the settings load. If it had focus, hand focus to the
+  // pane's first row instead of letting it fall to the page.
+  useEffect(() => {
+    if (!contract || !refocusAfterLoad.current) return;
+    refocusAfterLoad.current = false;
+    requestAnimationFrame(() => {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active !== document.body && active.isConnected) return;
+      document.querySelector<HTMLElement>(".settings-pane [data-tv-focusable='true']")?.focus();
+    });
+  }, [contract]);
+
+  function retryLoad() {
+    if (retrying) return;
+    refocusAfterLoad.current = document.activeElement?.getAttribute("data-setting-key") === "settings-retry";
+    setRetrying(true);
+    setLoadAttempt(attempt => attempt + 1);
+  }
 
   useEffect(() => {
     requestAnimationFrame(() => railRef.current?.querySelector<HTMLElement>(`[data-settings-category='${category}']`)?.focus());
@@ -1031,7 +1067,15 @@ export function SettingsScreen({
       </>
     );
   } else if (!contract) {
-    pane = error ? <p className="settings-error">{error}</p> : <LoadingState />;
+    pane = loadError ? (
+      <section className="settings-group">
+        <p className="settings-footer" role="alert">{loadError}</p>
+        {/* Stays mounted while retrying so focus doesn't jump. */}
+        <button data-tv-focusable="true" data-setting-key="settings-retry" className="option-row settings-row" aria-disabled={retrying} onClick={retryLoad}>
+          <span>{retrying ? "Loading…" : "Try Again"}</span>
+        </button>
+      </section>
+    ) : <LoadingState />;
   } else if (category === "subtitles") {
     pane = <>{renderGroups(keysByCategory.subtitles)}{renderSubtitleAppearance()}</>;
   } else if (category === "general") {
