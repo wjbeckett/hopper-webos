@@ -21,6 +21,7 @@ Deliberate differences from the Android TV app. Do not "fix" these to match Andr
 - Opening or resuming a title may start up to 10 s before the saved position, at the previous keyframe, because seeking to the exact position costs several seconds on a TV.
 - When the server cannot be reached while browsing, Hopper shows a dialog with "Try again" and "Dismiss", then a small notice, and loads the screen again when the server answers. Android shows an "Offline mode - select to retry" pill and keeps a cached Home; Hopper has no offline mode beyond the Home rows it already caches.
 - The Magic Remote pointer is supported, because LG requires it: pointing at a control focuses it, and rows of cards get arrows at their edges while the pointer is over them. Android TV has no pointer.
+- The access token is kept in memory only and renewed from the refresh token on every launch, which adds one request before the first screen loads. Android stores it, encrypted. The refresh and profile tokens are encrypted on the TV in both clients.
 - Audio delay is 0 to 1000 ms. Android allows -1000 to 1000 ms; a WebAudio `DelayNode` cannot move audio earlier. Keep the limit unless a TV-safe way to advance audio is shown not to make sync worse.
 - The TV cannot browse the network for servers, because a web app has no mDNS. Phone pairing covers discovery (the phone finds the TV); manual entry and saved servers remain.
 - Episode items open within the Series screen, which selects the relevant season; standalone episode/season pages are not webOS destinations.

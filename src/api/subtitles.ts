@@ -1,5 +1,5 @@
 import type { Session } from "../types";
-import { requestV2 } from "./silo";
+import { ensureAccessToken, requestV2 } from "./silo";
 
 export type SubtitleSearchResult = {
   id: string;
@@ -67,6 +67,7 @@ export const readSubtitleSync = (session: Session, fileId: number | string, key:
 export const startSubtitleSync = (session: Session, fileId: number | string, key: string) => requestV2<{ subtitle: SubtitleSyncState }>(session, syncPath(fileId, key), { method: "POST" }).then(response => response.subtitle);
 
 export async function resetSubtitleTiming(session: Session, fileId: number | string, key: string) {
+  await ensureAccessToken(session);
   const root = session.serverUrl.replace(/\/+$/, "");
   const headers = {
     Accept: "application/json",

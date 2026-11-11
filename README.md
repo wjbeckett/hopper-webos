@@ -69,6 +69,7 @@ Hopper is an independent, community-built client. It is not affiliated with or e
 - If the server can't be reached, Hopper says so, keeps trying, and carries on when it answers: screens load again and a video resumes where it stopped. If the server ends your sign-in, you return to the sign-in screen for the same server.
 - Settings for General, Playback, Subtitles, Diagnostics and Server, laid out like the official Android TV client.
 - Diagnostics stay on the TV. Logs can be viewed or exported, and are never uploaded.
+- Your sign-in is stored encrypted on the TV, and your password is never stored.
 
 ## Known limitations
 

@@ -4158,7 +4158,10 @@ body {
   font-size: .8rem;
 }
 
-.episode-tile.watched .episode-tile-art::before {
+/* ::after, not ::before: on Chrome 87 the art box gets its height from a ::before spacer
+   (see the @supports block near the end), and this overlay replaced it, leaving watched
+   episodes with no thumbnail. */
+.episode-tile.watched .episode-tile-art::after {
   content: "";
   position: absolute;
   inset: 0;

@@ -376,13 +376,13 @@ export function ProfileAvatar({ session }: { session: Session }) {
 
     let active = true;
     let objectUrl = "";
-    fetch(source, {
+    ensureAccessToken(session).then(() => fetch(source, {
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
         ...(session.profileId ? { "X-Profile-Id": session.profileId } : {}),
         ...(session.profileToken ? { "X-Profile-Token": session.profileToken } : {})
       }
-    })
+    }))
       .then((response) => {
         if (!response.ok) throw new Error(`Avatar request failed: ${response.status}`);
         return response.blob();
@@ -432,6 +432,6 @@ function avatarImageUrl(value: string, serverUrl: string) {
   return `${serverUrl.replace(/\/+$/, "")}/${value.replace(/^\/+/, "")}`;
 }
 import { useEffect, useState } from "react";
-import { getLibraryCollectionSections } from "../api/silo";
+import { ensureAccessToken, getLibraryCollectionSections } from "../api/silo";
 import { serverRegistry } from "../core/serverRegistry";
 import type { Session, SiloLibrary } from "../types";
