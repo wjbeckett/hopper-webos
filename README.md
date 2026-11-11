@@ -59,7 +59,7 @@ Hopper is an independent, community-built client. It is not affiliated with or e
 - Audio, subtitle, version and quality switching while you watch.
 - Subtitle appearance, sync and online search, plus AI subtitle translation where the server supports it.
 - Playback speed, sleep timer, audio delay, and HDR / Dolby Vision options.
-- Dolby Digital and Dolby Digital Plus audio is sent to the TV untouched, so the TV can pass it to a soundbar or receiver.
+- Dolby Digital and Dolby Digital Plus audio is sent to the TV untouched, so the TV can pass it to a soundbar or receiver. If the stream fails, playback starts again where it stopped, and the server converts the audio if it fails a second time.
 
 **Built for the TV**
 - Every screen works with arrows, OK and Back on the LG remote, and the remote's media keys control playback.

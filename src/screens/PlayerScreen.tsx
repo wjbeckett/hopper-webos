@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { connectionStatus, holdConnectionDialog, NetworkError, onceReachable, reportNetworkFailure, subscribeConnection } from "../api/connection";
 import type Hls from "hls.js";
 import { pinFocusedRailItem } from "../navigation/spatial";
-import { bestVersionForDevice, getMarkers, getTrickplay, getWatchDetail, playbackUrl, replanPlaybackV3, reportProgress, saveAudioPreference, saveSubtitlePreference, startPlaybackV3, stopPlayback, stopPlaybackKeepalive, type AudioTrack, type FileMarkers, type MarkerSegment, type PlaybackChoices, type PlaybackPlan, type Quality, type SubtitleInventory, type Trickplay, type WatchDetail } from "../api/playback";
+import { allowDolbyAudio, bestVersionForDevice, getMarkers, isDolbyAudio, getTrickplay, getWatchDetail, playbackUrl, replanPlaybackV3, reportProgress, saveAudioPreference, saveSubtitlePreference, startPlaybackV3, stopPlayback, stopPlaybackKeepalive, type AudioTrack, type FileMarkers, type MarkerSegment, type PlaybackChoices, type PlaybackPlan, type Quality, type SubtitleInventory, type Trickplay, type WatchDetail } from "../api/playback";
 import type { HomeRail, Session, SiloItem } from "../types";
 import { getEffectiveSettings, putScopedSetting } from "../api/settings";
 import { artUrl, getHomeRails, getShuffle, skipShuffle } from "../api/silo";
@@ -15,6 +15,7 @@ import { parseSubtitleAppearance, SUBTITLE_APPEARANCE_CHOICES, SUBTITLE_APPEARAN
 import { putDeviceSubtitleAppearance, putProfileSubtitleAppearance, type SubtitleAppearance } from "../api/settings";
 import { applySubtitleDelay, attachSidecarSubtitle, sidecarSubtitleArtifact } from "../core/subtitleSidecar";
 import { audioDelaySupported, setAudioDelay } from "../platform/audioDelay";
+import { patientGapController } from "../platform/startGap";
 import { SubtitleSearchDialog } from "../components/SubtitleSearchDialog";
 import { languageSearchCode } from "../core/languageNames";
 import { AiTranslateDialog, type AiSource } from "../components/AiTranslateDialog";
@@ -35,6 +36,8 @@ const PLAY_THROUGH_RESUME_SECONDS = 10;
 const PLAY_THROUGH_SEEK_SECONDS = 3;
 /** Restarts after network loss without the picture playing in between, before the error is shown instead. */
 const MAX_OUTAGE_RESTARTS = 3;
+/** Stream failures closer together than this count as the same problem (see recoverStream). */
+const STREAM_FAILURE_WINDOW_MS = 60000;
 
 // Seek grammar mirrors the Android TV player exactly (TvSeekRateLadder):
 // a signed 1x..32x ladder, a 100 ms tick carrying 2.0s of content per tick
@@ -219,6 +222,11 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   // Restarts since the picture last played; stops a stream that never loads from restarting for ever.
   const outageRestarts = useRef(0);
   const beginOutage = useRef<() => boolean>(() => false);
+  // A stream that fails for any other reason (hls.js gives up, or the TV reports a decode
+  // error) used to stay stopped on an error. It is started again at the same position: once
+  // as it was, then once with Dolby audio converted to AAC by the server.
+  const streamFailures = useRef({ count: 0, at: 0 });
+  const recoverStream = useRef<(reason: string) => boolean>(() => false);
   const unmounted = useRef(false);
   // Goes up to run the start-up again when the network was lost before anything played.
   const [startAttempt, setStartAttempt] = useState(0);
@@ -473,6 +481,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         }
         const hls = new HlsPlayer({
           startPosition: startAt,
+          gapController: patientGapController(HlsPlayer.DefaultConfig.gapController),
           pLoader: SlimPlaylistLoader as unknown as HlsConfig["pLoader"],
           enableWorker: true,
           // Fast start: begin on the lowest rendition, then ABR climbs. Waiting to measure
@@ -495,6 +504,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
           if (noAnswer) reportNetworkFailure(session.serverUrl);
           if (!data.fatal) return;
           if (noAnswer && beginOutage.current()) return;
+          if (!noAnswer && recoverStream.current(data.details)) return;
           setError(`HLS playback error: ${data.details}`);
         });
         hls.on(HlsPlayer.Events.MANIFEST_PARSED, () => {
@@ -754,6 +764,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       setSkipSeconds({ back: validSkip(settings.get("player.video_skip_back_seconds")?.value, DEFAULT_SKIP_BACK_SECONDS), forward: validSkip(settings.get("player.video_skip_forward_seconds")?.value, DEFAULT_SKIP_FORWARD_SECONDS) });
       setPlayerSettingsLoaded(true);
     });
+    allowDolbyAudio(true);
     getWatchDetail(session, item).then(async (watch) => {
       if (!alive) return;
       const selectedVersion = watch.versions.find(entry => entry.file_id === choices?.fileId)
@@ -1371,11 +1382,33 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     return true;
   };
 
+  // Returns false when the stream has already been started again without success: the caller
+  // shows the error.
+  recoverStream.current = (reason: string) => {
+    const active = stateRef.current;
+    if (!active || !detail || !version || outageWait.current) return false;
+    const failures = streamFailures.current;
+    const now = performance.now();
+    if (now - failures.at > STREAM_FAILURE_WINDOW_MS) failures.count = 0;
+    failures.at = now;
+    failures.count += 1;
+    const dolby = isDolbyAudio(active.plan.claims?.audio?.codec);
+    if (failures.count > (dolby ? 2 : 1)) return false;
+    const withoutDolby = dolby && failures.count === 2;
+    clientDiagnostic("restarting the stream after a playback failure", { reason, attempt: failures.count, withoutDolby });
+    if (withoutDolby) allowDolbyAudio(false);
+    setError("");
+    void resumeAfterOutage(sourcePosition());
+    return true;
+  };
+
   function handleMediaError() {
     const video = videoRef.current;
     const mediaError = video?.error;
     // A stream the TV loads itself (not through hls.js) reports network loss here.
     if (mediaError?.code === 2 && beginOutage.current()) return;
+    // The TV could not decode or open the stream: start it again before giving up.
+    if (mediaError && (mediaError.code === 3 || mediaError.code === 4) && recoverStream.current(`media error ${mediaError.code}`)) return;
     const labels: Record<number, string> = { 1: "aborted", 2: "network", 3: "decode", 4: "unsupported source" };
     const reason = mediaError ? labels[mediaError.code] ?? `code ${mediaError.code}` : "unknown error";
     const diagnostics = {

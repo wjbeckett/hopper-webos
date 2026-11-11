@@ -91,7 +91,7 @@ Keep each concern in its own layer:
   - `events.ts` is the realtime socket (`user_state`/`catalog` events).
   - `settings.ts` resolves effective server and profile settings.
   - `subtitles.ts` and `diagnostics.ts` cover their own areas.
-- **Playback** should direct play when the TV supports it, but it must always be negotiated through Silo PlaybackInfo/device profiles. Never seek the video at start-up: a seek rebuilds the TV's media pipeline and costs seconds (`docs/PERFORMANCE.md`).
+- **Playback** should direct play when the TV supports it, but it must always be negotiated through Silo PlaybackInfo/device profiles. Never seek the video at start-up: a seek rebuilds the TV's media pipeline and costs seconds (`docs/PERFORMANCE.md`). A stream that fails for a reason other than the network is started again at the same position, once as it was and once with Dolby audio left out of the client's capabilities so Silo converts it (`recoverStream` in `PlayerScreen.tsx`, `allowDolbyAudio` in `src/api/playback.ts`).
 
 ### Navigation
 - **`src/navigation/spatial.ts`** is one global keydown handler. It covers D-pad movement, the top nav, library grids, rails (`RAIL_SELECTOR` pins the focused card), modals (`[data-modal="true"]`) and Back.
@@ -103,6 +103,7 @@ Keep each concern in its own layer:
 - **`src/platform/`:**
   - `capabilities.ts` probes codecs via `canPlayType`, and audio codecs also alongside video in one MediaSource buffer, because that is how the HLS segments carry them.
   - `splitSourceBuffer.ts` and `fmp4Split.ts` make Dolby audio work: webOS 22 refuses AC-3 and E-AC-3 in a buffer shared with video, so the shared buffer hls.js asks for is replaced by a stand-in that splits each segment into a video buffer and an audio buffer. The audio is copied, never converted.
+  - `startGap.ts` keeps hls.js from seeking over a small gap at the start of a stream (Dolby streams have one); the TV starts across it by itself.
   - `pairing.ts` makes Luna calls to the bundled service.
   - `back.ts` hands Back over to the TV (`PalmSystem.platformBack()`: the exit popup on webOS 6 and later, the Home launcher before that). It does nothing in a desktop browser.
   - `audioDelay.ts` stays at 0..1000 ms (Android allows -1000..1000) unless a webOS-safe way to advance audio is demonstrated, because a WebAudio `DelayNode` can't advance audio.
