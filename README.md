@@ -19,7 +19,7 @@ Hopper is an independent, community-built client. It is not affiliated with or e
 | --- | --- | --- | --- |
 | LG Content Store | Not yet submitted | – | Store assets and listing are ready |
 | GitHub Releases (IPK) | Not yet published | – | |
-| Build from source | Available | 0.3.0 | Sideload with LG Developer Mode |
+| Build from source | Available | 0.3.x (every build has its own number) | Sideload with LG Developer Mode |
 
 ## Screenshots
 
@@ -59,6 +59,7 @@ Hopper is an independent, community-built client. It is not affiliated with or e
 - Audio, subtitle, version and quality switching while you watch.
 - Subtitle appearance, sync and online search, plus AI subtitle translation where the server supports it.
 - Playback speed, sleep timer, audio delay, and HDR / Dolby Vision options.
+- Dolby Digital and Dolby Digital Plus audio is sent to the TV untouched, so the TV can pass it to a soundbar or receiver.
 
 **Built for the TV**
 - Every screen works with arrows, OK and Back on the LG remote, and the remote's media keys control playback.

@@ -47,6 +47,7 @@ WEBOS_DEVICE=livingroom npm run webos:inspect          # LG Web Inspector
 npm run webos:check                                    # verify node/ares tooling and devices
 ```
 - There is no linter and no test suite yet. `npm run build`, which type-checks, is the check to run before committing. It fails on unused locals, imports and parameters (`noUnusedLocals`, `noUnusedParameters`); prefix a parameter you must keep with `_`.
+- Every build gets its own version, `<major>.<minor>.<commit count>` (for example 0.3.215), from `vite.config.ts`. It is stamped into the packaged `appinfo.json`, shown under Settings → Server with the commit hash, and sent in playback requests. `package.json` holds only `<major>.<minor>`; bump it there for a release. Don't hand-edit version numbers anywhere else.
 - `WEBOS_APP_ID` overrides the app ID for launch and inspect.
 - In the browser, arrow keys move focus, Enter selects, and Escape or Backspace act as Back.
 - During `vite dev`, `POST /__client-log` echoes client logs to the terminal.
@@ -89,7 +90,7 @@ Keep each concern in its own layer:
   - `events.ts` is the realtime socket (`user_state`/`catalog` events).
   - `settings.ts` resolves effective server and profile settings.
   - `subtitles.ts` and `diagnostics.ts` cover their own areas.
-- **Playback** should direct play when the TV supports it, but it must always be negotiated through Silo PlaybackInfo/device profiles.
+- **Playback** should direct play when the TV supports it, but it must always be negotiated through Silo PlaybackInfo/device profiles. Never seek the video at start-up: a seek rebuilds the TV's media pipeline and costs seconds (`docs/PERFORMANCE.md`).
 
 ### Navigation
 - **`src/navigation/spatial.ts`** is one global keydown handler. It covers D-pad movement, the top nav, library grids, rails (`RAIL_SELECTOR` pins the focused card), modals (`[data-modal="true"]`) and Back.
@@ -99,7 +100,8 @@ Keep each concern in its own layer:
 
 ### Platform and pairing
 - **`src/platform/`:**
-  - `capabilities.ts` probes codecs via `canPlayType`. Progressive and original-file delivery are disabled, so playback is HLS.
+  - `capabilities.ts` probes codecs via `canPlayType`, and audio codecs also alongside video in one MediaSource buffer, because that is how the HLS segments carry them.
+  - `splitSourceBuffer.ts` and `fmp4Split.ts` make Dolby audio work: webOS 22 refuses AC-3 and E-AC-3 in a buffer shared with video, so the shared buffer hls.js asks for is replaced by a stand-in that splits each segment into a video buffer and an audio buffer. The audio is copied, never converted.
   - `pairing.ts` makes Luna calls to the bundled service.
   - `audioDelay.ts` stays at 0..1000 ms (Android allows -1000..1000) unless a webOS-safe way to advance audio is demonstrated, because a WebAudio `DelayNode` can't advance audio.
   - The other modules are `captions`, `dolbyVision`, `device` and `youtube`.
@@ -110,6 +112,11 @@ Keep each concern in its own layer:
   - `serverRegistry.ts` stores saved servers and sessions in `localStorage`.
   - `watchState.ts` is a pub/sub. `publishWatchState` updates cards and rails in place, and `publishRailsChanged` triggers refetches.
   - The other modules cover artwork and title art, theme music, profile launch/PIN gating, subtitle styling and sync, browse prefs and episode navigation.
+- **Home, For You and library Recommended** are `FeaturedRailsScreen`. It is built for a slow TV, so keep these properties when changing it (measurements and reasons in `docs/PERFORMANCE.md`):
+  - Only rows near focus render cards, and each `MediaRail` renders the cards around the focused one. Other positions are empty `.media-card-wrap` placeholders.
+  - Nothing scrolls. `slideRailItem` in `spatial.ts` and `keepFocusedRailInView` move a row's `.rail-strip` and the band's `.home-rails-inner` with a CSS-animated `transform`.
+  - The hero is `HomeHero`, driven through a ref, so a focus change does not re-render the rows. On a TV its backdrop is two persistent images (`TvBackdrop`).
+  - Home's rows are cached in `src/core/homeRailsCache.ts`, so Back shows Home at once and focus returns to the same card.
 - **`src/screens/`** holds full screens. `PlayerScreen.tsx` is the largest and owns all playback UI. Audiobooks currently share it. **`src/components/`** holds the shared 10-foot UI (`TopNav`, `MediaCard`, `FeaturedRailsScreen` for Home and library rails, `PlaybackOptions`, `HopperMark`).
 - **Styling:** everything is in `src/styles.css`. `main.tsx` adds the `webos` class on TVs to turn on lighter paint rules. Theme values are CSS custom properties set from `THEME_TOKENS`.
 
@@ -124,6 +131,8 @@ Keep each concern in its own layer:
 - No CSS `:has()`.
 - CSS transforms on SVG elements need `transform-box: fill-box`.
 - Video renders on a hardware layer, so inspector screenshots show a blank player.
+- `window.devicePixelRatio` reports 2 but the page renders at 1920x1080. Don't size images or canvases from it.
+- A transition or animation on an element makes it a compositor layer for as long as it runs. Inside lists that means layers made and dropped on every focus change, which costs more than it draws.
 - Animations of shapes inside one `<svg>` are painted on the main thread, so they drop frames whenever the app is busy (launch, page loads). For anything that must stay smooth, animate separate HTML elements with `transform` and `opacity` only; the compositor runs those without the main thread.
 
 ## Branding
@@ -147,6 +156,7 @@ There is no change log, handoff or backlog file. The history is the merged pull 
 | `docs/DECISIONS.md` | Deliberate differences from Android TV, and what is not planned | The maintainer decides a new difference, or decides not to build something |
 | `README.md` | What users get: Features, Known limitations, Availability | A user-visible feature ships, a limitation is removed or added, or a store submission or release happens |
 | `CONTRIBUTING.md` | Setup, browser development, TV deploy, PR conventions | Commands, tooling, scripts or contribution rules change |
+| `docs/PERFORMANCE.md` | How speed is measured on a TV, the numbers, and the rules that came out of them | A change is measured on a TV, or changes how Home renders or the player starts |
 | `docs/MAINTAINING.md` | What the PR automation does and the maintainer's steps | A workflow in `.github/workflows/`, a label or a repository setting changes |
 | `CLAUDE.md` | Rules, commands, architecture and procedure for agents | Architecture, commands, rules or this table change |
 | `TRADEMARK.md`, `brand/NOTICE` | What brand files are reserved outside the AGPL, and the name and fork policy | Brand files are added, moved or renamed, or the app ID changes |

@@ -4957,31 +4957,12 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
   .detail-trailer-art { position: relative; display: block; }
 }
 
-/* webOS TV paint budget: full-screen radial gradients repaint on every rail scroll
-   and cost ~130ms/frame on a webOS 22 panel. Keep one linear scrim, drop the radials. */
-/* TV lite mode, chosen from remote-key frame timing on a real webOS 22 TV:
-   - the blurred wash (blur(92px)) repaints a full-screen layer on every focus change;
-   - slide-in/out keyframes on the hero layer animate position over a huge surface.
-   Keep the look (hero art with its soft mask, tint, scrim) but crossfade with opacity only. */
-.webos .home-backdrop-wash { display: none; }
-.webos .home-backdrop-image {
-  animation: none !important;
-  transform: none;
-  will-change: opacity;
-}
-.webos .home-backdrop-image.current { opacity: 0; transition: opacity 220ms linear; }
-.webos .home-backdrop-image.current.loaded { opacity: 1; }
-.webos .home-backdrop-image.previous { opacity: 1; transition: opacity 220ms linear; }
-.webos .home-backdrop-image.previous.transitioning-out { opacity: 0; }
-.webos .home-backdrop-tint { transition: opacity 220ms linear; }
 /* Focus: a crisp ring plus a small lift. No blurred glow or drop shadow. */
 .webos .media-card:focus { transform: scale(1.06); }
 .webos .media-card:focus .media-card-art { box-shadow: 0 0 0 3px rgba(255,255,255,.92); }
 .webos .media-card:focus .artwork-full { transform: none; }
 .webos .artwork-revealed { animation: none; }
 .webos .home-hero-backdrop { background: var(--background); }
-/* Plex-style settle: while focus is moving the backdrop sits washed out (gradient and copy stay);
-   it fades back in once focus rests. Opacity on an already-composited layer only. */
 /* Hero copy (title, metadata, overview) swaps in place: no roll animation, no text blur shadow,
    and its own paint scope so a text change never repaints the rows. */
 .webos .home-featured { contain: layout paint style; }
@@ -5000,14 +4981,90 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
   padding-bottom: .08em;
 }
 
+/* TV backdrop (HomeHero's TvBackdrop): two images that stay mounted and trade places, under
+   one fixed shade. Only opacity changes, on layers that already exist, so moving focus never
+   builds or repaints a layer. The shade draws the art's soft left and bottom edges, the scrim
+   and the vignette in one element that is rastered once. */
+.tv-backdrop-image {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 64%;
+  height: min(58vh, 640px);
+  object-fit: cover;
+  object-position: center;
+  opacity: 0;
+  /* Leaving: quick, while focus is moving. */
+  transition: opacity 140ms linear;
+  will-change: opacity;
+}
+/* Arriving: a slow fade once focus has rested. */
+.tv-backdrop-image.shown { opacity: 1; transition: opacity 900ms ease-out; }
+.tv-backdrop-shade {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  will-change: transform;
+  background:
+    linear-gradient(90deg, var(--background) 0%, rgba(7,8,9,.72) 24%, rgba(7,8,9,.28) 52%, transparent 78%),
+    linear-gradient(270deg, rgba(7,8,9,.38) 0%, transparent 22%),
+    linear-gradient(180deg, rgba(7,8,9,.08) 0%, transparent 28%, rgba(7,8,9,.46) 43%, rgba(7,8,9,.78) 58%, var(--background) 82%),
+    linear-gradient(to left, transparent 0%, transparent 68%, var(--background) 100%) top right / 64% min(58vh, 640px) no-repeat,
+    linear-gradient(to bottom, transparent 0%, transparent 58%, var(--background) 100%) top right / 64% min(58vh, 640px) no-repeat;
+}
+
 /* Top-nav lockup: mark + word. Mark viewBox is 664x840 (portrait). */
 .tv-nav .brand-mark { width: auto; min-width: 0; }
 .hopper-lockup { display: inline-flex; align-items: center; gap: 10px; white-space: nowrap; }
 .hopper-lockup-mark { width: 30px; height: 38px; }
 .hopper-lockup-word { color: #f4f4f2; font-size: 1.45rem; font-weight: 700; letter-spacing: .01em; }
 
+/* A row's strip of cards. By default it is not a box at all, so the track lays the cards out
+   and scrolls as it always did. */
+.rail-strip { display: contents; }
+/* Sliding rows and band (Home, For You, library Recommended): nothing scrolls. The track and
+   the band clip, and the strip and the band's inner block are moved with a transform that
+   CSS animates. One style change per key press, and the compositor does the rest. */
+.rail-track[data-slide] { display: block; overflow: hidden; }
+.rail-track[data-slide] > .rail-strip {
+  position: relative;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: inherit;
+  gap: inherit;
+  width: max-content;
+  isolation: isolate;
+  will-change: transform;
+  transition: transform 110ms ease-out;
+}
+.home-rails { overflow: hidden; }
+.home-rails-inner {
+  position: relative;
+  will-change: transform;
+  transition: transform 170ms ease-out;
+}
+.home-rails-inner.no-slide { transition: none; }
+
 /* The row slide is driven from script; native smooth scrolling would fight it. */
 .webos .rail-track { scroll-behavior: auto; scroll-snap-type: none; }
+/* TV compositing, measured on a webOS 22 TV (Chrome 87) with the inspector's trace:
+   - Rows that still scroll (outside Home) do so as compositor layers (will-change), so a
+     scroll moves a layer that is already rastered. Left to itself Chrome flipped between
+     composited and main-thread scrolling depending on what had animated last, and in the
+     composited state every z-indexed child of a card became its own layer (120 layers on Home).
+   - Each row is its own stacking context (isolation), so those children paint into the row's
+     layer and do not need layers of their own.
+   - No transitions inside cards: each one promoted its element to a layer for the length of
+     the transition, and making and dropping those layers cost more than the frames they drew.
+     Focus scale and artwork reveal are instant on a TV.
+   - No resting drop shadow under every card; the focused card keeps its ring. */
+.webos .rail-track:not([data-slide]) { isolation: isolate; will-change: transform; }
+.webos .media-card,
+.webos .media-card-art,
+.webos .artwork-image img { transition: none; }
+.webos .media-card-art { box-shadow: none; }
 /* Browse grid (TV): each card is its own layout/paint island, so a focus change repaints one
    card, not the grid (measured 150ms -> 50ms per frame). Cards far from the selector skip paint
    entirely; the window follows focus and spans well past the screen, so it is never visible. */
@@ -5017,20 +5074,3 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 .webos .library-grid > *:focus-within,
 .webos .library-grid > .media-card:focus { contain: layout style; }
 .webos .library-grid > .grid-far { visibility: hidden; }
-.webos .home-backdrop-image.previous { display: none; }
-/* New backdrop fades in over 1s once focus has rested. */
-.webos .home-backdrop-image.current.loaded { transition: opacity 1000ms ease-out; }
-/* While focus is moving the outgoing backdrop vanishes at once (no fade-out). */
-.webos .home-hero-backdrop.settling .home-backdrop-image.current,
-.webos .home-hero-backdrop.settling .home-backdrop-image.current.loaded { opacity: 0; transition: none; }
-/* Vignette softens the hero art in the top-right: darkens the edges and the left join with the copy. */
-.home-backdrop-vignette { position: absolute; inset: 0; z-index: 3; pointer-events: none; display: none; }
-.webos .home-backdrop-vignette {
-  display: block;
-  background:
-    linear-gradient(90deg, var(--background) 0%, rgba(7,8,9,.72) 24%, rgba(7,8,9,.28) 52%, transparent 78%),
-    linear-gradient(270deg, rgba(7,8,9,.38) 0%, transparent 22%);
-}
-.webos .home-backdrop-scrim {
-  background: linear-gradient(180deg, rgba(7,8,9,.08) 0%, transparent 28%, rgba(7,8,9,.46) 43%, rgba(7,8,9,.78) 58%, var(--background) 82%);
-}
