@@ -32,6 +32,7 @@ async function requestApi<T>(
     }
   });
 
+  if (path !== "/auth/refresh") await ensureAccessToken(session);
   let response = await perform();
   if (response.status === 401 && session.refreshToken && path !== "/auth/refresh") {
     await refreshSession(session);
@@ -83,6 +84,16 @@ function expireSession(session: Session) {
   if (!saved || saved.refreshToken !== session.refreshToken) return;
   serverRegistry.clearSession(session.serverUrl);
   publishSessionExpired(session.serverUrl);
+}
+
+/**
+ * The access token is not stored (core/secureStore), so after a launch a session has only its
+ * refresh token. Renews the access token before the first request instead of sending an empty
+ * one and waiting for the 401. Parallel callers share one refresh.
+ */
+export async function ensureAccessToken(session: Session): Promise<void> {
+  if (session.accessToken || !session.refreshToken) return;
+  await refreshSession(session);
 }
 
 export async function refreshSession(session: Session): Promise<void> {

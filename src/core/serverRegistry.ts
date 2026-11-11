@@ -1,4 +1,5 @@
 import type { ServerEntry, Session } from "../types";
+import { clearSecrets, secretsFor, secretsSettled, secureStorageAvailable, setSecrets } from "./secureStore";
 
 const REGISTRY_KEY = "silo-webos-servers-v1";
 const ACTIVE_KEY = "silo-webos-active-server-v1";
@@ -12,7 +13,8 @@ function serverName(url: string) {
   return new URL(url).hostname;
 }
 
-function readAll(): ServerEntry[] {
+/** What is stored for each server: the session without its tokens when secure storage is available. */
+function readStored(): ServerEntry[] {
   try {
     const parsed = JSON.parse(localStorage.getItem(REGISTRY_KEY) ?? "[]");
     return Array.isArray(parsed) ? parsed : [];
@@ -21,8 +23,53 @@ function readAll(): ServerEntry[] {
   }
 }
 
+/**
+ * Saved servers with their sessions complete. The tokens come from memory (see
+ * core/secureStore). A session whose refresh token could not be read is left out, so that
+ * server asks for sign-in again.
+ */
+function readAll(): ServerEntry[] {
+  return readStored().map((entry) => {
+    if (!entry.session) return entry;
+    const secrets = secretsFor(entry.url);
+    // Plain tokens are still on the entry where secure storage is unavailable.
+    const session: Session = { ...entry.session, ...secrets, accessToken: secrets?.accessToken ?? entry.session.accessToken ?? "" };
+    if (!session.refreshToken && !session.accessToken) return { ...entry, session: undefined };
+    return { ...entry, session };
+  });
+}
+
 function writeAll(entries: ServerEntry[]) {
-  localStorage.setItem(REGISTRY_KEY, JSON.stringify(entries));
+  const stored = entries.map((entry) => {
+    if (!entry.session) {
+      clearSecrets(entry.url);
+      return entry;
+    }
+    const { accessToken, refreshToken, profileToken, ...rest } = entry.session;
+    setSecrets(entry.url, { accessToken, refreshToken, profileToken });
+    if (!secureStorageAvailable()) return entry;
+    return { ...entry, session: { ...rest, accessToken: "" } };
+  });
+  localStorage.setItem(REGISTRY_KEY, JSON.stringify(stored));
+}
+
+/**
+ * Moves sign-ins saved by older builds, with tokens in plain text, into secure storage. The
+ * plain copy is removed only once the encrypted one is stored, so a power cut in between
+ * cannot lose the sign-in. Run once at start-up, after secrets are loaded.
+ */
+export async function migratePlainSessions(): Promise<void> {
+  if (!secureStorageAvailable()) return;
+  const stored = readStored();
+  const plain = stored.filter(entry => entry.session && (entry.session.refreshToken || entry.session.profileToken || entry.session.accessToken));
+  if (!plain.length) return;
+  for (const entry of plain) {
+    const { accessToken, refreshToken, profileToken } = entry.session!;
+    // The plain copy is the newer one if both exist.
+    setSecrets(entry.url, { accessToken, refreshToken, profileToken });
+  }
+  await secretsSettled();
+  writeAll(readAll());
 }
 
 export const serverRegistry = {
@@ -76,7 +123,9 @@ export const serverRegistry = {
   },
 
   remove(id: string) {
-    const entries = readAll().filter((entry) => entry.id !== id);
+    const all = readAll();
+    all.filter((entry) => entry.id === id).forEach((entry) => clearSecrets(entry.url));
+    const entries = all.filter((entry) => entry.id !== id);
     writeAll(entries);
     if (localStorage.getItem(ACTIVE_KEY) === id) {
       localStorage.removeItem(ACTIVE_KEY);
