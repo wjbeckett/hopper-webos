@@ -47,6 +47,7 @@ WEBOS_DEVICE=livingroom npm run webos:inspect          # LG Web Inspector
 npm run webos:check                                    # verify node/ares tooling and devices
 ```
 - There is no linter and no test suite yet. `npm run build`, which type-checks, is the check to run before committing. It fails on unused locals, imports and parameters (`noUnusedLocals`, `noUnusedParameters`); prefix a parameter you must keep with `_`.
+- Every build gets its own version, `<major>.<minor>.<commit count>` (for example 0.3.215), from `vite.config.ts`. It is stamped into the packaged `appinfo.json`, shown under Settings → Server with the commit hash, and sent in playback requests. `package.json` holds only `<major>.<minor>`; bump it there for a release. Don't hand-edit version numbers anywhere else.
 - `WEBOS_APP_ID` overrides the app ID for launch and inspect.
 - In the browser, arrow keys move focus, Enter selects, and Escape or Backspace act as Back.
 - During `vite dev`, `POST /__client-log` echoes client logs to the terminal.
@@ -89,7 +90,7 @@ Keep each concern in its own layer:
   - `events.ts` is the realtime socket (`user_state`/`catalog` events).
   - `settings.ts` resolves effective server and profile settings.
   - `subtitles.ts` and `diagnostics.ts` cover their own areas.
-- **Playback** should direct play when the TV supports it, but it must always be negotiated through Silo PlaybackInfo/device profiles.
+- **Playback** should direct play when the TV supports it, but it must always be negotiated through Silo PlaybackInfo/device profiles. Never seek the video at start-up: a seek rebuilds the TV's media pipeline and costs seconds (`docs/PERFORMANCE.md`).
 
 ### Navigation
 - **`src/navigation/spatial.ts`** is one global keydown handler. It covers D-pad movement, the top nav, library grids, rails (`RAIL_SELECTOR` pins the focused card), modals (`[data-modal="true"]`) and Back.
@@ -99,7 +100,8 @@ Keep each concern in its own layer:
 
 ### Platform and pairing
 - **`src/platform/`:**
-  - `capabilities.ts` probes codecs via `canPlayType`, and audio codecs also alongside video in one MediaSource buffer, because that is how the HLS segments carry them (webOS 22 refuses AC-3 and E-AC-3 there). Progressive and original-file delivery are disabled, so playback is HLS.
+  - `capabilities.ts` probes codecs via `canPlayType`, and audio codecs also alongside video in one MediaSource buffer, because that is how the HLS segments carry them.
+  - `splitSourceBuffer.ts` and `fmp4Split.ts` make Dolby audio work: webOS 22 refuses AC-3 and E-AC-3 in a buffer shared with video, so the shared buffer hls.js asks for is replaced by a stand-in that splits each segment into a video buffer and an audio buffer. The audio is copied, never converted.
   - `pairing.ts` makes Luna calls to the bundled service.
   - `audioDelay.ts` stays at 0..1000 ms (Android allows -1000..1000) unless a webOS-safe way to advance audio is demonstrated, because a WebAudio `DelayNode` can't advance audio.
   - The other modules are `captions`, `dolbyVision`, `device` and `youtube`.

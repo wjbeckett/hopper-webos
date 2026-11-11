@@ -65,6 +65,8 @@ To review any pull request on demand through the read-only path: **Actions → P
 
 `main` is always the latest accepted code. To cut a release, tag a commit on `main` that you have tested on a TV, and update the README Availability table.
 
+Every build has its own version number: `<major>.<minor>.<commit count>`, for example 0.3.215. The build stamps it into the packaged app, where the TV's app details show it, and into Settings → Server, next to the commit hash. To tell which build a TV is running, look there. To start a new release line, change `<major>.<minor>` in `package.json`; the third number takes care of itself. A hash ending in `+` means the build had uncommitted changes.
+
 ## What each workflow does
 
 | Workflow | Runs on | What it does |

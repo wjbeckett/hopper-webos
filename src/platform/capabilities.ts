@@ -1,3 +1,5 @@
+import { installSplitSourceBuffer } from "./splitSourceBuffer";
+
 export type WebOsPlaybackCapabilities = {
   platform: "webOS";
   userAgent: string;
@@ -33,14 +35,16 @@ export function probePlaybackCapabilities(): WebOsPlaybackCapabilities {
   const video = document.createElement("video");
   const codecs: Record<string, boolean> = {};
   const mediaSource = typeof MediaSource !== "undefined" && typeof MediaSource.isTypeSupported === "function";
+  // webOS 22 (Chrome 87) plays AC-3 and E-AC-3 on their own but refuses them in a buffer
+  // shared with video. This makes the shared buffer work by splitting it in two, so Dolby
+  // audio can be claimed and Silo sends it untouched (see splitSourceBuffer.ts).
+  installSplitSourceBuffer();
 
   for (const [name, mime] of Object.entries(MIME_TESTS)) {
     const result = video.canPlayType(mime);
     codecs[name] = result === "probably" || result === "maybe";
-    // webOS 22 (Chrome 87) plays AC-3 and E-AC-3 on their own but refuses them in a buffer
-    // shared with video ('video/mp4; codecs="avc1.640028,ec-3"' is unsupported). Claiming
-    // them made Silo send Dolby audio untouched, and playback failed with bufferAddCodecError.
-    // Not claiming them makes Silo convert the audio to a codec the TV accepts.
+    // Only claim an audio codec that works next to video. Claiming one that does not makes
+    // Silo send it as it is, and playback fails with bufferAddCodecError.
     const muxed = MUXED_AUDIO[name];
     if (codecs[name] && muxed && mediaSource) {
       codecs[name] = MediaSource.isTypeSupported(`video/mp4; codecs="avc1.640028,${muxed}"`);

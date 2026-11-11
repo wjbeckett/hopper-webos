@@ -54,23 +54,29 @@ What the trace showed, and what was done about each:
 
 ## Playback start
 
-Measured once for one episode (H.264 video, E-AC-3 audio, resumed mid-way), after the fixes below:
+Time from the OK press on Play to the first frame, three plays each. The first play after a cold launch is about 2 s slower than the rest, because the player's code is loaded then.
 
-| Step | ms after the press |
-| --- | --- |
-| Player on screen | 193 |
-| `playback/start` answered | 411 |
-| Playlist loaded | 664 |
-| First segment loaded | 1110 |
-| Video metadata | 1441 |
-| First frame | 6462 |
+| | Before | After |
+| --- | --- | --- |
+| Film from the start (H.264, AAC) | 3.0 to 5.8 s | 1.4 to 1.5 s (3.3 s first play) |
+| Resumed episode (HEVC, audio converted to AAC) | 4.4 to 7.0 s | 2.0 to 2.5 s (3.5 s first play) |
+| Resumed episode (HEVC, E-AC-3 passed through) | did not play | 2.2 to 2.4 s (4.5 s first play) |
+
+Measure this with the video element's events only. Turning on the inspector's Network domain, a trace or the profiler slows segment loading on the TV enough to add seconds, and the first numbers taken that way were wrong.
 
 Findings:
 
-1. **Dolby audio did not play at all.** The TV accepts AC-3 and E-AC-3 in an audio-only buffer but refuses them in a buffer shared with video, which is how Silo's HLS segments arrive. Hopper claimed both codecs, Silo sent the audio untouched, and playback failed with `bufferAddCodecError`. Hopper now tests each audio codec alongside video before claiming it, so Silo converts Dolby audio to AAC. Confirmed on the TV: the same episode plays.
-2. **The player fetched all of Home when an episode started,** a dozen requests, to fill its On Deck row. It now uses the rows Home already holds.
-3. **Five seconds between metadata and the first frame,** with six seconds already buffered. The player seeked 1.9 s into the stream at that point. The player now plays through start offsets under 3 s and does not seek. This change has not been measured: the TV went offline first.
-4. **Not addressed:** the stream's playlist is refetched every 2 s and grows (300 kB within 11 s), and there was one 1 s long task about 2 s after the press whose cause is unknown.
+1. **A seek costs seconds.** The TV rebuilds its media pipeline on every seek. The playlist carries `EXT-X-START:TIME-OFFSET=0.001`, hls.js seeked to it, and that one-millisecond seek was most of the start time. hls.js is now given its start position outright. With the seek swallowed in a test, the same film went from 3.0–5.8 s to 1.4–1.6 s.
+2. **Resumes seeked too.** A stream starts on the keyframe before the requested position, up to about ten seconds earlier, and the player seeked across that gap. Opening or resuming a title now plays through gaps up to 10 s, so it starts that much earlier and does not seek. Seeks and track changes made by the viewer keep a 3 s limit.
+3. **The playlist was 1.3 MB.** Silo signs every segment URL with the same 900-character token. hls.js parses playlists on the main thread, which took 0.7 to 1.8 s on the TV, during start-up. The token is now stripped from the text before hls.js sees it and put back on each request (`src/core/hlsPlaylistToken.ts`).
+4. **Dolby audio did not play at all.** The TV accepts AC-3 and E-AC-3 in an audio-only MediaSource buffer but refuses them in a buffer shared with video, which is how Silo's HLS segments arrive: playback failed with `bufferAddCodecError`. The page now gets a stand-in buffer that splits each segment into a video buffer and an audio buffer (`src/platform/splitSourceBuffer.ts`, `fmp4Split.ts`). The audio is copied, not converted, so the TV receives the original Dolby stream. Confirmed on the TV for HEVC with E-AC-3 5.1: plays, skips, pauses and replays. Not confirmed by ear, and AC-3 has not been tried.
+5. **The player fetched all of Home when an episode started,** a dozen requests, to fill its On Deck row. It now uses the rows Home already holds.
+
+Left over:
+
+- With split Dolby audio, HEVC video starts 0.2 s after the audio, so there is a 0.2 s hole at the start and hls.js seeks over it. That seek is inside the 2.2 to 2.4 s above. Shifting the timeline would remove it.
+- Resumes whose keyframe gap is over 10 s still seek.
+- The first play after launch pays for loading hls.js. It could be loaded while Details is on screen.
 
 ## Rules that came out of this
 
@@ -78,4 +84,5 @@ Findings:
 - Move things with `transform` and `opacity` on elements that already have their own layer. Do not animate scroll positions from script.
 - Do not create or destroy composited layers when focus moves: no transitions inside cards, no remounting images, no CSS masks on things that fade.
 - Keep focus-driven state out of components that render lists.
-- Measure on the TV with a trace before and after. Changes chosen by eye have gone both ways.
+- Never seek the video unless the viewer asked to. On a TV even a one-millisecond seek costs seconds.
+- Measure on the TV before and after. Changes chosen by eye have gone both ways. Measure with the lightest tool that answers the question: tracing and the Network domain change the result.

@@ -17,7 +17,8 @@ Deliberate differences from the Android TV app. Do not "fix" these to match Andr
 - Details and the Home hero show a time-left ring for partly watched titles, in the brand teal. No equivalent was found in the Android TV source.
 - Playback is always negotiated as HLS. Original-file and progressive delivery are switched off in the device profile, because the LG browser can report codec support and still reject the container.
 - On a TV, the focus ring and scale on a card and the reveal of its artwork are instant, where Android animates them. Each animation made a compositor layer per card on every focus change, which cost more than it drew (`docs/PERFORMANCE.md`).
-- Dolby audio (AC-3, E-AC-3) is not claimed as playable, so Silo converts it to AAC. webOS 22's browser refuses it in a buffer shared with video.
+- Dolby audio (AC-3, E-AC-3) reaches the TV through a second MediaSource buffer. webOS 22's browser refuses it in a buffer shared with video, so Hopper splits Silo's combined segments into video and audio itself (`src/platform/splitSourceBuffer.ts`). Android plays the combined stream directly.
+- Opening or resuming a title may start up to 10 s before the saved position, at the previous keyframe, because seeking to the exact position costs several seconds on a TV.
 - Audio delay is 0 to 1000 ms. Android allows -1000 to 1000 ms; a WebAudio `DelayNode` cannot move audio earlier. Keep the limit unless a TV-safe way to advance audio is shown not to make sync worse.
 - The TV cannot browse the network for servers, because a web app has no mDNS. Phone pairing covers discovery (the phone finds the TV); manual entry and saved servers remain.
 - Episode items open within the Series screen, which selects the relevant season; standalone episode/season pages are not webOS destinations.

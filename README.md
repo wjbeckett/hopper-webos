@@ -19,7 +19,7 @@ Hopper is an independent, community-built client. It is not affiliated with or e
 | --- | --- | --- | --- |
 | LG Content Store | Not yet submitted | – | Store assets and listing are ready |
 | GitHub Releases (IPK) | Not yet published | – | |
-| Build from source | Available | 0.3.0 | Sideload with LG Developer Mode |
+| Build from source | Available | 0.3.x (every build has its own number) | Sideload with LG Developer Mode |
 
 ## Screenshots
 
@@ -59,6 +59,7 @@ Hopper is an independent, community-built client. It is not affiliated with or e
 - Audio, subtitle, version and quality switching while you watch.
 - Subtitle appearance, sync and online search, plus AI subtitle translation where the server supports it.
 - Playback speed, sleep timer, audio delay, and HDR / Dolby Vision options.
+- Dolby Digital and Dolby Digital Plus audio is sent to the TV untouched, so the TV can pass it to a soundbar or receiver.
 
 **Built for the TV**
 - Every screen works with arrows, OK and Back on the LG remote, and the remote's media keys control playback.
@@ -72,7 +73,6 @@ Hopper is an independent, community-built client. It is not affiliated with or e
 - **TV models:** playback has been tested on one LG TV (webOS 22). Other webOS versions and codecs haven't been fully tested.
 - **Connection errors:** losing the network or having your session expire needs clearer recovery screens.
 - **Audio delay** can only delay audio by 0 to 1000 ms. It can't move audio earlier.
-- **Dolby audio** (AC-3 and E-AC-3) is converted to AAC by the server. LG's browser can't play it next to video in the way Silo streams it, so it is not passed through to a soundbar or receiver.
 - **Not implemented yet:** "Translate description" on details pages.
 - **Watch Party** isn't available. It's experimental and switched off in the official Android TV app too.
 
