@@ -13,7 +13,10 @@
  *
  * Reads are synchronous (the server registry is): `loadSecrets` decrypts everything once at
  * start-up, before the app renders, and the values stay in memory. Writes go to memory at
- * once and are encrypted and stored a moment later.
+ * once and are encrypted and stored a moment later. If that write fails, `storedSecurely()`
+ * turns false and the registry keeps the tokens in plain storage, as builds before this one
+ * did, rather than lose the sign-in; the write is retried and the registry is told when it
+ * succeeds.
  */
 
 export type Secrets = { accessToken?: string; refreshToken?: string; profileToken?: string };
@@ -28,8 +31,15 @@ const memory = new Map<string, Secrets>();
 let key: CryptoKey | null = null;
 /** False where WebCrypto or IndexedDB is missing; secrets then stay in memory and in plain storage. */
 let available = false;
-let sealing: Promise<void> = Promise.resolve();
+/** False while the last encrypted write failed. */
+let healthy = true;
+let sealing: Promise<boolean> = Promise.resolve(true);
 let sealQueued = false;
+let retryTimer: number | undefined;
+let retries = 0;
+const RETRY_MS = 10_000;
+const MAX_RETRIES = 6;
+const healthListeners = new Set<() => void>();
 
 const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 const fromBase64 = (text: string) => Uint8Array.from(atob(text), char => char.charCodeAt(0));
@@ -43,11 +53,14 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
+/** Resolves once the transaction has committed: a request can succeed and its transaction still abort. */
 function idb<T>(db: IDBDatabase, mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest): Promise<T> {
   return new Promise((resolve, reject) => {
-    const request = run(db.transaction(STORE, mode).objectStore(STORE));
-    request.onsuccess = () => resolve(request.result as T);
-    request.onerror = () => reject(request.error);
+    const transaction = db.transaction(STORE, mode);
+    const request = run(transaction.objectStore(STORE));
+    transaction.oncomplete = () => resolve(request.result as T);
+    transaction.onerror = () => reject(transaction.error ?? request.error);
+    transaction.onabort = () => reject(transaction.error ?? new Error("IndexedDB transaction aborted"));
   });
 }
 
@@ -94,13 +107,34 @@ async function writeSealed() {
   localStorage.setItem(SEALED_KEY, JSON.stringify(next));
 }
 
+function setHealthy(next: boolean) {
+  if (healthy === next) return;
+  healthy = next;
+  [...healthListeners].forEach(listener => listener());
+}
+
 function scheduleSeal() {
   if (!available || sealQueued) return;
   sealQueued = true;
-  sealing = sealing.then(() => {
+  window.clearTimeout(retryTimer);
+  retryTimer = undefined;
+  sealing = sealing.then(async () => {
     sealQueued = false;
-    return writeSealed();
-  }).catch(error => console.warn("[Hopper] could not store the sign-in securely", error));
+    try {
+      await writeSealed();
+      retries = 0;
+      setHealthy(true);
+      return true;
+    } catch (error) {
+      console.warn("[Hopper] could not store the sign-in securely; keeping it in plain storage for now", error);
+      setHealthy(false);
+      if (retries < MAX_RETRIES) {
+        retries++;
+        retryTimer = window.setTimeout(scheduleSeal, RETRY_MS);
+      }
+      return false;
+    }
+  });
 }
 
 /**
@@ -128,9 +162,23 @@ export async function loadSecrets(): Promise<void> {
   }
 }
 
-/** True when secrets are encrypted at rest; false means the caller keeps them in plain storage. */
+/** True when the key loaded, so secrets can be encrypted at rest. */
 export function secureStorageAvailable(): boolean {
   return available;
+}
+
+/**
+ * True when the encrypted copy can be relied on. False when secure storage is unavailable or
+ * the last encrypted write failed: the caller must then keep the tokens in plain storage.
+ */
+export function storedSecurely(): boolean {
+  return available && healthy;
+}
+
+/** Called when `storedSecurely()` changes, so the registry can rewrite its entries. */
+export function subscribeStorageHealth(listener: () => void): () => void {
+  healthListeners.add(listener);
+  return () => { healthListeners.delete(listener); };
 }
 
 export function secretsFor(url: string): Secrets | undefined {
@@ -149,17 +197,17 @@ export function setSecrets(url: string, secrets: Secrets) {
 /** Forgets a server's secrets. The stored copy is removed at once; that needs no encryption. */
 export function clearSecrets(url: string) {
   const had = memory.delete(url);
-  if (!available) return;
+  // Removing needs no key, so do it even when the key failed to load.
   const sealed = readSealed();
   if (url in sealed) {
     delete sealed[url];
     localStorage.setItem(SEALED_KEY, JSON.stringify(sealed));
   }
   // A write already queued would put the old copy back.
-  if (had) scheduleSeal();
+  if (had && available) scheduleSeal();
 }
 
-/** Resolves when every write so far is stored. */
-export function secretsSettled(): Promise<void> {
+/** Resolves when every write so far has been tried: true if the last one was stored. */
+export function secretsSettled(): Promise<boolean> {
   return sealing;
 }

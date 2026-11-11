@@ -1,5 +1,5 @@
 import type { ServerEntry, Session } from "../types";
-import { clearSecrets, secretsFor, secretsSettled, secureStorageAvailable, setSecrets } from "./secureStore";
+import { clearSecrets, secretsFor, secretsSettled, secureStorageAvailable, setSecrets, storedSecurely, subscribeStorageHealth } from "./secureStore";
 
 const REGISTRY_KEY = "silo-webos-servers-v1";
 const ACTIVE_KEY = "silo-webos-active-server-v1";
@@ -24,6 +24,13 @@ function readStored(): ServerEntry[] {
 }
 
 /**
+ * Sessions stored without tokens while the key could not be loaded this launch. They are
+ * kept through other registry writes, so the sign-in comes back once the key loads again.
+ * Signing out or removing the server drops them.
+ */
+const unreadable = new Map<string, Session>();
+
+/**
  * Saved servers with their sessions complete. The tokens come from memory (see
  * core/secureStore). A session whose refresh token could not be read is left out, so that
  * server asks for sign-in again.
@@ -34,24 +41,35 @@ function readAll(): ServerEntry[] {
     const secrets = secretsFor(entry.url);
     // Plain tokens are still on the entry where secure storage is unavailable.
     const session: Session = { ...entry.session, ...secrets, accessToken: secrets?.accessToken ?? entry.session.accessToken ?? "" };
-    if (!session.refreshToken && !session.accessToken) return { ...entry, session: undefined };
+    if (!session.refreshToken && !session.accessToken) {
+      if (!secureStorageAvailable()) unreadable.set(entry.url, entry.session);
+      return { ...entry, session: undefined };
+    }
     return { ...entry, session };
   });
 }
 
 function writeAll(entries: ServerEntry[]) {
+  const secure = storedSecurely();
   const stored = entries.map((entry) => {
     if (!entry.session) {
+      const stub = unreadable.get(entry.url);
+      if (stub) return { ...entry, session: stub };
       clearSecrets(entry.url);
       return entry;
     }
+    unreadable.delete(entry.url);
     const { accessToken, refreshToken, profileToken, ...rest } = entry.session;
     setSecrets(entry.url, { accessToken, refreshToken, profileToken });
-    if (!secureStorageAvailable()) return entry;
+    // Plain tokens where the encrypted copy can't be relied on, so the sign-in isn't lost.
+    if (!secure) return entry;
     return { ...entry, session: { ...rest, accessToken: "" } };
   });
   localStorage.setItem(REGISTRY_KEY, JSON.stringify(stored));
 }
+
+// The encrypted write failed (keep the tokens in plain storage) or works again (remove them).
+subscribeStorageHealth(() => writeAll(readAll()));
 
 /**
  * Moves sign-ins saved by older builds, with tokens in plain text, into secure storage. The
@@ -68,8 +86,8 @@ export async function migratePlainSessions(): Promise<void> {
     // The plain copy is the newer one if both exist.
     setSecrets(entry.url, { accessToken, refreshToken, profileToken });
   }
-  await secretsSettled();
-  writeAll(readAll());
+  // writeAll keeps the plain copy if the encrypted write failed.
+  if (await secretsSettled()) writeAll(readAll());
 }
 
 export const serverRegistry = {
@@ -116,6 +134,7 @@ export const serverRegistry = {
 
   clearSession(serverUrl: string) {
     const normalized = normalize(serverUrl);
+    unreadable.delete(normalized);
     const entries = readAll().map((entry) =>
       entry.url === normalized ? { ...entry, session: undefined } : entry
     );
@@ -124,7 +143,7 @@ export const serverRegistry = {
 
   remove(id: string) {
     const all = readAll();
-    all.filter((entry) => entry.id === id).forEach((entry) => clearSecrets(entry.url));
+    all.filter((entry) => entry.id === id).forEach((entry) => { unreadable.delete(entry.url); clearSecrets(entry.url); });
     const entries = all.filter((entry) => entry.id !== id);
     writeAll(entries);
     if (localStorage.getItem(ACTIVE_KEY) === id) {

@@ -87,6 +87,18 @@ function expireSession(session: Session) {
 }
 
 /**
+ * Refresh tokens are single use. If another copy of this session (a different object for the
+ * same sign-in) already renewed them, take the renewed pair. Returns true when it did.
+ */
+function adoptRenewedTokens(session: Session): boolean {
+  const saved = savedSession(session);
+  if (!saved?.refreshToken || saved.refreshToken === session.refreshToken || !saved.accessToken) return false;
+  session.accessToken = saved.accessToken;
+  session.refreshToken = saved.refreshToken;
+  return true;
+}
+
+/**
  * The access token is not stored (core/secureStore), so after a launch a session has only its
  * refresh token. Renews the access token before the first request instead of sending an empty
  * one and waiting for the 401. Parallel callers share one refresh.
@@ -99,22 +111,22 @@ export async function ensureAccessToken(session: Session): Promise<void> {
 export async function refreshSession(session: Session): Promise<void> {
   const key = `${session.serverUrl}|${session.userId}`;
   const existing = refreshes.get(key);
-  if (existing) return existing;
-
-  // Refresh tokens are single use. If another copy of this session already renewed them,
-  // take those; spending the old one again would be refused and read as a sign-out.
-  const saved = savedSession(session);
-  if (saved && saved.refreshToken && saved.refreshToken !== session.refreshToken) {
-    session.accessToken = saved.accessToken;
-    session.refreshToken = saved.refreshToken;
+  if (existing) {
+    // Another object started this refresh; only that object got the new tokens. Copy them.
+    await existing;
+    adoptRenewedTokens(session);
     return;
   }
 
+  // Spending the old token again would be refused and read as a sign-out.
+  if (adoptRenewedTokens(session)) return;
+
+  const spent = session.refreshToken;
   const refresh = (async () => {
     const response = await serverFetch(session.serverUrl, apiUrl(session.serverUrl, "/auth/refresh", "v2"), {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh_token: session.refreshToken })
+      body: JSON.stringify({ refresh_token: spent })
     });
     if (!response.ok) {
       // Only a refusal proves the token is dead (Android shouldInvalidateSessionAfterRefreshFailure).
@@ -127,11 +139,17 @@ export async function refreshSession(session: Session): Promise<void> {
     }
     const tokens = await response.json() as RefreshResponse;
     if (!tokens.access_token || !tokens.refresh_token) throw new Error(`/auth/refresh: the server sent no tokens`);
-    // Read before the tokens change: the saved copy may hold a newer profile selection than this one.
-    const latest = savedSession(session) ?? session;
+    // The sign-in may have changed while the request was out. Signed out: drop the new tokens,
+    // or saving them would sign the TV back in. Signed in again: keep the newer sign-in.
+    const saved = savedSession(session);
+    if (!saved || saved.refreshToken !== spent) {
+      if (adoptRenewedTokens(session)) return;
+      throw new Error("AUTH_EXPIRED");
+    }
     session.accessToken = tokens.access_token;
     session.refreshToken = tokens.refresh_token;
-    serverRegistry.saveSession({ ...latest, serverUrl: session.serverUrl, accessToken: tokens.access_token, refreshToken: tokens.refresh_token });
+    // From the saved copy, which may hold a newer profile selection than this object.
+    serverRegistry.saveSession({ ...saved, serverUrl: session.serverUrl, accessToken: tokens.access_token, refreshToken: tokens.refresh_token });
   })().finally(() => refreshes.delete(key));
 
   refreshes.set(key, refresh);
