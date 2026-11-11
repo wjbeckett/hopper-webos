@@ -134,10 +134,12 @@ export const MediaRail = memo(function MediaRail({
               onClick={() => onExplore?.(rail)}
             >
               <div className="media-card-art explore-all-art">
-                <span className="explore-all-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" focusable="false"><path d="M5 12h14m-6-6 6 6-6 6" /></svg>
+                <span className="explore-all-content">
+                  <span className="explore-all-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false"><path d="M5 12h14m-6-6 6 6-6 6" /></svg>
+                  </span>
+                  <span className="explore-all-label">Explore all</span>
                 </span>
-                <span className="explore-all-label">Explore all</span>
               </div>
             </button>
           </div>
