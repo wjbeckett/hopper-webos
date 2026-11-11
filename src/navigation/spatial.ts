@@ -33,7 +33,7 @@ function candidateScore(from: DOMRect, to: DOMRect, direction: Direction) {
   return primary + cross * 2.2;
 }
 
-const RAIL_SELECTOR = ".episode-rail, .detail-cast-track, .detail-trailer-track, .rail-track, .player-on-deck-row";
+export const RAIL_SELECTOR = ".episode-rail, .detail-cast-track, .detail-trailer-track, .rail-track, .player-on-deck-row";
 const RAIL_PIN_MS = 100;
 const railAnimations = new WeakMap<HTMLElement, number>();
 const railInlineStyles = new WeakMap<HTMLElement, { snap: string; behavior: string }>();

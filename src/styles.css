@@ -138,6 +138,48 @@ input:focus {
   transform: scale(1.015);
 }
 
+/* Pointing at a text field does not focus it (that would open the TV's keyboard), so it
+   gets its own selection effect. Other controls are focused by the pointer (navigation/pointer.ts). */
+input:hover:not(:focus),
+select:hover:not(:focus),
+textarea:hover:not(:focus) {
+  border-color: rgba(255,255,255,.7);
+}
+
+/* Arrows that page a row of cards sideways while the pointer is over it. */
+.pointer-pager {
+  position: fixed;
+  z-index: 40;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  margin-top: -32px;
+  padding: 0;
+  border: 2px solid rgba(255,255,255,.18);
+  border-radius: 50%;
+  color: var(--foreground);
+  background: rgba(10,12,16,.86);
+  box-shadow: 0 8px 24px rgba(0,0,0,.5);
+  cursor: pointer;
+}
+.pointer-pager.visible { display: flex; }
+.pointer-pager:hover {
+  border-color: var(--ring);
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+.pointer-pager svg {
+  width: 30px;
+  height: 30px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .tv-button {
   margin-top: 24px;
   border: 0;
@@ -1412,6 +1454,16 @@ input:focus {
   border-radius: 14px;
   background: rgba(255,255,255,.22);
   transition: background .12s ease;
+}
+/* A taller target for the pointer than the 8px bar. */
+.scrub-bar { cursor: pointer; }
+.scrub-bar::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -20px;
+  bottom: -20px;
 }
 .player-scrubber[data-focused="true"] .scrub-bar { height: 10px; }
 .player-scrubber[data-focused="true"] .scrub-segment { background: rgba(255,255,255,.32); }
