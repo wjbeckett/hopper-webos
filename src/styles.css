@@ -4175,6 +4175,14 @@ body {
   object-fit: cover;
 }
 
+/* Over the box, not in its flow: on Chrome 87 the box's height is a ::before spacer, and an
+   image in the flow lands under it, turning the 16:9 card into a tall one. */
+.detail-trailer-art img {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
 .detail-cast-card strong,
 .detail-trailer-card strong {
   display: block;
@@ -4686,8 +4694,9 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 .player-on-deck-card { flex: 0 0 calc((100vw - 480px) / 5); min-width: 0; display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 0; border: 1px solid transparent; border-radius: 16px; background: transparent; color: #fff; text-align: left; overflow: hidden; }
 .player-on-deck-card:focus { outline: none; }
 .player-on-deck-card:focus .player-on-deck-art { outline: 4px solid #fff; outline-offset: 0; }
-.player-on-deck-art { display: block; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 16px; background: rgba(255,255,255,.08); }
-.player-on-deck-art img { width: 100%; height: 100%; object-fit: cover; }
+.player-on-deck-art { position: relative; display: block; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 16px; background: rgba(255,255,255,.08); }
+/* Absolute for the same reason as .detail-trailer-art img: Chrome 87's ::before spacer. */
+.player-on-deck-art img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
 .player-on-deck-card strong,.player-on-deck-card small { padding: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .player-on-deck-card strong { margin-top: 22px; color: rgba(255,255,255,.78); font-size: 26.66px; line-height: 31.82px; font-weight: 500; }
 .player-on-deck-card:focus strong { color: #fff; }
@@ -4796,14 +4805,20 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 /* Row "Explore all" card (Android TvExploreAllCard): takes the row's card size, a tinted tile with an arrow disc. */
 .explore-all-card { display: block; }
 .explore-all-art.media-card-art {
+  background: rgba(255,255,255,.08);
+  box-shadow: none;
+  transition: background .18s ease-out, box-shadow .18s ease-out;
+}
+/* Laid over the art box, not inside its flow: on Chrome 87 the box's height comes from a
+   ::before spacer, and content in the flow stacks under it and makes the tile taller. */
+.explore-all-content {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  background: rgba(255,255,255,.08);
-  box-shadow: none;
-  transition: background .18s ease-out, box-shadow .18s ease-out;
 }
 .explore-all-card:focus .explore-all-art.media-card-art { background: rgba(255,255,255,.16); }
 .explore-all-icon {
