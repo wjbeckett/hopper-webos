@@ -31,6 +31,7 @@ import { SignupScreen } from "./screens/SignupScreen";
 import { PhoneSetupScreen } from "./screens/PhoneSetupScreen";
 import { ServerSetupScreen } from "./screens/ServerSetupScreen";
 import { pairingAvailable } from "./platform/pairing";
+import { platformBack } from "./platform/back";
 import { FirstRunSetupScreen } from "./screens/FirstRunSetupScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { SectionBrowseScreen, type SectionBrowseArgs } from "./screens/SectionBrowseScreen";
@@ -319,8 +320,33 @@ export default function App() {
   useEffect(() => {
     const onBack = (event: KeyboardEvent) => {
       if (!["Escape", "Backspace", "Back", "GoBack", "BrowserBack"].includes(event.key) && event.keyCode !== 461 && event.keyCode !== 10009) return;
-      if (!session) return;
+      // Backspace inside a text field edits the text; only the remote's Back leaves.
+      const editingText = event.key === "Backspace" && (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement);
+      // LG's rule for an app's entry page: Back hands over to the TV (the exit popup or the
+      // Home launcher). Once per press, so a held Back can't reopen it.
+      const exitApp = () => {
+        if (!event.repeat && !editingText && platformBack()) event.preventDefault();
+      };
+      if (!session) {
+        // Server setup without a saved server was opened from phone setup, so Back returns there.
+        // With a saved server, ServerSetupScreen handles Back itself.
+        if (authRoute === "server-setup" && pairingAvailable() && !serverRegistry.active()) {
+          if (!event.repeat && !editingText) {
+            setAuthRoute("phone-setup");
+            event.preventDefault();
+          }
+          return;
+        }
+        if (authRoute === "phone-setup" || authRoute === "device-login" || authRoute === "server-setup") exitApp();
+        return;
+      }
       if (document.querySelector(".player-shell")) return;
+      // The full-screen profile picker (and the profile loading screen) is the entry page
+      // when a profile has to be chosen. Its own dialogs take Back first.
+      if (profileError || !session.profileId) {
+        exitApp();
+        return;
+      }
       if (document.querySelector(".profile-menu")) {
         window.dispatchEvent(new Event("silo:close-profile-menu"));
         event.preventDefault();
@@ -387,6 +413,17 @@ export default function App() {
           event.preventDefault();
           return;
         }
+        const homeTab = nav.querySelector<HTMLElement>("[data-nav-primary='home']");
+        if (homeTab && activeElement === homeTab) {
+          // Home's "Explore all" page is one step deeper than Home.
+          if (sectionBrowse) {
+            setSectionBrowse(null);
+            event.preventDefault();
+            return;
+          }
+          exitApp();
+          return;
+        }
         if (activeNav) focusTopNavigation(activeNav);
         event.preventDefault();
         return;
@@ -404,7 +441,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onBack);
     return () => window.removeEventListener("keydown", onBack);
-  }, [session, route.name, section, browseDetail, sectionBrowse]);
+  }, [session, route.name, section, browseDetail, sectionBrowse, authRoute, profileError]);
 
   useEffect(() => {
     const onVisibility = () => {
