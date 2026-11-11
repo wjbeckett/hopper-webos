@@ -1338,9 +1338,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     setBusy(true);
     closePlayback(false);
     try {
-      // Subtitles the viewer turned off stay off (-1). A file with no subtitles takes no index at
-      // all: the server refuses -1 for it (422, seen on the demo server).
-      const subtitleIndex = subtitle ? subtitle.index : active.plan.subtitle.inventory?.length ? -1 : undefined;
+      // Subtitles the viewer turned off stay off: -1, which startPlaybackV3 sends as no index.
+      const subtitleIndex = subtitle ? subtitle.index : -1;
       const started = await startPlaybackV3(session, detail, version, qualityRef.current, audio?.index, subtitleIndex, at);
       if (unmounted.current) { void stopPlayback(session, started.plan.session_id).catch(() => undefined); return; }
       installPlan({ ...started, attemptedKeys: [] });

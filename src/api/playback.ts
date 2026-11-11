@@ -181,10 +181,18 @@ export function getMarkers(session: Session, itemId: string): Promise<FileMarker
   return optionalSiloJson(session, `/markers/items/${encodeURIComponent(itemId)}`);
 }
 
+/**
+ * `subtitleIndex` -1 is the app's "subtitles off". The server accepts only 0 and up and refuses the
+ * whole start for -1 (422 "subtitle_track_index is invalid"). Leaving the index out is how a start
+ * asks for off, so -1 is never sent. Android's client does the same.
+ */
 export async function startPlaybackV3(session: Session, detail: WatchDetail, version: FileVersion, quality = "auto", audioIndex?: number, subtitleIndex?: number, startPosition?: number) {
   if (!session.profileId) throw new Error("A Silo profile is required for playback.");
   const playbackAttemptId = uuid("webos");
-  const body = { installation_id: await playbackInstallationId(session), protocol_version: 3, client_features: features, file_id: version.file_id, profile_id: session.profileId, playback_attempt_id: playbackAttemptId, quality_preference: quality, subtitle_fidelity_preference: "compatible", start_position: startPosition ?? detail.user_data?.position_seconds ?? 0, ...(audioIndex == null ? {} : { audio_track_id: `file:${version.file_id}:audio:${audioIndex}`, audio_track_index: audioIndex }), ...(subtitleIndex == null ? {} : subtitleIndex < 0 ? { subtitle_track_index: -1 } : { subtitle_track_id: `file:${version.file_id}:subtitle:${subtitleIndex}`, subtitle_track_index: subtitleIndex }), metered: false, ...snapshot() };
+  const subtitle = subtitleIndex != null && subtitleIndex >= 0
+    ? { subtitle_track_id: `file:${version.file_id}:subtitle:${subtitleIndex}`, subtitle_track_index: subtitleIndex }
+    : {};
+  const body = { installation_id: await playbackInstallationId(session), protocol_version: 3, client_features: features, file_id: version.file_id, profile_id: session.profileId, playback_attempt_id: playbackAttemptId, quality_preference: quality, subtitle_fidelity_preference: "compatible", start_position: startPosition ?? detail.user_data?.position_seconds ?? 0, ...(audioIndex == null ? {} : { audio_track_id: `file:${version.file_id}:audio:${audioIndex}`, audio_track_index: audioIndex }), ...subtitle, metered: false, ...snapshot() };
   const decision = await requestV2<Decision>(session, "/playback/start", { method: "POST", body: JSON.stringify(body) });
   return { plan: requirePlan(decision), playbackAttemptId, planAttemptId: uuid("plan") };
 }
