@@ -808,7 +808,9 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     const timer = window.setInterval(() => {
       const active = stateRef.current;
       const video = videoRef.current;
-      if (active && video) void reportProgress(session, active.plan.session_id, sourcePosition(), video.paused).catch(() => undefined);
+      // Not while a stream is being started again: the old one is closed and the video is
+      // empty, so the position would be reported as the start of the old stream.
+      if (active && video && !closedSessions.current.has(active.plan.session_id)) void reportProgress(session, active.plan.session_id, sourcePosition(), video.paused).catch(() => undefined);
     }, 10_000);
     return () => window.clearInterval(timer);
   }, [session, sourcePosition]);
