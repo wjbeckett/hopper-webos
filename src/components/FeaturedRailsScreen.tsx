@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { backdropUrl } from "../api/silo";
 import { focusFirstContentCard, focusNavigationTarget } from "../navigation/spatial";
+import { focusFromPointer } from "../navigation/pointer";
 import { subscribeWatchState } from "../core/watchState";
 import { HomeHero, warmBackdrop, type HomeHeroHandle } from "./HomeHero";
 import { MediaRail } from "./MediaRail";
@@ -244,7 +245,8 @@ export function FeaturedRailsScreen({
         if (railIndex >= 0) rowFocused(railIndex);
         if (item && card && railIndex >= 0) {
           heroRef.current?.preview(item, railIndex);
-          keepFocusedRailInView(card);
+          // Not for the pointer: moving the rows would put a different card under it.
+          if (!focusFromPointer()) keepFocusedRailInView(card);
           warmNeighbours(card);
         }
         const wrap = card?.closest<HTMLElement>(".media-card-wrap");

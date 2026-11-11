@@ -35,6 +35,8 @@ const PLAY_THROUGH_RESUME_SECONDS = 10;
 const PLAY_THROUGH_SEEK_SECONDS = 3;
 /** Restarts after network loss without the picture playing in between, before the error is shown instead. */
 const MAX_OUTAGE_RESTARTS = 3;
+/** After this long in the background the stream is started again on return: the server may have closed it. */
+const BACKGROUND_RESTART_MS = 10 * 60 * 1000;
 
 // Seek grammar mirrors the Android TV player exactly (TvSeekRateLadder):
 // a signed 1x..32x ladder, a 100 ms tick carrying 2.0s of content per tick
@@ -219,6 +221,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   // Restarts since the picture last played; stops a stream that never loads from restarting for ever.
   const outageRestarts = useRef(0);
   const beginOutage = useRef<() => boolean>(() => false);
+  const restartStream = useRef<(at: number) => void>(() => undefined);
   const unmounted = useRef(false);
   // Goes up to run the start-up again when the network was lost before anything played.
   const [startAttempt, setStartAttempt] = useState(0);
@@ -717,6 +720,27 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       }
     } catch { localStorage.removeItem(ACTIVE_PLAYBACK_KEY); }
   }, [session]);
+
+  // Home key, or another app in front: the page is hidden but keeps running, and the TV pauses
+  // the video by itself and plays it again on return. The position is saved at once, because
+  // the TV may close a hidden app without telling it. Closing the page is handled below.
+  useEffect(() => {
+    let hiddenAt = 0;
+    const onVisibility = () => {
+      const active = stateRef.current;
+      if (!active || closedSessions.current.has(active.plan.session_id)) return;
+      if (document.hidden) {
+        hiddenAt = Date.now();
+        void reportProgress(session, active.plan.session_id, sourcePosition(), true).catch(() => undefined);
+        return;
+      }
+      const away = hiddenAt ? Date.now() - hiddenAt : 0;
+      hiddenAt = 0;
+      if (away > BACKGROUND_RESTART_MS) restartStream.current(sourcePosition());
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [session, sourcePosition]);
 
   useEffect(() => {
     const unload = () => closePlayback(true);
@@ -1358,6 +1382,10 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     }
   }
 
+  restartStream.current = (at: number) => {
+    if (!outageWait.current && !busy) void resumeAfterOutage(at);
+  };
+
   // Returns false when the stream has already been restarted several times without playing:
   // the server answers but the stream does not load, so the caller shows the error instead.
   beginOutage.current = () => {
@@ -1850,7 +1878,12 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
             {autoSeekRate !== 0 ? <div className="auto-seek-chip"><svg viewBox="0 0 24 24" aria-hidden="true"><path d={autoSeekRate < 0 ? "M20.8 6.4 19.1 9.2 16.2 7.9" : "M3.2 6.4 4.9 9.2 7.8 7.9"} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" /><path d={autoSeekRate < 0 ? "M12 4a8 8 0 1 0 7.4 4.9" : "M12 4a8 8 0 1 1-7.4 4.9"} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" /></svg>{Math.abs(autoSeekRate)}x</div> : null}
           </div> : null}
           {skipFeedback && !cleanSeek && !panel && !upNextCard && hud ? <div className="skip-feedback-docked" data-raised={previewSeconds != null && previewCard != null} data-nonce={skipFeedback.nonce}><div className="skip-feedback-chip"><strong>{skipFeedback.delta < 0 ? `−${-skipFeedback.delta}s` : `+${skipFeedback.delta}s`}</strong><span>{formatClock(skipFeedback.target)}</span></div></div> : null}
-          <div ref={timelineRef} className="scrub-bar" role="slider" aria-label="Playback position" aria-valuemin={0} aria-valuemax={Math.round(duration)} aria-valuenow={Math.round(labelSeconds)} tabIndex={-1}>
+          <div ref={timelineRef} className="scrub-bar" role="slider"
+            onClick={event => {
+              // Pointer: a click on the bar seeks there.
+              const rect = event.currentTarget.getBoundingClientRect();
+              if (duration > 0 && rect.width > 0) seekToPosition(clampSeek(((event.clientX - rect.left) / rect.width) * duration, duration));
+            }} aria-label="Playback position" aria-valuemin={0} aria-valuemax={Math.round(duration)} aria-valuenow={Math.round(labelSeconds)} tabIndex={-1}>
             {segments.map(([start, end], index) => {
               const span = end - start;
               if (span <= 0) return null;
