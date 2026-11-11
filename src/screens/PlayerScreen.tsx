@@ -8,6 +8,8 @@ import type { HomeRail, Session, SiloItem } from "../types";
 import { getEffectiveSettings, putScopedSetting } from "../api/settings";
 import { artUrl, getHomeRails, getShuffle, skipShuffle } from "../api/silo";
 import { cachedHomeRails, storeHomeRails } from "../core/homeRailsCache";
+import { stripPlaylistToken, withPlaylistToken } from "../core/hlsPlaylistToken";
+import type { HlsConfig, Loader, LoaderCallbacks, LoaderConfiguration, PlaylistLoaderContext } from "hls.js";
 import { parseSubtitleAppearance, SUBTITLE_APPEARANCE_CHOICES, SUBTITLE_APPEARANCE_FIELDS, subtitleChoiceLabel, subtitleCueCss } from "../core/subtitleStyle";
 import { putDeviceSubtitleAppearance, putProfileSubtitleAppearance, type SubtitleAppearance } from "../api/settings";
 import { applySubtitleDelay, attachSidecarSubtitle, sidecarSubtitleArtifact } from "../core/subtitleSidecar";
@@ -22,8 +24,14 @@ import { delayLabel, localAudioSyncMs, localDolbyVisionEnabled, localHdrEnabled,
 
 type PlaybackState = { plan: PlaybackPlan; playbackAttemptId: string; planAttemptId: string; attemptedKeys: string[] };
 const ACTIVE_PLAYBACK_KEY = "silo-webos-active-playback-v1";
-/** Start offsets up to this long are played through rather than seeked over (see installPlan). */
-const START_SEEK_MIN_SECONDS = 3;
+/**
+ * How far before the requested position playback may begin so that it does not have to seek
+ * (see installPlan). Opening or resuming a title can start up to RESUME seconds early, the
+ * way a resume rewinds a little anyway. After the viewer picks a position (a seek, a track or
+ * quality change) it has to land close, so only SEEK seconds.
+ */
+const PLAY_THROUGH_RESUME_SECONDS = 10;
+const PLAY_THROUGH_SEEK_SECONDS = 3;
 
 // Seek grammar mirrors the Android TV player exactly (TvSeekRateLadder):
 // a signed 1x..32x ladder, a 100 ms tick carrying 2.0s of content per tick
@@ -357,7 +365,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     return Math.max(0, (video?.currentTime ?? 0) + (active?.timeline.timeline_offset_seconds ?? 0));
   }, []);
 
-  const installPlan = useCallback((next: PlaybackState) => {
+  const installPlan = useCallback((next: PlaybackState, playThroughSeconds = PLAY_THROUGH_SEEK_SECONDS) => {
     stateRef.current = next;
     localStorage.setItem(ACTIVE_PLAYBACK_KEY, JSON.stringify({ sessionId: next.plan.session_id, serverUrl: session.serverUrl, profileId: session.profileId }));
     setPlan(next.plan);
@@ -390,15 +398,19 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       streamUrl,
       streamHeaders: Object.keys(next.plan.stream.headers ?? {})
     });
-    const begin = () => {
-      // The stream starts on a keyframe a little before the requested position, and
-      // player_start_seconds is the gap. Measured once on a webOS 22 TV: with a 1.9 s gap
-      // seeked over, 5 s passed between the metadata and the first frame although 6 s was
-      // already buffered. A seek makes the TV flush and restart its decoder. So small gaps
-      // are played through (playback starts that much earlier, inside the resume rewind) and
-      // only a real jump seeks. Whether this removes the whole wait is not yet confirmed.
-      const startAt = next.plan.timeline.player_start_seconds;
-      if (startAt > START_SEEK_MIN_SECONDS) video.currentTime = startAt;
+    // A seek costs seconds on a TV: it tears down and rebuilds the media pipeline. Measured on
+    // webOS 22, a film that seeked 1 ms into its own start took 3.0 to 5.8 s from Play to the
+    // first frame, and 1.4 to 1.6 s with that seek left out. So starting never seeks unless
+    // it has to:
+    // - The stream begins on a keyframe a little before the requested position, and
+    //   player_start_seconds is the gap, up to the distance between keyframes. Gaps within
+    //   playThroughSeconds are played through, so playback starts that much earlier.
+    // - hls.js is told its start position outright (below). Left to itself it reads the
+    //   playlist's EXT-X-START (0.001 s) and seeks there.
+    const requestedStart = next.plan.timeline.player_start_seconds;
+    const startAt = requestedStart > playThroughSeconds ? requestedStart : 0;
+    const beginNative = () => {
+      if (startAt > 0) video.currentTime = startAt;
       void video.play().catch(() => setHud(true));
     };
     const isHls = next.plan.stream.protocol.toLowerCase() === "hls" || /mpegurl/i.test(next.plan.stream.mime_type ?? "") || /\.m3u8(?:\?|$)/i.test(streamUrl);
@@ -416,19 +428,46 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
           if (!nativeHls) { setError("This browser cannot play the negotiated HLS stream."); return; }
           video.src = streamUrl;
           video.load();
-          video.onloadedmetadata = begin;
+          video.onloadedmetadata = beginNative;
           return;
         }
+        // The playlist repeats one long token on every segment line. Strip it before hls.js
+        // parses the text and put it back on each request (see core/hlsPlaylistToken).
+        let segmentToken: string | null = null;
+        const BaseLoader = HlsPlayer.DefaultConfig.loader as unknown as new (config: HlsConfig) => Loader<PlaylistLoaderContext>;
+        class SlimPlaylistLoader extends BaseLoader {
+          load(context: PlaylistLoaderContext, config: LoaderConfiguration, callbacks: LoaderCallbacks<PlaylistLoaderContext>) {
+            super.load(context, config, {
+              ...callbacks,
+              onSuccess: (response, stats, loaded, details) => {
+                if (typeof response.data === "string") {
+                  const slim = stripPlaylistToken(response.data);
+                  if (slim.token) {
+                    segmentToken = slim.token;
+                    response.data = slim.text;
+                  }
+                }
+                callbacks.onSuccess(response, stats, loaded, details);
+              }
+            });
+          }
+        }
         const hls = new HlsPlayer({
+          startPosition: startAt,
+          pLoader: SlimPlaylistLoader as unknown as HlsConfig["pLoader"],
           enableWorker: true,
           // Fast start: begin on the lowest rendition, then ABR climbs. Waiting to measure
           // bandwidth before the first segment delayed the first frame on the TV.
           startLevel: 0,
           testBandwidth: false,
-          xhrSetup: (xhr) => Object.entries(headers).forEach(([name, value]) => xhr.setRequestHeader(name, value))
+          xhrSetup: (xhr, url) => {
+            // Opening here lets the segment URL get its token back; hls.js skips its own open.
+            if (!xhr.readyState) xhr.open("GET", /\.m3u8(?:\?|$)/i.test(url) ? url : withPlaylistToken(url, segmentToken), true);
+            Object.entries(headers).forEach(([name, value]) => xhr.setRequestHeader(name, value));
+          }
         });
         hlsRef.current = hls;
-        hls.on(HlsPlayer.Events.MANIFEST_PARSED, begin);
+        hls.on(HlsPlayer.Events.MANIFEST_PARSED, () => { void video.play().catch(() => setHud(true)); });
         hls.on(HlsPlayer.Events.ERROR, (_event, data) => {
           clientDiagnostic("HLS playback error", { fatal: data.fatal, type: data.type, details: data.details, reason: data.reason, responseCode: data.response?.code, responseUrl: data.response?.url });
           if (data.fatal) setError(`HLS playback error: ${data.details}`);
@@ -447,7 +486,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     } else {
       video.src = streamUrl;
       video.load();
-      video.onloadedmetadata = begin;
+      video.onloadedmetadata = beginNative;
     }
   }, [session]);
 
@@ -703,7 +742,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         : resumePositionWithRewind(resumePosition, localResumeRewindSeconds());
       const started = await startPlaybackV3(session, watch, selectedVersion, "auto", choices?.audioIndex ?? selectedVersion.effective_audio_track_index, choices?.subtitleOff ? -1 : choices?.subtitleIndex, playbackStart);
       if (!alive) { void stopPlayback(session, started.plan.session_id); return; }
-      installPlan({ ...started, attemptedKeys: [] });
+      installPlan({ ...started, attemptedKeys: [] }, PLAY_THROUGH_RESUME_SECONDS);
     }).catch((reason) => alive && setError(reason instanceof Error ? reason.message : "Playback failed."))
       .finally(() => alive && setBusy(false));
     return () => {

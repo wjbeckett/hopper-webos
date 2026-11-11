@@ -1025,7 +1025,7 @@ export function SettingsScreen({
         </section>
         <section className="settings-group">
           <h3>About</h3>
-          <div className="option-row settings-static"><span>App Version</span><strong>{clientIdentity.version}</strong></div>
+          <div className="option-row settings-static"><span>App Version</span><strong>{clientIdentity.version}{clientIdentity.commit ? ` (${clientIdentity.commit})` : ""}</strong></div>
           <button data-tv-focusable="true" data-setting-key="privacy-policy" className="option-row settings-row" onClick={() => setShowPrivacyPolicy(true)}><span>Privacy Policy</span></button>
         </section>
       </>
@@ -1095,7 +1095,7 @@ export function SettingsScreen({
           <SettingsGlyph name="signout" />
           <span className="settings-category-text"><span>Sign Out</span></span>
         </button>
-        <small className="settings-version">Silo {clientIdentity.version}</small>
+        <small className="settings-version">Hopper {clientIdentity.version}</small>
       </nav>
 
       <section className="settings-pane" aria-label={categories.find(entry => entry.id === category)?.label}>

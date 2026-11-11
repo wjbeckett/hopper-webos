@@ -1,9 +1,49 @@
+import { execSync } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
+/**
+ * Every build gets its own version, so a TV can always say which build it is running.
+ *
+ * The version is <major>.<minor> from package.json plus the number of commits on the
+ * branch being built: 0.3.412. LG requires three numeric parts, and a count only goes up.
+ * The commit hash goes alongside for exact identification, with "+" when the working tree
+ * has uncommitted changes. Without git (a source archive) it falls back to package.json.
+ */
+function buildVersion() {
+  const base = JSON.parse(readFileSync(resolve(__dirname, "package.json"), "utf8")).version as string;
+  const git = (command: string) => execSync(`git ${command}`, { cwd: __dirname, stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+  try {
+    const [major, minor] = base.split(".");
+    const commit = git("rev-parse --short HEAD") + (git("status --porcelain") ? "+" : "");
+    return { version: `${major}.${minor}.${git("rev-list --count HEAD")}`, commit };
+  } catch {
+    return { version: base, commit: "" };
+  }
+}
+
+const build = buildVersion();
+
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(build.version),
+    __APP_COMMIT__: JSON.stringify(build.commit)
+  },
   plugins: [
     react(),
+    {
+      // Stamp the packaged manifest, which is what the TV's app list and ares-install report.
+      name: "hopper-appinfo-version",
+      apply: "build",
+      closeBundle() {
+        const file = resolve(__dirname, "dist/appinfo.json");
+        const appinfo = JSON.parse(readFileSync(file, "utf8"));
+        appinfo.version = build.version;
+        writeFileSync(file, `${JSON.stringify(appinfo, null, 2)}\n`);
+      }
+    },
     {
       name: "hopper-client-log",
       configureServer(server) {

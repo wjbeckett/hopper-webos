@@ -15,5 +15,8 @@ export function getDeviceId(): string {
 export const clientIdentity = {
   client: "Hopper for webOS",
   device: "LG webOS TV",
-  version: "0.3.0"
+  /** Stamped at build time: <major>.<minor>.<commit count>. */
+  version: __APP_VERSION__,
+  /** Short commit hash of the build. Empty when built without git. */
+  commit: __APP_COMMIT__
 };

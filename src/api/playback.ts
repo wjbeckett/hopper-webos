@@ -1,6 +1,7 @@
 import { displaySupportsHdr, localDolbyVisionEnabled, localHdrEnabled } from "../core/playerSettings";
 import { advertisableDolbyVisionProfiles } from "../platform/dolbyVision";
 import { probePlaybackCapabilities } from "../platform/capabilities";
+import { clientIdentity } from "../platform/device";
 import type { Session, SiloItem } from "../types";
 import { getDeviceId } from "../platform/device";
 import { requestV2 } from "./silo";
@@ -87,7 +88,7 @@ function snapshot() {
   const dolbyProfiles = advertisableDolbyVisionProfiles(localDolbyVisionEnabled());
   const hdr_details = { hdr10: hdrOutput, hdr10_plus: false, hlg: hdrOutput, dolby_vision_profiles: dolbyProfiles.map(entry => entry.profile), ...(dolbyProfiles.length ? { dolby_vision_profile_levels: dolbyProfiles } : {}) };
   const client_capabilities = { video_evidence: "declared", audio_evidence: "declared", codecs_video: video, codecs_video_hardware: [], codecs_audio: audio, containers: ["hls", "mpegts", "fmp4", "mp4", "mov", "m4v"], max_resolution: "2160p", hdr: hdrOutput, video_decode: [] };
-  const client_playback_context = { protocol_version: 3, form_factor: "tv", app_version: "0.2.0", device: { platform: "webos", manufacturer: "LG", platform_details: { user_agent: navigator.userAgent.slice(0, 128) } }, output: { display: { hdr_evidence: "unknown", hdr_types: hdr_details }, hdr_details }, deliveries: { original_http: unavailable, progressive: unavailable, hls: delivery(["hls", "mpegts", "fmp4", "mp4"]) } };
+  const client_playback_context = { protocol_version: 3, form_factor: "tv", app_version: clientIdentity.version, device: { platform: "webos", manufacturer: "LG", platform_details: { user_agent: navigator.userAgent.slice(0, 128) } }, output: { display: { hdr_evidence: "unknown", hdr_types: hdr_details }, hdr_details }, deliveries: { original_http: unavailable, progressive: unavailable, hls: delivery(["hls", "mpegts", "fmp4", "mp4"]) } };
   return { client_capabilities, client_playback_context };
 }
 
