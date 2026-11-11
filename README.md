@@ -64,6 +64,7 @@ Hopper is an independent, community-built client. It is not affiliated with or e
 **Built for the TV**
 - Every screen works with arrows, OK and Back on the LG remote, and the remote's media keys control playback.
 - An animated startup splash, and performance tuning for older webOS TVs.
+- If the server can't be reached, Hopper says so, keeps trying, and carries on when it answers: screens load again and a video resumes where it stopped. If the server ends your sign-in, you return to the sign-in screen for the same server.
 - Settings for General, Playback, Subtitles, Diagnostics and Server, laid out like the official Android TV client.
 - Diagnostics stay on the TV. Logs can be viewed or exported, and are never uploaded.
 
@@ -71,7 +72,7 @@ Hopper is an independent, community-built client. It is not affiliated with or e
 
 - **Audiobooks** play in the video player. Multi-part books don't have one continuous timeline yet, and bookmarks are missing.
 - **TV models:** playback has been tested on one LG TV (webOS 22). Other webOS versions and codecs haven't been fully tested.
-- **Connection errors:** losing the network or having your session expire needs clearer recovery screens.
+- **Connection errors:** the connection-lost and signed-out screens have been tested in a desktop browser only, not yet on a TV.
 - **Audio delay** can only delay audio by 0 to 1000 ms. It can't move audio earlier.
 - **Not implemented yet:** "Translate description" on details pages.
 - **Watch Party** isn't available. It's experimental and switched off in the official Android TV app too.

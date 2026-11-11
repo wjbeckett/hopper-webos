@@ -3,6 +3,7 @@ import type { ThemeSelection } from "../core/themeMusic";
 import type { HomeRail, ItemsResponse, Session, SiloCalendarDay, SiloCalendarItem, SiloCollection, SiloItem, SiloLibrary, SiloMediaRequest, SiloProfile, SiloRequestResult } from "../types";
 import { serverRegistry } from "../core/serverRegistry";
 import { getDeviceId } from "../platform/device";
+import { publishSessionExpired, serverFetch } from "./connection";
 
 function normalizeServerUrl(input: string): string {
   return input.trim().replace(/\/+$/, "");
@@ -19,7 +20,7 @@ async function requestApi<T>(
   version: string,
   includeProfile = true
 ): Promise<T> {
-  const perform = () => fetch(apiUrl(session.serverUrl, path, version), {
+  const perform = () => serverFetch(session.serverUrl, apiUrl(session.serverUrl, path, version), {
     ...init,
     headers: {
       Accept: "application/json",
@@ -35,6 +36,9 @@ async function requestApi<T>(
   if (response.status === 401 && session.refreshToken && path !== "/auth/refresh") {
     await refreshSession(session);
     response = await perform();
+  } else if (response.status === 401 && !session.refreshToken) {
+    // Nothing to renew the sign-in with: it is over.
+    expireSession(session);
   }
 
   if (response.status === 401) throw new Error("AUTH_EXPIRED");
@@ -63,23 +67,60 @@ export function v2Url(session: Session, path: string): string {
 type RefreshResponse = { access_token: string; refresh_token: string; expires_in?: number };
 const refreshes = new Map<string, Promise<void>>();
 
+/** The sign-in saved for this session's server and user, which another copy of the session may have renewed. */
+function savedSession(session: Session): Session | undefined {
+  const url = normalizeServerUrl(session.serverUrl);
+  const saved = serverRegistry.all().find(entry => entry.url === url)?.session;
+  return saved && saved.userId === session.userId ? saved : undefined;
+}
+
+/**
+ * Ends a sign-in the server has refused for good: forgets its tokens (the server stays saved)
+ * and tells the app, which returns to sign-in. Does nothing if the saved sign-in is a newer one.
+ */
+function expireSession(session: Session) {
+  const saved = savedSession(session);
+  if (!saved || saved.refreshToken !== session.refreshToken) return;
+  serverRegistry.clearSession(session.serverUrl);
+  publishSessionExpired(session.serverUrl);
+}
+
 export async function refreshSession(session: Session): Promise<void> {
   const key = `${session.serverUrl}|${session.userId}`;
   const existing = refreshes.get(key);
   if (existing) return existing;
 
+  // Refresh tokens are single use. If another copy of this session already renewed them,
+  // take those; spending the old one again would be refused and read as a sign-out.
+  const saved = savedSession(session);
+  if (saved && saved.refreshToken && saved.refreshToken !== session.refreshToken) {
+    session.accessToken = saved.accessToken;
+    session.refreshToken = saved.refreshToken;
+    return;
+  }
+
   const refresh = (async () => {
-    const response = await fetch(apiUrl(session.serverUrl, "/auth/refresh", "v2"), {
+    const response = await serverFetch(session.serverUrl, apiUrl(session.serverUrl, "/auth/refresh", "v2"), {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
       body: JSON.stringify({ refresh_token: session.refreshToken })
     });
-    if (!response.ok) throw new Error("AUTH_EXPIRED");
+    if (!response.ok) {
+      // Only a refusal proves the token is dead (Android shouldInvalidateSessionAfterRefreshFailure).
+      // A proxy or server failure keeps the sign-in, so an outage does not sign anyone out.
+      if (response.status === 400 || response.status === 401 || response.status === 403) {
+        expireSession(session);
+        throw new Error("AUTH_EXPIRED");
+      }
+      throw new Error(`/auth/refresh: ${response.status} ${response.statusText}`);
+    }
     const tokens = await response.json() as RefreshResponse;
-    if (!tokens.access_token || !tokens.refresh_token) throw new Error("AUTH_EXPIRED");
+    if (!tokens.access_token || !tokens.refresh_token) throw new Error(`/auth/refresh: the server sent no tokens`);
+    // Read before the tokens change: the saved copy may hold a newer profile selection than this one.
+    const latest = savedSession(session) ?? session;
     session.accessToken = tokens.access_token;
     session.refreshToken = tokens.refresh_token;
-    serverRegistry.saveSession(session);
+    serverRegistry.saveSession({ ...latest, serverUrl: session.serverUrl, accessToken: tokens.access_token, refreshToken: tokens.refresh_token });
   })().finally(() => refreshes.delete(key));
 
   refreshes.set(key, refresh);
@@ -502,7 +543,7 @@ export async function restoreDefaultProfile(session: Session): Promise<Session> 
 }
 
 export async function authenticate(serverUrl: string, username: string, password: string): Promise<Session> {
-  const response = await fetch(apiUrl(serverUrl, "/auth/login", "v2"), {
+  const response = await serverFetch(serverUrl, apiUrl(serverUrl, "/auth/login", "v2"), {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json" },
     body: JSON.stringify({ username, password })
@@ -957,6 +998,9 @@ export async function getLibraryRails(session: Session, library: SiloLibrary): P
 
 export async function getLibrariesRails(session: Session, libraries: SiloLibrary[]): Promise<HomeRail[]> {
   const results = await Promise.allSettled(libraries.map((library) => getLibraryRails(session, library)));
+  // One library failing leaves the others' rows. All of them failing is a failed load, not an empty one.
+  const failed = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
+  if (failed && results.every(result => result.status === "rejected")) throw failed.reason;
   return results.flatMap((result) => result.status === "fulfilled" ? result.value : []);
 }
 

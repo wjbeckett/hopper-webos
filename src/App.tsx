@@ -1,7 +1,7 @@
 import { getEffectiveSettings } from "./api/settings";
 import { hydrateTitleArt } from "./core/titleArt";
 import { setThemeMusicPreferences, setThemeMusicSession } from "./core/themeMusic";
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { TopNav, type AppSection, type LibraryLanding } from "./components/TopNav";
 import { advanceShuffle, createShuffle, deleteShuffle, getCatalogItem, getEpisodes, getLibraries, getProfileAppearance, getRequestsFeatureStatus, getSeasons, getSetupStatus, restoreDefaultProfile } from "./api/silo";
 import { serverRegistry } from "./core/serverRegistry";
@@ -40,6 +40,8 @@ import { applyResumeState, applyWatchedState, publishWatchState } from "./core/w
 import { firstEpisodeOfSeason, nextEpisodeAfter } from "./core/episodeNavigation";
 import { publishRailsChanged } from "./core/watchState";
 import { connectEventsSocket } from "./api/events";
+import { subscribeReload, subscribeSessionExpired, watchServer } from "./api/connection";
+import { ConnectionLost } from "./components/ConnectionLost";
 import type { HomeRail, Session, SiloCollection, SiloItem, SiloLibrary, SiloProfile } from "./types";
 import { LoadingState } from "./components/LoadingState";
 
@@ -145,8 +147,29 @@ export default function App() {
   const [profileHydrated, setProfileHydrated] = useState(false);
   const [route, setRoute] = useState<DetailRoute>({ name: "main" });
   const [navigationRestored, setNavigationRestored] = useState(false);
+  // Server name to show on the sign-in screen after the server ended the sign-in.
+  const [signedOutOf, setSignedOutOf] = useState("");
+  // Goes up when the server answers again after a screen failed to load; screens are keyed on it.
+  const [connectionEpoch, setConnectionEpoch] = useState(0);
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
 
   useEffect(() => installSpatialNavigation(), [route.name, authRoute, session]);
+
+  // A layout effect, so it runs before the screens' own effects send their first requests.
+  useLayoutEffect(() => { watchServer(session?.serverUrl ?? ""); }, [session?.serverUrl]);
+  useEffect(() => subscribeReload(() => setConnectionEpoch(epoch => epoch + 1)), []);
+  // Android TvAppNavigation: when the server refuses the sign-in for good, go back to sign-in
+  // for the same server and say why. The saved server stays.
+  useEffect(() => subscribeSessionExpired((serverUrl) => {
+    const current = sessionRef.current;
+    if (!current || current.serverUrl.trim().replace(/\/+$/, "") !== serverUrl) return;
+    setSignedOutOf(serverRegistry.active()?.name ?? "the server");
+    setSession(null);
+    setNavigationRestored(false);
+    setRoute({ name: "main" });
+    setAuthRoute("device-login");
+  }), []);
 
   useEffect(() => {
     if (!session) return;
@@ -172,7 +195,7 @@ export default function App() {
         if (alive) setProfileError(error instanceof Error ? error.message : "Could not select profile.");
       });
     return () => { alive = false; };
-  }, [session, profileHydrated]);
+  }, [session, profileHydrated, connectionEpoch]);
 
   useEffect(() => {
     if (!session || !session.profileId) {
@@ -194,7 +217,7 @@ export default function App() {
       })
       .catch((error) => { console.error("[Hopper] libraries", error); if (alive) setLibrariesLoaded(true); });
     return () => { alive = false; };
-  }, [session]);
+  }, [session, connectionEpoch]);
 
   useEffect(() => {
     if (!session?.profileId) return;
@@ -402,6 +425,7 @@ export default function App() {
 
   const login = useCallback((next: Session) => {
     launchSelectionRequired = false;
+    setSignedOutOf("");
     serverRegistry.saveSession(next);
     setServerUrl(next.serverUrl);
     setSession(next);
@@ -443,6 +467,7 @@ export default function App() {
   }
 
   function changeServer() {
+    setSignedOutOf("");
     setSession(null);
     setNavigationRestored(false);
     setRoute({ name: "main" });
@@ -556,9 +581,10 @@ export default function App() {
     setNavigationRestored(true);
   }
 
+  const signedOutNotice = signedOutOf ? `You were signed out of ${signedOutOf}. Sign in again.` : undefined;
   if (!session) {
     if (authRoute === "phone-setup") return <PhoneSetupScreen onPaired={login} onManual={() => setAuthRoute("server-setup")} />;
-    if (authRoute === "server-setup") return <ServerSetupScreen onContinue={chooseServer} />;
+    if (authRoute === "server-setup") return <ServerSetupScreen onContinue={(url) => { setSignedOutOf(""); chooseServer(url); }} />;
     if (authRoute === "first-run-setup") {
       return <FirstRunSetupScreen serverUrl={serverUrl} onComplete={login} onChangeServer={() => setAuthRoute("server-setup")} />;
     }
@@ -569,6 +595,7 @@ export default function App() {
       return (
         <LoginScreen
           serverUrl={serverUrl}
+          notice={signedOutNotice}
           onLogin={login}
           onDeviceLogin={() => setAuthRoute("device-login")}
           onCreateAccount={() => setAuthRoute("signup")}
@@ -579,6 +606,7 @@ export default function App() {
     return (
       <DeviceLoginScreen
         serverUrl={serverUrl}
+        notice={signedOutNotice}
         onLogin={login}
         onPasswordLogin={() => setAuthRoute("password-login")}
         onChangeServer={() => setAuthRoute("server-setup")}
@@ -586,9 +614,13 @@ export default function App() {
     );
   }
 
+  const connectionLost = <ConnectionLost serverName={serverRegistry.active()?.name ?? "the server"} />;
+
   if (profileError) {
     return (
+      <>
       <ProfileSelectionScreen
+        key={connectionEpoch}
         session={session}
         onSelect={activateProfile}
         onChangeServer={changeServer}
@@ -596,6 +628,8 @@ export default function App() {
         onActiveProfileDeleted={clearDeletedProfile}
         fullScreen
       />
+      {connectionLost}
+      </>
     );
   }
 
@@ -646,19 +680,24 @@ export default function App() {
 
   if (route.name === "person") {
     return (
+      <>
       <PersonScreen
+        key={connectionEpoch}
         session={session}
         personId={route.personId}
         name={route.personName}
         onOpen={openItem}
       />
+      {connectionLost}
+      </>
     );
   }
 
   if (route.name === "series") {
     return (
+      <>
       <SeriesScreen
-        key={route.item.Id}
+        key={`${route.item.Id}-${connectionEpoch}`}
         session={session}
         series={route.item}
         initialEpisode={route.selectedEpisode}
@@ -669,12 +708,16 @@ export default function App() {
         onShuffle={startShuffle}
         onOpen={openItem}
       />
+      {connectionLost}
+      </>
     );
   }
 
   if (route.name === "details") {
     return (
+      <>
       <DetailsScreen
+        key={connectionEpoch}
         session={session}
         item={route.item}
         restoreCastIndex={route.castIndex}
@@ -683,6 +726,8 @@ export default function App() {
         onPlay={(startPosition, choices) => setRoute({ name: "player", item: route.item, startPosition, choices })}
         onOpen={openItem}
       />
+      {connectionLost}
+      </>
     );
   }
 
@@ -828,7 +873,8 @@ export default function App() {
         onSignOut={signOut}
         onChangeServer={changeServer}
       />}
-      {body}
+      <Fragment key={connectionEpoch}>{body}</Fragment>
+      {connectionLost}
     </div>
   );
 }
