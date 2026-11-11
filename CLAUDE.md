@@ -80,7 +80,8 @@ Keep each concern in its own layer:
 - Remote and focus behaviour goes in `src/navigation`.
 
 ### App shell and API
-- **`src/App.tsx` is the router and state root.** There is no router library. Auth routes (`AuthRoute`), top-level sections (`AppSection` from `TopNav`) and a `DetailRoute` union cover details, series, person, play-choice and player. The last route is saved to `localStorage` (`silo-webos-navigation-v1`). `safeBrowsingRoute` never restores straight into the player. App.tsx also applies profile theme tokens (`THEME_TOKENS`), installs spatial navigation, connects the realtime events socket and controls the startup splash.
+- **`src/App.tsx` is the router and state root.** There is no router library. Auth routes (`AuthRoute`), top-level sections (`AppSection` from `TopNav`) and a `DetailRoute` union cover details, series, person and player. The last route is saved to `localStorage` (`silo-webos-navigation-v1`). `safeBrowsingRoute` never restores straight into the player. App.tsx also applies profile theme tokens (`THEME_TOKENS`), installs spatial navigation and connects the realtime events socket.
+- **The startup splash is in `index.html`,** not in React: static markup and CSS that is on screen from the first paint, with each moving part as its own HTML element. `src/core/bootSplash.ts` lifts it once the animation has played. It plays on launches with a saved session only.
 - **`src/api/`:**
   - `silo.ts` is the main client. `requestV2`/`v2Url` build `/api/v2/...` calls from a `Session`. `refreshSession` performs single-flight token refresh per session.
   - `deviceLogin.ts` handles QR/device sign-in. The token fields come back only on the first approved poll.
@@ -123,11 +124,12 @@ Keep each concern in its own layer:
 - No CSS `:has()`.
 - CSS transforms on SVG elements need `transform-box: fill-box`.
 - Video renders on a hardware layer, so inspector screenshots show a blank player.
+- Animations of shapes inside one `<svg>` are painted on the main thread, so they drop frames whenever the app is busy (launch, page loads). For anything that must stay smooth, animate separate HTML elements with `transform` and `opacity` only; the compositor runs those without the main thread.
 
 ## Branding
 - The working name is **Hopper**. The Silo name and logo are trademarked separately from the AGPL code, and Silo logo assets have been removed from the app. Public store publishing needs permission; the submission status is in `brand/store/LISTING.md`.
 - The Hopper name and artwork are reserved outside the AGPL by `TRADEMARK.md` and `brand/NOTICE` (unregistered ™, no ®). New brand files belong in `brand/`; if artwork goes anywhere else, add it to the "Brand files" table in `TRADEMARK.md` and the list in `brand/NOTICE`.
-- Brand sources and the render pipeline are in `brand/` (see `brand/README.md`). Keep `src/components/HopperMark.tsx` geometry in sync with `brand/hopper-icon.svg`.
+- Brand sources and the render pipeline are in `brand/` (see `brand/README.md`). Keep `src/components/HopperMark.tsx` and the splash layers in `index.html` in sync with `brand/hopper-icon.svg`.
 - Render with `brand/render.sh` (headless Chrome). Don't use Quick Look, which distorts non-square SVGs.
 
 ## After each verified step

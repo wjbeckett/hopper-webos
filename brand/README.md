@@ -18,9 +18,9 @@ The mark shows poster tiles dropping into an aurora-gradient hopper. The hopper 
 |---|---|---|
 | Mark | `src/components/HopperMark.tsx` | Same geometry as `hopper-icon.svg` with no background (viewBox `180 110 664 840`). Gradient IDs come from `useId`. |
 | Nav lockup | `HopperLockup` in the same file | 30×38 mark plus wordmark, in the top nav |
-| Startup animation | `src/components/StartupSplash.tsx` and `src/styles.css` | The hopper settles, three tiles fall in one at a time and the hopper dips as each lands, the play button pops, then the spout glow spreads as the wordmark rises. `public/splash.png` (LG's native launch splash) is the same backdrop with no artwork, so the animation starts from an empty stage. The resting frame matches `hopper-splash.svg`. |
+| Startup animation | `index.html` (markup, styles and timeline) and `src/core/bootSplash.ts` (when to lift it) | The hopper settles, three tiles fall in one at a time and the hopper dips as each lands, the play button pops, then the spout glow spreads as the wordmark rises. Each moving part is its own HTML element so the TV's compositor animates it while the app loads. `public/splash.png` (LG's native launch splash) is the same backdrop with no artwork, so the animation starts from an empty stage. The resting frame matches `hopper-splash.svg`. |
 
-If you change the artwork, update the SVG and `HopperMark.tsx` together.
+If you change the artwork, update the SVG, `HopperMark.tsx` and the splash layers in `index.html` together.
 
 ## Sources (edit these)
 
@@ -28,7 +28,7 @@ If you change the artwork, update the SVG and `HopperMark.tsx` together.
 |---|---|---|
 | `hopper-icon.svg` | 1024×1024 | Master icon |
 | `hopper-splash.svg` | 1920×1080 | Full splash artwork: backdrop, mark and wordmark. Reference for the resting frame of the startup animation |
-| `hopper-splash-backdrop.svg` | 1920×1080 | The same backdrop with no mark or wordmark: LG's native launch splash. Keep its gradients identical to `hopper-splash.svg` and `.startup-splash` in `src/styles.css` |
+| `hopper-splash-backdrop.svg` | 1920×1080 | The same backdrop with no mark or wordmark: LG's native launch splash. Keep its gradients identical to `hopper-splash.svg` and `#boot-splash` in `index.html` |
 | `hopper-store-banner.svg` | 1920×1080 | Store hero / promo image |
 
 ## Render

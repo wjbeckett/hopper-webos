@@ -3,10 +3,190 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#080b11" />
+    <meta name="theme-color" content="#0E1030" />
     <title>Hopper</title>
+    <!--
+      Startup splash. It lives here, not in React, so it is on screen from the first paint
+      and does not depend on the bundle having run.
+
+      Every moving part is its own HTML element animated with transform and opacity only.
+      Chrome 87 (webOS 22) paints animations inside a single SVG on the main thread, which
+      is busy loading the app during launch, so those frames were dropped. Separate elements
+      are animated by the compositor and keep moving while the main thread works.
+
+      The animation starts when #boot-splash gets the "play" class (script below), once the
+      page is visible and has painted. src/core/bootSplash.ts removes the splash when it is done.
+
+      Geometry: the mark is brand/hopper-icon.svg (viewBox 180 110 664 840) drawn at 412x521,
+      so 1 SVG unit = 0.62px. Keep the shapes in step with src/components/HopperMark.tsx.
+      The backdrop matches public/splash.png (LG's native launch splash).
+
+      Timeline (ms after "play"):
+        0     hopper settles in
+        360   three tiles fall in one at a time (left, right, centre); tiles and hopper dip
+              and spring back as each lands (714, 974, 1234)
+        1234  play button pops on the last landing
+        1500  spout glow spreads while the word rises
+      Keep ANIMATION_MS in src/core/bootSplash.ts in step with the total length.
+    -->
+    <style>
+      html, body { margin: 0; background: #0E1030; }
+      #boot-splash {
+        position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 9999;
+        display: flex; align-items: center; justify-content: center;
+        background:
+          radial-gradient(circle at 50% 43.5%, rgba(129, 140, 248, .45), rgba(129, 140, 248, 0) 420px),
+          radial-gradient(620px 420px at 260px 180px, rgba(45, 212, 191, .22), rgba(45, 212, 191, 0)),
+          radial-gradient(640px 420px at 1680px 940px, rgba(244, 114, 182, .2), rgba(244, 114, 182, 0)),
+          radial-gradient(ellipse 70% 70% at 50% 45%, #1B1F4B, #0E1030 60%, #07081A);
+        opacity: 1;
+        transition: opacity 400ms ease-out;
+        will-change: opacity;
+      }
+      #boot-splash.leaving { opacity: 0; }
+      /* The splash artwork puts the mark top at y=180; plain centring lands at ~192. */
+      .bs-brand { display: flex; flex-direction: column; align-items: center; transform: translateY(-12px); }
+      .bs-mark { position: relative; width: 412px; height: 521px; }
+      .bs-layer, .bs-react, .bs-body { position: absolute; top: 0; left: 0; width: 412px; height: 521px; }
+      .bs-layer { display: block; overflow: visible; }
+      .bs-tile, .bs-body, .bs-play, .bs-glow, .bs-word { opacity: 0; will-change: transform, opacity; }
+      .bs-react { will-change: transform; transform-origin: 206px 480.3px; }
+      .bs-body { transform-origin: 206px 480.3px; }
+      .bs-tile-a { transform-origin: 121px 119.8px; }
+      .bs-tile-c { transform-origin: 291.6px 107.3px; }
+      .bs-tile-b { transform-origin: 206px 77.6px; }
+      .bs-play { transform-origin: 230.7px 286.7px; }
+      .bs-glow { transform-origin: 206px 497.6px; }
+      .bs-word {
+        margin-top: 64px;
+        color: #f4f4f2;
+        font: 700 112px/1 Outfit, Inter, ui-sans-serif, system-ui, sans-serif;
+        letter-spacing: 2px;
+      }
+      #boot-splash.play .bs-body { animation: bs-drop 460ms cubic-bezier(.2, .9, .3, 1.25) both; }
+      #boot-splash.play .bs-react { animation: bs-hit 250ms ease-out 714ms, bs-hit 250ms ease-out 974ms, bs-hit 300ms ease-out 1234ms; }
+      #boot-splash.play .bs-tile { animation: bs-tile 520ms linear both; }
+      #boot-splash.play .bs-tile-a { animation-delay: 360ms; }
+      #boot-splash.play .bs-tile-c { animation-delay: 620ms; }
+      #boot-splash.play .bs-tile-b { animation-delay: 880ms; }
+      #boot-splash.play .bs-play { animation: bs-play 420ms cubic-bezier(.3, 1.6, .5, 1) 1234ms both; }
+      #boot-splash.play .bs-glow { animation: bs-glow 700ms ease-out 1500ms both; }
+      #boot-splash.play .bs-word { animation: bs-word 600ms cubic-bezier(.2, .8, .3, 1) 1500ms both; }
+      @keyframes bs-drop {
+        0% { opacity: 0; transform: translateY(-37px) scaleY(1.08); }
+        60% { opacity: 1; transform: translateY(0) scaleY(.94); }
+        100% { opacity: 1; transform: translateY(0) scaleY(1); }
+      }
+      /* Falls from above gathering speed, sinks a little past its resting place on landing (68%), then settles. */
+      @keyframes bs-tile {
+        0% { opacity: 0; transform: translateY(-198px) rotate(-16deg); animation-timing-function: cubic-bezier(.45, 0, .85, .55); }
+        18% { opacity: 1; }
+        68% { opacity: 1; transform: translateY(8.7px) rotate(2deg); animation-timing-function: ease-out; }
+        84% { opacity: 1; transform: translateY(-3.1px) rotate(-.5deg); animation-timing-function: ease-in-out; }
+        100% { opacity: 1; transform: translateY(0) rotate(0); }
+      }
+      @keyframes bs-hit {
+        0% { transform: translateY(0) scale(1, 1); }
+        28% { transform: translateY(5.6px) scale(1.022, .962); }
+        62% { transform: translateY(-1.9px) scale(.994, 1.012); }
+        100% { transform: translateY(0) scale(1, 1); }
+      }
+      @keyframes bs-play {
+        from { opacity: 0; transform: scale(.3); }
+        to { opacity: 1; transform: scale(1); }
+      }
+      @keyframes bs-glow {
+        0% { opacity: 0; transform: scale(.3, .6); }
+        60% { opacity: 1; transform: scale(1.08, 1.04); }
+        100% { opacity: 1; transform: scale(1, 1); }
+      }
+      @keyframes bs-word {
+        from { opacity: 0; transform: translateY(18px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+    </style>
   </head>
   <body tabindex="-1">
+    <div id="boot-splash" aria-hidden="true">
+      <div class="bs-brand">
+        <div class="bs-mark">
+          <div class="bs-react">
+            <svg class="bs-layer bs-tile bs-tile-a" viewBox="180 110 664 840" focusable="false">
+              <defs><linearGradient id="bs-tileA" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5EEAD4" /><stop offset="1" stop-color="#2DD4BF" /></linearGradient></defs>
+              <rect x="300" y="196" width="150" height="214" rx="22" fill="url(#bs-tileA)" transform="rotate(-16 375 303)" />
+            </svg>
+            <svg class="bs-layer bs-tile bs-tile-c" viewBox="180 110 664 840" focusable="false">
+              <defs><linearGradient id="bs-tileC" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FBCFE8" /><stop offset="1" stop-color="#F472B6" /></linearGradient></defs>
+              <rect x="575" y="176" width="150" height="214" rx="22" fill="url(#bs-tileC)" transform="rotate(14 650 283)" />
+            </svg>
+            <svg class="bs-layer bs-tile bs-tile-b" viewBox="180 110 664 840" focusable="false">
+              <defs><linearGradient id="bs-tileB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#A5B4FC" /><stop offset="1" stop-color="#818CF8" /></linearGradient></defs>
+              <rect x="437" y="128" width="150" height="214" rx="22" fill="url(#bs-tileB)" transform="rotate(-3 512 235)" />
+            </svg>
+            <div class="bs-body">
+              <svg class="bs-layer" viewBox="180 110 664 840" focusable="false">
+                <defs>
+                  <linearGradient id="bs-aurora" x1="0.12" y1="0.05" x2="0.88" y2="1"><stop offset="0" stop-color="#5EEAD4" /><stop offset="0.5" stop-color="#818CF8" /><stop offset="1" stop-color="#F472B6" /></linearGradient>
+                  <linearGradient id="bs-rim" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#99F6E4" /><stop offset="1" stop-color="#C4B5FD" /></linearGradient>
+                </defs>
+                <path d="M232 404H792a34 34 0 0 1 29 51L612 790v64a30 30 0 0 1-30 30H442a30 30 0 0 1-30-30v-64L203 455a34 34 0 0 1 29-51Z" fill="url(#bs-aurora)" />
+                <path d="M232 404H792a34 34 0 0 1 30 18H202a34 34 0 0 1 30-18Z" fill="url(#bs-rim)" />
+              </svg>
+              <svg class="bs-layer bs-play" viewBox="180 110 664 840" focusable="false">
+                <path d="M470 500c0-16 17-26 31-18l122 72c14 8 14 28 0 36l-122 72c-14 8-31-2-31-18Z" fill="#0E1030" />
+              </svg>
+            </div>
+          </div>
+          <svg class="bs-layer bs-glow" viewBox="180 110 664 840" focusable="false">
+            <defs><radialGradient id="bs-glowfill" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#F9A8D4" stop-opacity="0.9" /><stop offset="1" stop-color="#F472B6" stop-opacity="0" /></radialGradient></defs>
+            <ellipse cx="512" cy="912" rx="150" ry="40" fill="url(#bs-glowfill)" />
+          </svg>
+        </div>
+        <span class="bs-word">Hopper</span>
+      </div>
+    </div>
+    <script>
+      // Start the splash animation only when the page is on screen and has painted, so its
+      // clock starts with a frame the viewer can see. ES5 on purpose.
+      (function () {
+        var splash = document.getElementById("boot-splash");
+        if (!splash) return;
+        // Launch timeline in ms since navigation, for checking a launch on a TV.
+        var log = window.__bootSplashLog = [];
+        function note(name) { log.push([name, Math.round(performance.now())]); }
+        note(document.hidden ? "parsed-hidden" : "parsed-visible");
+        document.addEventListener("visibilitychange", function () { note(document.hidden ? "hidden" : "visible"); });
+        window.addEventListener("load", function () { note("load"); });
+        function play() {
+          if (window.__bootSplashStart != null) return;
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              if (window.__bootSplashStart != null) return;
+              splash.className += " play";
+              window.__bootSplashStart = performance.now();
+              note("play");
+              try { window.dispatchEvent(new Event("boot-splash-start")); } catch (error) { /* older engines */ }
+            });
+          });
+        }
+        // webOS loads the page hidden behind its own launch splash and marks it visible when
+        // it shows the app (about 0.2 to 0.4 s in on webOS 22). Wait for that, plus a short
+        // margin for the system's hand-over, then start. This does not wait for the load
+        // event: the layers are animated by the compositor, so the animation can run while
+        // the bundle loads.
+        var VISIBLE_MARGIN_MS = 250;
+        var armed = false;
+        function whenVisible() {
+          if (armed || document.hidden) return;
+          armed = true;
+          setTimeout(play, VISIBLE_MARGIN_MS);
+        }
+        document.addEventListener("visibilitychange", whenVisible);
+        whenVisible();
+        // src/core/bootSplash.ts calls this if the page is never reported visible.
+        window.__bootSplashPlay = play;
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="./src/main.tsx"></script>
   </body>

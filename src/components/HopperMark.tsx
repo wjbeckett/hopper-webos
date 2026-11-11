@@ -3,7 +3,8 @@ import { useId } from "react";
 /**
  * Hopper brand mark (same artwork as brand/hopper-icon.svg, without the background):
  * three poster tiles drop into an aurora-gradient hopper that carries a play button,
- * with a glow under the spout. Each part has a class so the startup splash can animate it.
+ * with a glow under the spout. The startup splash in index.html draws the same shapes as
+ * separate layers; keep the two in step.
  */
 export function HopperMark({ className, glow = true }: { className?: string; glow?: boolean }) {
   // Gradient ids must be unique per instance (nav + splash can both be mounted).
