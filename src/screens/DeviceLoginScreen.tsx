@@ -12,6 +12,8 @@ import type { Session } from "../types";
 
 type Props = {
   serverUrl: string;
+  /** Why the viewer is back here, when the server ended their sign-in. */
+  notice?: string;
   onLogin: (session: Session) => void;
   onPasswordLogin: () => void;
   onChangeServer: () => void;
@@ -19,6 +21,7 @@ type Props = {
 
 export function DeviceLoginScreen({
   serverUrl,
+  notice,
   onLogin,
   onPasswordLogin,
   onChangeServer
@@ -81,6 +84,8 @@ export function DeviceLoginScreen({
           try {
             const result = await pollDeviceLogin(serverUrl, started.device_code);
             if (stopped.current) return;
+            // A failed check (network loss) is retried; once one gets through, its message goes.
+            setError("");
 
             if (result.status === "approved") {
               // Important: Silo returns tokens only on this single approved poll.
@@ -140,6 +145,7 @@ export function DeviceLoginScreen({
         <div className="pair-copy">
           <div className="eyebrow">Sign in to Silo</div>
           <h1>Use another device</h1>
+          {notice ? <div className="signed-out-notice" role="status">{notice}</div> : null}
           <p className="pair-intro">
             Scan the QR code with your phone, or open the address shown below and enter the code.
           </p>

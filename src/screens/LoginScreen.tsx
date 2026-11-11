@@ -5,6 +5,8 @@ import type { Session } from "../types";
 
 type Props = {
   serverUrl: string;
+  /** Why the viewer is back here, when the server ended their sign-in. */
+  notice?: string;
   onLogin: (session: Session) => void;
   onDeviceLogin: () => void;
   onCreateAccount: () => void;
@@ -13,6 +15,7 @@ type Props = {
 
 export function LoginScreen({
   serverUrl,
+  notice,
   onLogin,
   onDeviceLogin,
   onCreateAccount,
@@ -54,6 +57,7 @@ export function LoginScreen({
         <div className="eyebrow">Password sign-in</div>
         <h1>Hopper</h1>
         <p>{serverUrl}</p>
+        {notice ? <div className="signed-out-notice" role="status">{notice}</div> : null}
 
         <label>
           Username

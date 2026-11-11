@@ -1,6 +1,7 @@
 import { deviceCaptioningAppearance, getSubtitleMatchesDevice } from "../platform/captions";
 import { interruptThemeMusic } from "../core/themeMusic";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { connectionStatus, holdConnectionDialog, NetworkError, onceReachable, reportNetworkFailure, subscribeConnection } from "../api/connection";
 import type Hls from "hls.js";
 import { pinFocusedRailItem } from "../navigation/spatial";
 import { bestVersionForDevice, getMarkers, getTrickplay, getWatchDetail, playbackUrl, replanPlaybackV3, reportProgress, saveAudioPreference, saveSubtitlePreference, startPlaybackV3, stopPlayback, stopPlaybackKeepalive, type AudioTrack, type FileMarkers, type MarkerSegment, type PlaybackChoices, type PlaybackPlan, type Quality, type SubtitleInventory, type Trickplay, type WatchDetail } from "../api/playback";
@@ -32,6 +33,8 @@ const ACTIVE_PLAYBACK_KEY = "silo-webos-active-playback-v1";
  */
 const PLAY_THROUGH_RESUME_SECONDS = 10;
 const PLAY_THROUGH_SEEK_SECONDS = 3;
+/** Restarts after network loss without the picture playing in between, before the error is shown instead. */
+const MAX_OUTAGE_RESTARTS = 3;
 
 // Seek grammar mirrors the Android TV player exactly (TvSeekRateLadder):
 // a signed 1x..32x ladder, a 100 ms tick carrying 2.0s of content per tick
@@ -209,6 +212,22 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   // installed, but the manifest fetch and first buffer still leave a black screen after that.
   const [buffering, setBuffering] = useState(true);
   const [error, setError] = useState("");
+  // Network loss (Android TvPlayerViewModel.waitOutOutage): the stream failed with no answer
+  // from the server. The player waits for the server, then starts again from the same position.
+  const [outage, setOutage] = useState(false);
+  const outageWait = useRef<(() => void) | null>(null);
+  // Restarts since the picture last played; stops a stream that never loads from restarting for ever.
+  const outageRestarts = useRef(0);
+  const beginOutage = useRef<() => boolean>(() => false);
+  const unmounted = useRef(false);
+  // Goes up to run the start-up again when the network was lost before anything played.
+  const [startAttempt, setStartAttempt] = useState(0);
+  const serverUnreachable = useSyncExternalStore(subscribeConnection, connectionStatus) === "unreachable";
+  useEffect(() => holdConnectionDialog(), []);
+  useEffect(() => {
+    unmounted.current = false;
+    return () => { unmounted.current = true; outageWait.current?.(); outageWait.current = null; };
+  }, []);
   const [position, setPosition] = useState(0);
   const [bufferedAhead, setBufferedAhead] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -470,7 +489,13 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         hls.on(HlsPlayer.Events.MANIFEST_PARSED, () => { void video.play().catch(() => setHud(true)); });
         hls.on(HlsPlayer.Events.ERROR, (_event, data) => {
           clientDiagnostic("HLS playback error", { fatal: data.fatal, type: data.type, details: data.details, reason: data.reason, responseCode: data.response?.code, responseUrl: data.response?.url });
-          if (data.fatal) setError(`HLS playback error: ${data.details}`);
+          // No answer from the server (no HTTP status), or a proxy answering for a server that is down.
+          const code = data.response?.code;
+          const noAnswer = data.type === HlsPlayer.ErrorTypes.NETWORK_ERROR && (!code || code === 502 || code === 503 || code === 504);
+          if (noAnswer) reportNetworkFailure(session.serverUrl);
+          if (!data.fatal) return;
+          if (noAnswer && beginOutage.current()) return;
+          setError(`HLS playback error: ${data.details}`);
         });
         hls.on(HlsPlayer.Events.MANIFEST_PARSED, () => {
           const rendition = next.plan.subtitle.hls_rendition;
@@ -743,13 +768,17 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       const started = await startPlaybackV3(session, watch, selectedVersion, "auto", choices?.audioIndex ?? selectedVersion.effective_audio_track_index, choices?.subtitleOff ? -1 : choices?.subtitleIndex, playbackStart);
       if (!alive) { void stopPlayback(session, started.plan.session_id); return; }
       installPlan({ ...started, attemptedKeys: [] }, PLAY_THROUGH_RESUME_SECONDS);
-    }).catch((reason) => alive && setError(reason instanceof Error ? reason.message : "Playback failed."))
+    }).catch((reason) => {
+      if (!alive) return;
+      if (reason instanceof NetworkError && beginOutage.current()) return;
+      setError(reason instanceof Error ? reason.message : "Playback failed.");
+    })
       .finally(() => alive && setBusy(false));
     return () => {
       alive = false;
       closePlayback(false);
     };
-  }, [closePlayback, installPlan, item, session, startPosition, choices]);
+  }, [closePlayback, installPlan, item, session, startPosition, choices, startAttempt]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -1294,9 +1323,60 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     onBack(videoRef.current?.currentTime ?? 0);
   }
 
+  /** Starts the stream again where it stopped, once the server answers. */
+  async function resumeAfterOutage(at: number) {
+    const active = stateRef.current;
+    if (!active || !detail || !version) {
+      // Nothing had started: run the start-up again.
+      setOutage(false);
+      setStartAttempt(attempt => attempt + 1);
+      return;
+    }
+    outageRestarts.current += 1;
+    const audio = active.plan.selected_tracks.audio;
+    const subtitle = active.plan.selected_tracks.subtitle;
+    setBusy(true);
+    closePlayback(false);
+    try {
+      // Subtitles the viewer turned off stay off (-1). A file with no subtitles takes no index at
+      // all: the server refuses -1 for it (422, seen on the demo server).
+      const subtitleIndex = subtitle ? subtitle.index : active.plan.subtitle.inventory?.length ? -1 : undefined;
+      const started = await startPlaybackV3(session, detail, version, qualityRef.current, audio?.index, subtitleIndex, at);
+      if (unmounted.current) { void stopPlayback(session, started.plan.session_id).catch(() => undefined); return; }
+      installPlan({ ...started, attemptedKeys: [] });
+      setOutage(false);
+    } catch (reason) {
+      if (unmounted.current) return;
+      if (reason instanceof NetworkError) {
+        // Lost again before the stream started: keep waiting.
+        outageWait.current = onceReachable(() => { outageWait.current = null; void resumeAfterOutage(at); });
+        return;
+      }
+      setOutage(false);
+      setError(reason instanceof Error ? reason.message : "Playback could not start again.");
+    } finally {
+      if (!unmounted.current) setBusy(false);
+    }
+  }
+
+  // Returns false when the stream has already been restarted several times without playing:
+  // the server answers but the stream does not load, so the caller shows the error instead.
+  beginOutage.current = () => {
+    if (outageWait.current) return true;
+    if (outageRestarts.current >= MAX_OUTAGE_RESTARTS) return false;
+    const at = sourcePosition();
+    setOutage(true);
+    setError("");
+    reportNetworkFailure(session.serverUrl);
+    outageWait.current = onceReachable(() => { outageWait.current = null; void resumeAfterOutage(at); });
+    return true;
+  };
+
   function handleMediaError() {
     const video = videoRef.current;
     const mediaError = video?.error;
+    // A stream the TV loads itself (not through hls.js) reports network loss here.
+    if (mediaError?.code === 2 && beginOutage.current()) return;
     const labels: Record<number, string> = { 1: "aborted", 2: "network", 3: "decode", 4: "unsupported source" };
     const reason = mediaError ? labels[mediaError.code] ?? `code ${mediaError.code}` : "unknown error";
     const diagnostics = {
@@ -1734,7 +1814,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       onPause={() => { setPlaying(false); revealHud(); }}
       onLoadStart={() => setBuffering(true)}
       onWaiting={() => setBuffering(true)}
-      onPlaying={() => setBuffering(false)}
+      onPlaying={() => { setBuffering(false); outageRestarts.current = 0; }}
       onCanPlay={() => setBuffering(false)}
       onEnded={handleMediaEnded}
       onSeeked={event => {
@@ -1831,10 +1911,12 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         <div className="skip-feedback-chip"><strong>{skipFeedback.delta < 0 ? `−${-skipFeedback.delta}s` : `+${skipFeedback.delta}s`}</strong><span>{formatClock(skipFeedback.target)}</span></div>
         {!hud && duration > 0 ? <div className="skip-feedback-track"><b style={{ width: `${Math.max(0, Math.min(1, skipFeedback.target / duration)) * 100}%` }} /></div> : null}
       </div> : null}
-
-      {busy || (buffering && !error) ? <div className="player-loading" role="status" aria-label="Loading"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="28" /></svg></div> : null}
-      {error ? <div className="player-error" role="alert">{error}</div> : null}
     </div>
+
+    {/* Outside .player-chrome, which is invisible while the controls are hidden: loading, network loss and errors must always show. */}
+    {(outage || (serverUnreachable && buffering)) && !error ? <div className="player-outage" role="alert">Connection lost<small>Playback continues when the server answers. Press Back to leave.</small></div> : null}
+    {busy || outage || (buffering && !error) ? <div className="player-loading" role="status" aria-label="Loading"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="28" /></svg></div> : null}
+    {error ? <div className="player-error" role="alert">{error}</div> : null}
 
     {upNextCard ? <section className="player-next-up" data-modal="true" aria-label="Up next">
       {nextUpBackdrop ? <img className="player-next-up-backdrop" src={nextUpBackdrop} alt="" /> : null}

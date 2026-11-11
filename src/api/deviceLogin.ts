@@ -1,4 +1,5 @@
 import type { Session } from "../types";
+import { serverFetch } from "./connection";
 
 export type DeviceLoginStart = {
   device_code: string;
@@ -50,7 +51,7 @@ async function jsonRequest<T>(
   path: string,
   init: RequestInit
 ): Promise<T> {
-  const response = await fetch(`${normalizeServerUrl(serverUrl)}${path}`, {
+  const response = await serverFetch(serverUrl, `${normalizeServerUrl(serverUrl)}${path}`, {
     ...init,
     headers: {
       Accept: "application/json",
