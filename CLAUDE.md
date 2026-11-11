@@ -111,7 +111,8 @@ Keep each concern in its own layer:
 
 ### State, screens and styling
 - **`src/core/`** holds client-side state that isn't API or UI:
-  - `serverRegistry.ts` stores saved servers and sessions in `localStorage`.
+  - `serverRegistry.ts` stores saved servers and sessions in `localStorage`, without their tokens.
+  - `secureStore.ts` holds the tokens. The refresh and profile tokens are encrypted with AES-GCM under a non-extractable WebCrypto key kept in IndexedDB (`hopper-keys`), and stored in `silo-webos-sealed-v1`. The access token is never stored: `ensureAccessToken` in `src/api/silo.ts` renews it before the first request after a launch. `main.tsx` waits for `loadSecrets` (and the one-time migration of plain sessions) before rendering. Where WebCrypto or IndexedDB is missing (an insecure page), or an encrypted write fails, tokens stay in plain storage as before; a failed write is retried and the plain copy removed once it succeeds. A refresh that returns after the sign-in was cleared or replaced is discarded, never saved.
   - `watchState.ts` is a pub/sub. `publishWatchState` updates cards and rails in place, and `publishRailsChanged` triggers refetches.
   - The other modules cover artwork and title art, theme music, profile launch/PIN gating, subtitle styling and sync, browse prefs and episode navigation.
 - **Home, For You and library Recommended** are `FeaturedRailsScreen`. It is built for a slow TV, so keep these properties when changing it (measurements and reasons in `docs/PERFORMANCE.md`):
@@ -169,6 +170,6 @@ There is no change log, handoff or backlog file. The history is the merged pull 
 The README is public and user-facing: keep build and setup material in `CONTRIBUTING.md`, brand material in `brand/README.md`, and personal device or server details out of both.
 
 ## Local notes
-- Never commit personal server URLs, tokens or `localStorage` backups. Any change to a TV's `localStorage` must back it up first and keep `silo-webos-device-id`.
+- Never commit personal server URLs, tokens or `localStorage` backups. Any change to a TV's `localStorage` must back it up first and keep `silo-webos-device-id`. A `localStorage` backup alone no longer restores a sign-in: the tokens in it are encrypted under a key in the app's IndexedDB, which cannot be exported.
 - Shell heredocs have hung the agent tool runner before. Prefer file edits or `sed`/`perl`.
 - `getBrowseCatalogPage` and `getBrowseFilterOptions` in `src/api/silo.ts` are unused on purpose (parked for Global Browse, see `docs/DECISIONS.md`). Leave them.
