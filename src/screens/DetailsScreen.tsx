@@ -4,6 +4,7 @@ import { CastSection, FactsSection, TrailersSection, factsFor, useDetailExtras }
 import { PlaybackOptionsDialog, PlaybackSummary, useWatchDetail } from "../components/PlaybackOptions";
 import { GearIcon, MoreIcon, PlayIcon, RestartIcon, WatchlistIcon } from "../components/icons";
 import { MediaRail } from "../components/MediaRail";
+import { ExpandableOverview } from "../components/ExpandableOverview";
 import { ResumeProgress } from "../components/ResumeProgress";
 import type { PlaybackChoices } from "../api/playback";
 import type { DetailPerson, DetailTrailer } from "../api/silo";
@@ -203,7 +204,7 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
         {!audiobook && extras?.tagline ? <div className="details-tokens">{extras.tagline}</div> : null}
         {audiobook ? <div className="audiobook-detail-metadata">{[detail.AudiobookAuthorNames ?? detail.Author, (detail.AudiobookNarratorNames ?? detail.Narrator) ? `Narrated by ${detail.AudiobookNarratorNames ?? detail.Narrator}` : "", audiobookDuration(detail)].filter(Boolean).join("  ")}</div> : null}
         {audiobook && detail.Publisher ? <div className="audiobook-detail-publisher">{detail.Publisher}</div> : null}
-        {detail.Overview && !hideEpisodeOverview ? <p className={`details-overview${audiobook ? " audiobook-detail-overview" : ""}`}>{detail.Overview}</p> : null}
+        {detail.Overview && !hideEpisodeOverview ? <ExpandableOverview className={`details-overview${audiobook ? " audiobook-detail-overview" : ""}`} text={detail.Overview} title={detail.Name} /> : null}
         {!audiobook && (detail.Author || detail.Narrator) ? (
           <div className="details-credit">{[detail.Author, detail.Narrator ? `Narrated by ${detail.Narrator}` : ""].filter(Boolean).join(" · ")}</div>
         ) : null}

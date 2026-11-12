@@ -187,7 +187,7 @@ function slideScrollTop(container: HTMLElement, delta: number) {
  * slide as library Browse: eased for one press, a jump while a key is held. A native smooth
  * scroll per press stacked up under a held key and left the selector off screen (#83).
  */
-function keepInViewVertically(element: HTMLElement) {
+function keepInViewVertically(element: HTMLElement, anchorTop = false) {
   let container: HTMLElement | null = element.parentElement;
   while (container && container !== document.body) {
     const overflow = getComputedStyle(container).overflowY;
@@ -200,6 +200,12 @@ function keepInViewVertically(element: HTMLElement) {
   const top = page ? 0 : scroller.getBoundingClientRect().top;
   const height = page ? window.innerHeight : scroller.clientHeight;
   const rect = element.getBoundingClientRect();
+  // A row that is fully on screen with the page at its top keeps the page there, so the
+  // buttons above it and the row hold still while focus moves between them.
+  if (anchorTop && scroller.scrollTop + rect.bottom - top <= height - 24) {
+    if (scroller.scrollTop) slideScrollTop(scroller, -scroller.scrollTop);
+    return;
+  }
   const visibleStart = top + height * 0.12;
   const visibleEnd = top + height * 0.78;
   const delta = rect.top < visibleStart ? rect.top - visibleStart : rect.bottom > visibleEnd ? rect.bottom - visibleEnd : 0;
@@ -274,7 +280,7 @@ function focusElement(element: HTMLElement) {
     }
     return;
   }
-  if (element.closest(".details-actions")) {
+  if (element.closest(".details-actions, .overview-button, .season-tabs")) {
     const page = element.closest<HTMLElement>(".details-shell, .series-screen, .person-screen");
     // A slide down that is still running would carry on after this scroll up and leave the
     // buttons off screen.
@@ -293,7 +299,7 @@ function focusElement(element: HTMLElement) {
   if (rail?.dataset.slide === "true") {
     slideRailItem(rail, element);
     // Home moves its band itself. Elsewhere (Details, Series) the page scrolls to the row.
-    if (!element.closest(".home-rails")) keepInViewVertically(element);
+    if (!element.closest(".home-rails")) keepInViewVertically(element, true);
     return;
   }
   if (rail && rail.scrollWidth > rail.clientWidth + 1) {
@@ -880,6 +886,22 @@ export function installSpatialNavigation() {
         return;
       }
       focusAdjacent(current, rowItems, direction);
+      event.preventDefault();
+      return;
+    }
+
+    // The overview is a focus stop above the buttons (Android TV: Up from the action row).
+    if (current.matches(".overview-button")) {
+      const play = direction === "down"
+        ? current.closest<HTMLElement>(".details-shell, .series-screen")?.querySelector<HTMLElement>(".details-actions .tv-button:not([disabled])")
+        : null;
+      if (play) focusElement(play);
+      event.preventDefault();
+      return;
+    }
+    if (current.closest(".details-actions") && direction === "up") {
+      const overview = current.closest<HTMLElement>(".details-shell, .series-screen")?.querySelector<HTMLElement>(".overview-button");
+      if (overview) focusElement(overview);
       event.preventDefault();
       return;
     }

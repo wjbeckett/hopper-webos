@@ -6,6 +6,7 @@ import { CastSection, FactsSection, TrailersSection, factsFor, useDetailExtras }
 import { PlaybackOptionsDialog, PlaybackSummary, useWatchDetail } from "../components/PlaybackOptions";
 import { GearIcon, MoreIcon, PlayIcon, RestartIcon, WatchlistIcon } from "../components/icons";
 import { MediaRail } from "../components/MediaRail";
+import { ExpandableOverview } from "../components/ExpandableOverview";
 import { ArtworkImage } from "../components/ArtworkImage";
 import type { PlaybackChoices, WatchDetail } from "../api/playback";
 import type { DetailPerson, DetailTrailer } from "../api/silo";
@@ -215,6 +216,7 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
   const synopsis = focusedEpisode
     ? hidesEpisodeOverview(focusedEpisode, spoilerPreferences) ? "" : [focusedEpisode.Name, focusedEpisode.Overview ?? ""].filter(Boolean).join(" · ")
     : show.Overview ?? "";
+  const overviewText = (focusedEpisode ? focusedEpisode.Overview : show.Overview) || synopsis;
   const metaTokens = [
     focusedEpisode
       ? [focusedEpisode.ParentIndexNumber === 0 ? "Specials" : `Season ${focusedEpisode.ParentIndexNumber}`, `Episode ${focusedEpisode.IndexNumber ?? ""}`].filter(Boolean).join(" · ")
@@ -297,8 +299,11 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
             {rating ? <span>{`★ ${rating.toFixed(1)}`}</span> : null}
             {target && resume > 0 ? <ResumeProgress position={resume} duration={(target.RunTimeTicks ?? 0) / 10_000_000} /> : null}
           </div>
-          <p className="series-overview">{synopsis}</p>
-          {extras?.cast.length ? <div className="details-credit">{`Starring ${extras.cast.slice(0, 3).map(member => member.name).join(", ")}`}</div> : null}
+          {/* The slot keeps its height with no overview, so the buttons and the episode row never move. */}
+          <div className="series-overview-slot">
+            {synopsis ? <ExpandableOverview className="series-overview" preview={synopsis} text={overviewText} title={focusedEpisode?.Name ?? show.Name} /> : null}
+          </div>
+          <div className="details-credit series-credit">{extras?.cast.length ? `Starring ${extras.cast.slice(0, 3).map(member => member.name).join(", ")}` : ""}</div>
           <PlaybackSummary detail={watchDetail} choices={choices} />
           <div className="details-actions">
             <button ref={playRef} type="button" data-tv-focusable="true" className={`tv-button series-play ${activeButton === null || activeButton === "play" ? "pin-open" : ""}`} disabled={!target}
