@@ -206,8 +206,23 @@ function keepInViewVertically(element: HTMLElement) {
   if (delta) slideScrollTop(scroller, delta);
 }
 
+/**
+ * The card last focused in each row. Up or Down into a row lands on it, as Android TV does,
+ * and on the row's first card when the row has not been visited.
+ */
+const lastInRow = new WeakMap<HTMLElement, HTMLElement>();
+
+/** Where focus should land when it moves into `row` from above or below. */
+function rowEntry(row: HTMLElement): HTMLElement | undefined {
+  const remembered = lastInRow.get(row);
+  if (remembered?.isConnected && row.contains(remembered) && !remembered.matches(":disabled")) return remembered;
+  return focusables("[data-tv-focusable='true']").find(item => row.contains(item) && item.offsetParent !== null);
+}
+
 function focusElement(element: HTMLElement) {
   element.focus({ preventScroll: true });
+  const row = element.closest<HTMLElement>(RAIL_SELECTOR);
+  if (row && !row.closest(".home-rails")) lastInRow.set(row, element);
   const libraryResults = element.closest<HTMLElement>(".library-results");
   if (libraryResults) {
     const elementRect = element.getBoundingClientRect();
@@ -901,8 +916,7 @@ export function installSpatialNavigation() {
         .filter(row => row.offsetParent !== null && row.querySelector("[data-tv-focusable='true']"))
       : [];
     if (castRow && direction === "up" && !current.closest(".series-body") && bodyRows.indexOf(castRow) > 0) {
-      const above = bodyRows[bodyRows.indexOf(castRow) - 1];
-      const target = focusables("[data-tv-focusable='true']").find(item => above.contains(item));
+      const target = rowEntry(bodyRows[bodyRows.indexOf(castRow) - 1]);
       if (target) {
         focusElement(target);
         event.preventDefault();
@@ -974,7 +988,7 @@ export function installSpatialNavigation() {
     if (target && Number.isFinite(target.score)) {
       const targetRow = target.candidate.closest<HTMLElement>(".episode-rail, .detail-cast-track, .detail-trailer-track, .rail-track");
       if (targetRow && !targetRow.contains(current) && (direction === "up" || direction === "down")) {
-        const firstInRow = focusables("[data-tv-focusable='true']").find(item => targetRow.contains(item) && item.offsetParent !== null);
+        const firstInRow = targetRow.closest(".home-rails") ? focusables("[data-tv-focusable='true']").find(item => targetRow.contains(item) && item.offsetParent !== null) : rowEntry(targetRow);
         if (firstInRow) {
           focusElement(firstInRow);
           event.preventDefault();
