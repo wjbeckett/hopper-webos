@@ -55,7 +55,7 @@ function railOverflow(rail: HTMLElement) {
     const strip = rail.firstElementChild as HTMLElement | null;
     if (!strip) return { previous: false, next: false };
     const offset = Number(strip.dataset.offset ?? 0) || 0;
-    return { previous: offset > 0, next: offset < strip.offsetWidth - railView(rail).width - 1 };
+    return { previous: offset > 0, next: offset < Math.max(strip.offsetWidth, strip.scrollWidth) - railView(rail).width - 1 };
   }
   return { previous: rail.scrollLeft > 1, next: rail.scrollLeft < rail.scrollWidth - rail.clientWidth - 1 };
 }

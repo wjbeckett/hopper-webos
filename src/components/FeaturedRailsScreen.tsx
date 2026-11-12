@@ -31,6 +31,12 @@ const rememberedFocus = new Map<string, { railId: string; index: number }>();
 // focus to lives at module level (Android arms an explore-all return the same
 // way). Consumed once by the next mount that finds the row's Explore card.
 let pendingExploreReturn: string | null = null;
+/**
+ * The restoreKey of the screen a card was last opened from. On the way back the card gets
+ * focus even if something else took it meanwhile: screens that load before showing their rows
+ * (For You, Recommended) put focus on their tab while they load.
+ */
+let pendingOpenReturn: string | null = null;
 
 /**
  * Only rows near the focused one render their cards; the rest keep their heading and
@@ -191,8 +197,10 @@ export function FeaturedRailsScreen({
     // Something else holds focus (the top navigation, when Home was chosen from it), or an
     // Explore return is pending: leave focus alone and build the rows from the top.
     const active = document.activeElement;
+    const returning = Boolean(restoreKey) && pendingOpenReturn === restoreKey;
+    pendingOpenReturn = null;
     const focusHeld = active instanceof HTMLElement && active !== document.body && active.isConnected;
-    if (focusHeld || pendingExploreReturn) {
+    if ((focusHeld && !returning) || pendingExploreReturn) {
       setLive({ from: -IDLE_ABOVE, to: IDLE_BELOW });
       return;
     }
@@ -271,6 +279,11 @@ export function FeaturedRailsScreen({
   }
 
 
+  const openFromRow = useCallback((item: SiloItem) => {
+    pendingOpenReturn = restoreKey ?? null;
+    onOpen(item);
+  }, [onOpen, restoreKey]);
+
   const exploreRail = useCallback((target: HomeRail) => {
     pendingExploreReturn = target.id;
     onExplore?.(target);
@@ -343,7 +356,7 @@ export function FeaturedRailsScreen({
             key={rail.id}
             rail={rail}
             session={session}
-            onOpen={onOpen}
+            onOpen={openFromRow}
             onExplore={onExplore ? exploreRail : undefined}
             live={index >= live.from && index <= live.to}
             initialAnchor={restore && restore.railIndex === index ? restore.index : 0}

@@ -101,7 +101,8 @@ function slideRailItem(rail: HTMLElement, element: HTMLElement) {
   if (rail.scrollLeft) rail.scrollLeft = 0;
   const style = getComputedStyle(rail);
   const view = rail.clientWidth - (Number.parseFloat(style.paddingLeft) || 0) - (Number.parseFloat(style.paddingRight) || 0);
-  const maxOffset = Math.max(0, strip.offsetWidth - view);
+  // scrollWidth too: Chrome 87 can size a flex strip narrower than its fixed-basis cards.
+  const maxOffset = Math.max(0, Math.max(strip.offsetWidth, strip.scrollWidth) - view);
   const centre = wrap.offsetLeft + wrap.offsetWidth / 2;
   const offset = Math.round(Math.max(0, Math.min(maxOffset, centre - view / 2)));
   if (strip.dataset.offset === String(offset)) return;
