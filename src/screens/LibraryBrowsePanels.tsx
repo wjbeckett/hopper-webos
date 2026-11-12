@@ -213,6 +213,8 @@ export function LibraryBrowsePanels({
 
   function clearFacet(facet: Facet) {
     setDraft(current => ({ ...current, [facet.id]: [] }));
+    // The Clear row goes away with the selection; put focus on the row above it.
+    document.querySelector<HTMLElement>(".browse-panel [data-browse-panel-initial-focus]")?.focus({ preventScroll: true });
   }
 
   function facetSummary(facet: Facet) {
