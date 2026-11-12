@@ -2312,7 +2312,7 @@ textarea:hover:not(:focus) {
 .home-featured-overview {
   display: -webkit-box;
   max-width: min(46vw, 880px);
-  margin: 0;
+  margin: 6px 0 0;
   overflow: hidden;
   color: var(--foreground);
   opacity: .9;
@@ -2471,7 +2471,8 @@ textarea:hover:not(:focus) {
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
-  margin: 8px 0 0;
+  /* Room for the focused card above, which grows over its own caption. */
+  margin: 20px 0 0;
   color: var(--muted-foreground);
   font-size: 1.25rem;
   text-transform: capitalize;
@@ -3471,6 +3472,7 @@ body {
 }
 
 .browse-panel-eyebrow {
+  flex: none;
   margin: 0 10px;
   color: rgba(255,255,255,.6);
   font: 600 20px/26px ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -3478,6 +3480,8 @@ body {
 }
 
 .browse-panel-title {
+  /* The panel is a column that hides overflow; without this a long list squeezes the title. */
+  flex: none;
   margin: 3px 0 0;
   padding: 0 10px;
   overflow: hidden;
@@ -4404,7 +4408,7 @@ body {
 
 .playback-summary {
   display: flex;
-  gap: 24px;
+  gap: 44px;
   margin-top: 28px;
   height: 52px;
   font-size: 1.25rem;
@@ -4413,8 +4417,10 @@ body {
 .playback-summary span {
   display: grid;
   gap: 2px;
-  flex: 0 1 236px;
-  min-width: 0;
+  /* Sized by its text, so a long version line is not cut short to match "Auto". */
+  flex: 0 1 auto;
+  min-width: 120px;
+  max-width: 440px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
