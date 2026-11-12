@@ -7,6 +7,8 @@ import { advanceShuffle, createShuffle, deleteShuffle, getCatalogItem, getEpisod
 import { serverRegistry } from "./core/serverRegistry";
 import { focusTopNavigation, installSpatialNavigation } from "./navigation/spatial";
 import { installPointerNavigation } from "./navigation/pointer";
+import { installGridPaintWindow } from "./navigation/gridWindow";
+import { isTvDevice } from "./core/artwork";
 import { DetailsScreen } from "./screens/DetailsScreen";
 import { CalendarScreen } from "./screens/CalendarScreen";
 import { CollectionsScreen } from "./screens/CollectionsScreen";
@@ -168,6 +170,7 @@ export default function App() {
 
   useEffect(() => installSpatialNavigation(), [route.name, authRoute, session]);
   useEffect(() => installPointerNavigation(), []);
+  useEffect(() => (isTvDevice() ? installGridPaintWindow() : undefined), []);
   useEffect(() => installKeyboardTracking(), []);
 
   // A layout effect, so it runs before the screens' own effects send their first requests.

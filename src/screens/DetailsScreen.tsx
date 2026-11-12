@@ -241,7 +241,7 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
       <div className="details-related">
         {detail.Type !== "AudioBook" && extras ? <CastSection cast={extras.cast} restoreIndex={restoreCastIndex} onOpen={onOpenPerson} /> : null}
         {extras ? <TrailersSection trailers={extras.trailers} onPlayLocal={onPlayExtra} /> : null}
-        {similar.length ? <MediaRail rail={{ id: "similar", title: relatedTitle, items: similar }} session={session} onOpen={onOpen} /> : null}
+        {similar.length ? <MediaRail rail={{ id: "similar", title: relatedTitle, items: similar }} session={session} onOpen={onOpen} slide /> : null}
         <FactsSection facts={factsFor(extras)} />
       </div>
       {optionsOpen ? (

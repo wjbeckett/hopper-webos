@@ -38,7 +38,11 @@ export function ForYouScreen({
 
   useEffect(() => {
     if (loading) return;
-    const frame = requestAnimationFrame(focusFirstContentCard);
+    // Back from a title puts focus back on its card (FeaturedRailsScreen restoreKey); only
+    // when nothing in the rows has focus does the first card take it.
+    const frame = requestAnimationFrame(() => {
+      if (!document.activeElement?.closest(".home-rails")) focusFirstContentCard();
+    });
     return () => cancelAnimationFrame(frame);
   }, [loading]);
 
@@ -53,6 +57,7 @@ export function ForYouScreen({
       emptyMark="✦"
       emptyTitle="Nothing to recommend yet"
       emptyDescription="As you watch more, personalized picks will appear here."
+      restoreKey={`for-you|${session.serverUrl}|${session.profileId ?? ""}`}
     />
   );
 }

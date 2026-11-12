@@ -93,8 +93,12 @@ function pinRailItem(rail: HTMLElement, element: HTMLElement) {
  */
 function slideRailItem(rail: HTMLElement, element: HTMLElement) {
   const strip = rail.firstElementChild as HTMLElement | null;
-  const wrap = element.closest<HTMLElement>(".media-card-wrap") ?? element;
+  // The strip's child that holds the focused control: a card's wrapper, or the control itself.
+  let wrap: HTMLElement = element;
+  while (wrap.parentElement && wrap.parentElement !== strip && wrap.parentElement !== rail) wrap = wrap.parentElement;
   if (!strip || wrap.parentElement !== strip) return;
+  // The row never scrolls; something like scrollIntoView may still have moved it.
+  if (rail.scrollLeft) rail.scrollLeft = 0;
   const style = getComputedStyle(rail);
   const view = rail.clientWidth - (Number.parseFloat(style.paddingLeft) || 0) - (Number.parseFloat(style.paddingRight) || 0);
   const maxOffset = Math.max(0, strip.offsetWidth - view);
@@ -104,6 +108,29 @@ function slideRailItem(rail: HTMLElement, element: HTMLElement) {
   strip.dataset.offset = String(offset);
   strip.style.transform = offset ? `translate3d(${-offset}px, 0, 0)` : "";
   railStepUntil = performance.now() + RAIL_PIN_MS;
+}
+
+/** Puts a sliding row back at its start, without animating (a new season's episodes, say). */
+export function resetSlidingRail(rail: HTMLElement | null) {
+  const strip = rail?.firstElementChild as HTMLElement | null | undefined;
+  if (!rail || !strip) return;
+  rail.scrollLeft = 0;
+  delete strip.dataset.offset;
+  strip.style.transition = "none";
+  strip.style.transform = "";
+  void strip.offsetWidth;
+  strip.style.transition = "";
+}
+
+/** Brings a card into its sliding row at once, without animating (on entry, or when focus is restored). */
+export function placeRailItem(element: HTMLElement) {
+  const rail = element.closest<HTMLElement>(RAIL_SELECTOR);
+  const strip = rail?.firstElementChild as HTMLElement | null | undefined;
+  if (rail?.dataset.slide !== "true" || !strip) { pinFocusedRailItem(element); return; }
+  strip.style.transition = "none";
+  slideRailItem(rail, element);
+  void strip.offsetWidth;
+  strip.style.transition = "";
 }
 
 export function pinFocusedRailItem(element: HTMLElement) {
@@ -118,6 +145,8 @@ export function pinFocusedRailItem(element: HTMLElement) {
  * the selector and stutter until the key is released.
  */
 const VERTICAL_SLIDE_MS = 140;
+/** True while the key being handled is a held key's repeat: moves then jump instead of easing. */
+let keyHeld = false;
 const verticalSlides = new WeakMap<HTMLElement, { frame: number; goal: number }>();
 
 function slideScrollTop(container: HTMLElement, delta: number) {
@@ -134,7 +163,7 @@ function slideScrollTop(container: HTMLElement, delta: number) {
     return;
   }
   container.style.scrollBehavior = "auto";
-  if (running) {
+  if (running || keyHeld) {
     // A press arrived mid-slide (key held or rapid presses): jump straight to the goal so the
     // selector never trails off screen. Single presses still get the eased slide.
     container.scrollTop = goal;
@@ -149,6 +178,30 @@ function slideScrollTop(container: HTMLElement, delta: number) {
     else verticalSlides.delete(container);
   };
   verticalSlides.set(container, { frame: requestAnimationFrame(tick), goal });
+}
+
+/**
+ * Keeps a focused grid card in view by scrolling whatever holds the grid, through the same
+ * slide as library Browse: eased for one press, a jump while a key is held. A native smooth
+ * scroll per press stacked up under a held key and left the selector off screen (#83).
+ */
+function keepGridCardInView(element: HTMLElement) {
+  let container: HTMLElement | null = element.parentElement;
+  while (container && container !== document.body) {
+    const overflow = getComputedStyle(container).overflowY;
+    if ((overflow === "auto" || overflow === "scroll") && container.scrollHeight > container.clientHeight + 1) break;
+    container = container.parentElement;
+  }
+  const page = !container || container === document.body;
+  const scroller = page ? (document.scrollingElement as HTMLElement | null) : container;
+  if (!scroller) return;
+  const top = page ? 0 : scroller.getBoundingClientRect().top;
+  const height = page ? window.innerHeight : scroller.clientHeight;
+  const rect = element.getBoundingClientRect();
+  const visibleStart = top + height * 0.12;
+  const visibleEnd = top + height * 0.78;
+  const delta = rect.top < visibleStart ? rect.top - visibleStart : rect.bottom > visibleEnd ? rect.bottom - visibleEnd : 0;
+  if (delta) slideScrollTop(scroller, delta);
 }
 
 function focusElement(element: HTMLElement) {
@@ -226,6 +279,10 @@ function focusElement(element: HTMLElement) {
     return;
   }
   if (element.closest(".library-screen, .home-rails")) return;
+  if (element.closest(".library-grid")) {
+    keepGridCardInView(element);
+    return;
+  }
   element.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
 }
 
@@ -595,6 +652,7 @@ export function installSpatialNavigation() {
     // player's); spatial navigation would double-drive its scrubber and
     // transport focus.
     if (document.querySelector(".player-shell")) return;
+    keyHeld = event.repeat;
     if (event.repeat && (event.key === "ArrowLeft" || event.key === "ArrowRight") && performance.now() < railStepUntil) {
       event.preventDefault();
       return;

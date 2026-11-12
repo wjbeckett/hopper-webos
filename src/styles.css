@@ -5170,6 +5170,24 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
   will-change: transform;
   transition: transform 110ms ease-out;
 }
+/* The same for rows that are not MediaRails: episodes, cast, trailers, the player's On Deck.
+   Their strip takes the row's flex layout. */
+.episode-rail[data-slide],
+.detail-cast-track[data-slide],
+.detail-trailer-track[data-slide],
+.player-on-deck-row[data-slide] { overflow: hidden; }
+.episode-rail[data-slide] > .rail-strip,
+.detail-cast-track[data-slide] > .rail-strip,
+.detail-trailer-track[data-slide] > .rail-strip,
+.player-on-deck-row[data-slide] > .rail-strip {
+  position: relative;
+  display: flex;
+  gap: inherit;
+  width: max-content;
+  isolation: isolate;
+  will-change: transform;
+  transition: transform 110ms ease-out;
+}
 .home-rails { overflow: hidden; }
 .home-rails-inner {
   position: relative;
@@ -5205,3 +5223,9 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 .webos .library-grid > *:focus-within,
 .webos .library-grid > .media-card:focus { contain: layout style; }
 .webos .library-grid > .grid-far { visibility: hidden; }
+/* Grids are moved from script (navigation/spatial keepGridCardInView): a native smooth scroll
+   per key press stacked up under a held key. */
+.webos,
+.webos body,
+.webos #root,
+.webos .library-results { scroll-behavior: auto; }

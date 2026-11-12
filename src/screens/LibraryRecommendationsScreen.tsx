@@ -44,7 +44,11 @@ export function LibraryRecommendationsScreen({
 
   useEffect(() => {
     if (loading) return;
-    const frame = requestAnimationFrame(focusFirstContentCard);
+    // Back from a title puts focus back on its card (FeaturedRailsScreen restoreKey); only
+    // when nothing in the rows has focus does the first card take it.
+    const frame = requestAnimationFrame(() => {
+      if (!document.activeElement?.closest(".home-rails")) focusFirstContentCard();
+    });
     return () => cancelAnimationFrame(frame);
   }, [loading]);
 
@@ -60,6 +64,7 @@ export function LibraryRecommendationsScreen({
       emptyMark="✦"
       emptyTitle={`No ${title} recommendations yet`}
       emptyDescription="There aren’t any picks for this library right now."
+      restoreKey={`recommended|${session.serverUrl}|${session.profileId ?? ""}|${libraries.map(library => library.id).join(",")}`}
     />
   );
 }

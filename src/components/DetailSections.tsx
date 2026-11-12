@@ -1,5 +1,6 @@
 import { hideThemeMusic, showThemeMusic } from "../core/themeMusic";
 import { useEffect, useState } from "react";
+import { placeRailItem } from "../navigation/spatial";
 import { getDetailExtras } from "../api/silo";
 import type { DetailExtras, DetailPerson, DetailTrailer } from "../api/silo";
 import { openYoutube } from "../platform/youtube";
@@ -38,8 +39,11 @@ export function CastSection({ cast, restoreIndex, onOpen }: {
     if (restoreIndex == null) return;
     const frame = requestAnimationFrame(() => {
       const card = document.querySelector<HTMLElement>(`[data-cast-index="${restoreIndex}"]`);
-      card?.scrollIntoView({ block: "center", inline: "center" });
-      card?.focus({ preventScroll: true });
+      if (card) {
+        card.scrollIntoView({ block: "center", inline: "nearest" });
+        placeRailItem(card);
+        card.focus({ preventScroll: true });
+      }
     });
     return () => cancelAnimationFrame(frame);
   }, [restoreIndex, cast.length]);
@@ -48,7 +52,7 @@ export function CastSection({ cast, restoreIndex, onOpen }: {
   return (
     <section className="detail-section">
       <h2>Cast &amp; Crew</h2>
-      <div className="detail-cast-track">
+      <div className="detail-cast-track" data-slide="true"><div className="rail-strip">
         {cast.map((person, index) => (
           <button key={`${person.name}-${index}`} type="button" data-tv-focusable="true" data-cast-index={index} className="detail-cast-card" onClick={() => onOpen(person, index)}>
             <span className="detail-cast-photo">
@@ -58,7 +62,7 @@ export function CastSection({ cast, restoreIndex, onOpen }: {
             {person.role ? <small>{person.role}</small> : null}
           </button>
         ))}
-      </div>
+      </div></div>
     </section>
   );
 }
@@ -71,7 +75,7 @@ export function TrailersSection({ trailers, onPlayLocal }: {
   return (
     <section className="detail-section">
       <h2>Trailers &amp; More</h2>
-      <div className="detail-trailer-track">
+      <div className="detail-trailer-track" data-slide="true"><div className="rail-strip">
         {trailers.map(trailer => (
           <button key={trailer.key} type="button" data-tv-focusable="true" className="detail-trailer-card"
             onClick={() => trailer.kind === "youtube" && trailer.youtubeKey ? openYoutube(trailer.youtubeKey) : onPlayLocal(trailer)}>
@@ -82,7 +86,7 @@ export function TrailersSection({ trailers, onPlayLocal }: {
             <strong>{trailer.title}</strong>
           </button>
         ))}
-      </div>
+      </div></div>
     </section>
   );
 }
