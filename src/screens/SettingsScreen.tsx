@@ -686,7 +686,7 @@ export function SettingsScreen({
   function toggleRow(key: string, label: string, checked: boolean, onToggle: () => void) {
     return (
       <button key={key} data-tv-focusable="true" data-setting-key={key} className={`option-row settings-row settings-toggle${checked ? " is-on" : ""}`} aria-pressed={checked} onClick={onToggle}>
-        <span>{label}</span><strong>{checked ? "On" : "Off"}</strong>
+        <span>{label}</span><strong aria-hidden="true">{checked ? "On" : "Off"}</strong>
       </button>
     );
   }
@@ -795,7 +795,7 @@ export function SettingsScreen({
             onClick={() => activate(definition)}
           >
             <span>{group.labels?.[definition.key] ?? definition.label}</span>
-            <strong>{describe(definition, values.get(definition.key), contract!)}</strong>
+            <strong aria-hidden={definition.value_schema.type === "boolean" ? true : undefined}>{describe(definition, values.get(definition.key), contract!)}</strong>
           </button>
         ))}
         {group.footer ? <p className="settings-footer">{group.footer}</p> : null}
@@ -870,7 +870,7 @@ export function SettingsScreen({
         {!definition ? <p className="settings-footer">Update your Silo server to customize media cards.</p> : (
           <>
             <button data-tv-focusable="true" data-setting-key="poster-size" className="option-row settings-row" onClick={() => setPicker({ title: "Poster Size", choices: appearanceOptions.posterSize, current: posterSize, returnKey: "poster-size", onPick: value => { setPicker(null); void chooseAppearance("posterSize", value); } })}><span>Poster Size</span><strong>{posterSize[0].toUpperCase() + posterSize.slice(1)}</strong></button>
-            <button data-tv-focusable="true" data-setting-key="poster-device-only" className={`option-row settings-row settings-toggle${posterSource === "profile_device" ? " is-on" : ""}`} onClick={() => void setPosterDeviceOnly(posterSource !== "profile_device")}><span>Only This Device</span><strong>{posterSource === "profile_device" ? "On" : "Off"}</strong></button>
+            <button data-tv-focusable="true" data-setting-key="poster-device-only" className={`option-row settings-row settings-toggle${posterSource === "profile_device" ? " is-on" : ""}`} aria-pressed={posterSource === "profile_device"} onClick={() => void setPosterDeviceOnly(posterSource !== "profile_device")}><span>Only This Device</span><strong aria-hidden="true">{posterSource === "profile_device" ? "On" : "Off"}</strong></button>
             {posterSource === "profile_client" ? <button data-tv-focusable="true" className="option-row settings-row" onClick={() => void useProfilePosterDefault()}><span>Use Profile Default</span></button> : null}
             <p className="settings-footer">Poster size syncs with other TVs on this profile unless Only This Device is on.</p>
           </>
@@ -992,7 +992,7 @@ export function SettingsScreen({
     return <><section className="settings-group"><h3>Appearance</h3>
       <div className="subtitle-settings-preview" style={{ color: pv.fontColor, opacity: pv.textOpacity / 100, fontFamily: pv.fontFamily, fontSize: sizePx[pv.fontSize] ?? "1.5rem", background: pv.backgroundStyle === "box" ? pv.backgroundColor : "transparent", textShadow: pv.backgroundStyle === "shadow" ? "0 2px 5px #000" : undefined, WebkitTextStroke: pv.textOutline || pv.backgroundStyle === "outline" ? `1px ${pv.backgroundStyle === "outline" && !pv.textOutline ? "#000" : pv.textOutlineColor}` : undefined }}>Subtitles will look like this</div>
       {toggleRow("subtitle-match-device", "Use Device Settings", subtitleMatchesDevice, () => { const next = !subtitleMatchesDevice; setSubtitleMatchesDeviceState(next); setSubtitleMatchesDevice(session.profileId, next); })}
-      <button data-tv-focusable="true" data-setting-key="subtitle-device-only" className={`option-row settings-row settings-toggle${subtitleDeviceOnly ? " is-on" : ""}`} onClick={async () => {
+      <button data-tv-focusable="true" data-setting-key="subtitle-device-only" className={`option-row settings-row settings-toggle${subtitleDeviceOnly ? " is-on" : ""}`} aria-pressed={subtitleDeviceOnly} onClick={async () => {
         const next = !subtitleDeviceOnly; setSubtitleDeviceOnly(next);
         try {
           if (next) await putDeviceSubtitleAppearance(session, subtitleAppearance);
@@ -1004,7 +1004,7 @@ export function SettingsScreen({
             setSubtitleAppearance(restored);
           }
         } catch (reason) { setSubtitleDeviceOnly(!next); setError(reason instanceof Error ? reason.message : "Could not change subtitle scope."); }
-      }}><span>Only on This Device</span><strong>{subtitleDeviceOnly ? "On" : "Off"}</strong></button>
+      }}><span>Only on This Device</span><strong aria-hidden="true">{subtitleDeviceOnly ? "On" : "Off"}</strong></button>
       <div className="settings-nested">
         {row("fontSize", "Font Size")}
         {row("fontFamily", "Font Family")}

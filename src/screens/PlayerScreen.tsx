@@ -1881,12 +1881,12 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
             {autoSeekRate !== 0 ? <div className="auto-seek-chip"><svg viewBox="0 0 24 24" aria-hidden="true"><path d={autoSeekRate < 0 ? "M20.8 6.4 19.1 9.2 16.2 7.9" : "M3.2 6.4 4.9 9.2 7.8 7.9"} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" /><path d={autoSeekRate < 0 ? "M12 4a8 8 0 1 0 7.4 4.9" : "M12 4a8 8 0 1 1-7.4 4.9"} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" /></svg>{Math.abs(autoSeekRate)}x</div> : null}
           </div> : null}
           {skipFeedback && !cleanSeek && !panel && !upNextCard && hud ? <div className="skip-feedback-docked" data-raised={previewSeconds != null && previewCard != null} data-nonce={skipFeedback.nonce}><div className="skip-feedback-chip"><strong>{skipFeedback.delta < 0 ? `−${-skipFeedback.delta}s` : `+${skipFeedback.delta}s`}</strong><span>{formatClock(skipFeedback.target)}</span></div></div> : null}
-          <div ref={timelineRef} className="scrub-bar" role="slider"
+          <div ref={timelineRef} className="scrub-bar"
             onClick={event => {
               // Pointer: a click on the bar seeks there.
               const rect = event.currentTarget.getBoundingClientRect();
               if (duration > 0 && rect.width > 0) seekToPosition(clampSeek(((event.clientX - rect.left) / rect.width) * duration, duration));
-            }} aria-label="Playback position" aria-valuemin={0} aria-valuemax={Math.round(duration)} aria-valuenow={Math.round(labelSeconds)} tabIndex={-1}>
+            }} tabIndex={-1}>
             {segments.map(([start, end], index) => {
               const span = end - start;
               if (span <= 0) return null;
