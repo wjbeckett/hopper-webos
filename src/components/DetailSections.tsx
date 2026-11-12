@@ -93,7 +93,7 @@ export function FactsSection({ facts }: { facts: DetailFact[] }) {
   return (
     <section className="detail-section">
       <h2>Details</h2>
-      <div className="detail-facts-table" tabIndex={0} data-tv-focusable="true">
+      <div className="detail-facts-table" tabIndex={0} data-tv-focusable="true" role="group" aria-label="Details">
         {rows.map(fact => (
           <div key={fact.label} className="detail-facts-row">
             <span>{fact.label}</span>

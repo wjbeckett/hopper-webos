@@ -685,7 +685,7 @@ export function SettingsScreen({
 
   function toggleRow(key: string, label: string, checked: boolean, onToggle: () => void) {
     return (
-      <button key={key} data-tv-focusable="true" data-setting-key={key} className={`option-row settings-row settings-toggle${checked ? " is-on" : ""}`} onClick={onToggle}>
+      <button key={key} data-tv-focusable="true" data-setting-key={key} className={`option-row settings-row settings-toggle${checked ? " is-on" : ""}`} aria-pressed={checked} onClick={onToggle}>
         <span>{label}</span><strong>{checked ? "On" : "Off"}</strong>
       </button>
     );
@@ -791,6 +791,7 @@ export function SettingsScreen({
             data-tv-focusable="true"
             data-setting-key={definition.key}
             className={`option-row settings-row${definition.value_schema.type === "boolean" ? " settings-toggle" : ""}${definition.value_schema.type === "boolean" && values.get(definition.key) ? " is-on" : ""}`}
+            aria-pressed={definition.value_schema.type === "boolean" ? Boolean(values.get(definition.key)) : undefined}
             onClick={() => activate(definition)}
           >
             <span>{group.labels?.[definition.key] ?? definition.label}</span>

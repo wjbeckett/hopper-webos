@@ -1871,6 +1871,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         <h2 className="player-title-text">{detail?.title ?? item.Name}</h2>
 
         <div ref={scrubberRef} className="player-scrubber" tabIndex={-1} data-active={scrubberFocused || scrubPreview != null} data-focused={scrubberFocused}
+          role="slider" aria-label="Playback position" aria-valuemin={0} aria-valuemax={Math.round(duration)} aria-valuenow={Math.round(labelSeconds)} aria-valuetext={`${formatClock(labelSeconds)} of ${formatClock(duration)}`}
           onFocus={() => setScrubberFocused(true)} onBlur={() => setScrubberFocused(false)}>
           {previewSeconds != null && (previewCard || autoSeekRate !== 0) ? <div className="scrub-preview-stack" data-fast={autoSeekRate !== 0} style={{ left: `clamp(168px, ${playedFraction * 100}%, calc(100% - 168px))` }}>
             {previewCard ? <div className="scrub-preview-card">
@@ -1925,29 +1926,32 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
           </div>
         </div>
       </div>
-
-      {pill && !panel && !upNextCard ? <div className="skip-pill" data-controls={hud}>
-        {pill.undo ? <small className="skip-pill-caption">Intro skipped</small> : null}
-        <div ref={pillRef} className="skip-pill-capsule" tabIndex={-1} onClick={selectPill} data-prompt={pill.kind}>
-          {pillFill != null ? <b className="skip-pill-fill" style={{ width: `${Math.max(0, Math.min(1, pillFill)) * 100}%` }} /> : null}
-          <span>{pill.label}</span>
-        </div>
-      </div> : null}
-
-      {cleanSeek ? <div className="hold-seek-indicator">
-        <div className="hold-seek-frame" style={holdCard ?? undefined} />
-        <div className="hold-seek-chip"><strong>{cleanSeek.rate === 0 ? "Paused" : `${cleanSeek.rate < 0 ? "-" : ""}${Math.abs(cleanSeek.rate)}×`}</strong><span>{formatClock(cleanSeek.preview)}</span></div>
-        {duration > 0 ? <div className="hold-seek-track"><b style={{ width: `${Math.max(0, Math.min(1, cleanSeek.preview / duration)) * 100}%` }} /></div> : null}
-        <div className="hold-seek-hint">← → speed · ◉ play · ↩ cancel</div>
-      </div> : null}
-
-      {skipFeedback && !cleanSeek && !panel && !upNextCard && !hud ? <div className="skip-feedback" data-nonce={skipFeedback.nonce} data-controls={hud}>
-        <div className="skip-feedback-chip"><strong>{skipFeedback.delta < 0 ? `−${-skipFeedback.delta}s` : `+${skipFeedback.delta}s`}</strong><span>{formatClock(skipFeedback.target)}</span></div>
-        {!hud && duration > 0 ? <div className="skip-feedback-track"><b style={{ width: `${Math.max(0, Math.min(1, skipFeedback.target / duration)) * 100}%` }} /></div> : null}
-      </div> : null}
     </div>
 
-    {/* Outside .player-chrome, which is invisible while the controls are hidden: loading, network loss and errors must always show. */}
+    {/* Outside .player-chrome, which is invisible while the controls are hidden. The skip pill shows in
+        both states (Android's TvIntroAutoSkipBanner), and the hold-seek preview and skip chip exist only
+        while the controls are hidden (#67). */}
+    {pill && !panel && !upNextCard ? <div className="skip-pill" data-controls={hud}>
+      {pill.undo ? <small className="skip-pill-caption">Intro skipped</small> : null}
+      <div ref={pillRef} className="skip-pill-capsule" tabIndex={-1} role="button" onClick={selectPill} data-prompt={pill.kind}>
+        {pillFill != null ? <b className="skip-pill-fill" style={{ width: `${Math.max(0, Math.min(1, pillFill)) * 100}%` }} /> : null}
+        <span>{pill.label}</span>
+      </div>
+    </div> : null}
+
+    {cleanSeek ? <div className="hold-seek-indicator">
+      <div className="hold-seek-frame" style={holdCard ?? undefined} />
+      <div className="hold-seek-chip"><strong>{cleanSeek.rate === 0 ? "Paused" : `${cleanSeek.rate < 0 ? "-" : ""}${Math.abs(cleanSeek.rate)}×`}</strong><span>{formatClock(cleanSeek.preview)}</span></div>
+      {duration > 0 ? <div className="hold-seek-track"><b style={{ width: `${Math.max(0, Math.min(1, cleanSeek.preview / duration)) * 100}%` }} /></div> : null}
+      <div className="hold-seek-hint">← → speed · ◉ play · ↩ cancel</div>
+    </div> : null}
+
+    {skipFeedback && !cleanSeek && !panel && !upNextCard && !hud ? <div className="skip-feedback" data-nonce={skipFeedback.nonce} data-controls={hud}>
+      <div className="skip-feedback-chip"><strong>{skipFeedback.delta < 0 ? `−${-skipFeedback.delta}s` : `+${skipFeedback.delta}s`}</strong><span>{formatClock(skipFeedback.target)}</span></div>
+      {!hud && duration > 0 ? <div className="skip-feedback-track"><b style={{ width: `${Math.max(0, Math.min(1, skipFeedback.target / duration)) * 100}%` }} /></div> : null}
+    </div> : null}
+
+    {/* Also outside .player-chrome: loading, network loss and errors must always show. */}
     {(outage || (serverUnreachable && buffering)) && !error ? <div className="player-outage" role="alert">Connection lost<small>Playback continues when the server answers. Press Back to leave.</small></div> : null}
     {busy || outage || (buffering && !error) ? <div className="player-loading" role="status" aria-label="Loading"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="28" /></svg></div> : null}
     {error ? <div className="player-error" role="alert">{error}</div> : null}
