@@ -188,7 +188,7 @@ function lgMediaKey(event: KeyboardEvent): LgMediaKey | undefined {
   return undefined;
 }
 
-export function PlayerScreen({ session, item, startPosition, choices, onBack, onEnded, resolveNextEpisode, onPlayNext, shuffle, onShuffleAdvance, autoAdvanceCount = 0 }: { session: Session; item: SiloItem; startPosition?: number; choices?: PlaybackChoices; onBack: (elapsedSeconds: number) => void; onEnded?: () => void; resolveNextEpisode?: () => Promise<SiloItem | null>; onPlayNext?: (next: SiloItem, autoAdvanceCount: number) => void; shuffle?: { id: string; scopeLabel?: string; next?: SiloItem }; onShuffleAdvance?: (autoAdvanceCount: number) => void; autoAdvanceCount?: number }) {
+export function PlayerScreen({ session, item, startPosition, choices, onBack, onEnded, resolveNextEpisode, onPlayNext, shuffle, onShuffleAdvance, autoAdvanceCount = 0 }: { session: Session; item: SiloItem; startPosition?: number; choices?: PlaybackChoices; onBack: (positionSeconds: number) => void; onEnded?: () => void; resolveNextEpisode?: () => Promise<SiloItem | null>; onPlayNext?: (next: SiloItem, autoAdvanceCount: number) => void; shuffle?: { id: string; scopeLabel?: string; next?: SiloItem }; onShuffleAdvance?: (autoAdvanceCount: number) => void; autoAdvanceCount?: number }) {
   useEffect(() => { interruptThemeMusic(); }, []);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -1362,7 +1362,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     stopAutoSeek();
     stopCleanSeek();
     closePlayback(false);
-    onBack(videoRef.current?.currentTime ?? 0);
+    // The title's position, not the stream's clock: a resumed stream starts its clock near 0.
+    onBack(sourcePosition());
   }
 
   /** Starts the stream again where it stopped, once the server answers. */
