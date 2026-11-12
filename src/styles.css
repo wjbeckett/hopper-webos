@@ -5223,7 +5223,7 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 .webos .library-grid > *:focus-within,
 .webos .library-grid > .media-card:focus { contain: layout style; }
 .webos .library-grid > .grid-far { visibility: hidden; }
-/* Grids are moved from script (navigation/spatial keepGridCardInView): a native smooth scroll
+/* Grids are moved from script (navigation/spatial keepInViewVertically): a native smooth scroll
    per key press stacked up under a held key. */
 .webos,
 .webos body,
