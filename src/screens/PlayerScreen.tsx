@@ -1671,10 +1671,12 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       if (event.key === "ArrowDown") {
         event.preventDefault(); event.stopPropagation();
         if (event.repeat) return;
-        if (onScrubber) focusTransport();
-        else if (onPill) revealHud("transport");
-        else if (onTransportButton) { /* bottom row: stay */ }
+        // Focus stays on the timeline or a button after the controls hide, so the hidden state
+        // is checked before where focus is; otherwise Down did nothing once they had been shown.
+        if (onPill) revealHud("transport");
         else if (snapshot.cleanSeek) stopCleanSeek();
+        else if (snapshot.hud && onScrubber) focusTransport();
+        else if (snapshot.hud && onTransportButton) { /* bottom row: stay */ }
         else if (!snapshot.hud) {
           const tab: HudTab = snapshot.audioAvailable ? "Audio" : snapshot.subtitlesAvailable ? "Subtitles" : "Video";
           setPanel(tab === "Audio" ? "audio" : tab === "Subtitles" ? "subtitles" : "quality");
@@ -1687,9 +1689,9 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       if (event.key === "ArrowUp") {
         event.preventDefault(); event.stopPropagation();
         if (event.repeat) return;
-        if (onTransportButton) scrubberRef.current?.focus();
+        if (!snapshot.hud && !onPill && !snapshot.cleanSeek) revealHud("transport");
+        else if (onTransportButton) scrubberRef.current?.focus();
         else if (onScrubber && snapshot.pill) pillRef.current?.focus();
-        else if (!snapshot.hud && !onPill && !snapshot.cleanSeek) revealHud("transport");
         return;
       }
 
