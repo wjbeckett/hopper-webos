@@ -108,7 +108,14 @@ export function FeaturedRailsScreen({
     }, LIVE_IDLE_MS);
   }
   const [watchVersion, setWatchVersion] = useState(0);
-  useEffect(() => subscribeWatchState(() => setWatchVersion(version => version + 1)), []);
+  /** The newest watch state published for each title since the rows loaded (watched, resumed). */
+  const publishedState = useRef(new Map<string, SiloItem>());
+  /** The item the hero shows, and its row, so a watch-state change can refresh it. */
+  const heroShown = useRef<{ item: SiloItem; railIndex: number } | undefined>(undefined);
+  useEffect(() => subscribeWatchState(next => {
+    publishedState.current.set(next.Id, next);
+    setWatchVersion(version => version + 1);
+  }), []);
   const displayRails = useMemo(() => rails.map(rail => {
     if (!rail.title.toLocaleLowerCase().includes("continue watching")) return rail;
     const kept = rail.items.filter(item => item.UserData?.Played !== true);
@@ -119,6 +126,46 @@ export function FeaturedRailsScreen({
     () => new Map(displayRails.flatMap(rail => rail.items.map(item => [item.Id, item] as const))),
     [displayRails]
   );
+
+  /**
+   * The copy of each title that knows the most about where the viewer is. A title can be in
+   * several rows, and only some copies carry a position: Continue Watching has it, Recently
+   * Added does not. A state published since the rows loaded wins over all of them.
+   */
+  const userStateById = useMemo(() => {
+    const best = new Map<string, SiloItem>();
+    for (const rail of displayRails) {
+      for (const item of rail.items) {
+        const known = best.get(item.Id);
+        if (!known || (item.UserData?.PlaybackPositionTicks ?? 0) > (known.UserData?.PlaybackPositionTicks ?? 0)) best.set(item.Id, item);
+      }
+    }
+    for (const [id, item] of publishedState.current) best.set(id, item);
+    return best;
+  }, [displayRails, watchVersion]);
+
+  /** The focused row's own copy of the item, with the viewer's position from whichever copy has it. */
+  const heroItem = useCallback((item: SiloItem): SiloItem => {
+    const state = userStateById.get(item.Id);
+    if (!state || state === item) return item;
+    return { ...item, UserData: state.UserData ?? item.UserData, RunTimeTicks: item.RunTimeTicks ?? state.RunTimeTicks };
+  }, [userStateById]);
+
+  function showInHero(item: SiloItem, railIndex: number, settle: "show" | "preview") {
+    const shown = heroItem(item);
+    heroShown.current = { item: shown, railIndex };
+    if (settle === "show") heroRef.current?.show(shown, railIndex);
+    else heroRef.current?.preview(shown, railIndex);
+  }
+
+  // Watched or resumed while Home was open: the hero updates in place, as the card does.
+  useEffect(() => {
+    const shown = heroShown.current;
+    if (!shown) return;
+    const next = heroItem(shown.item);
+    if (next.UserData !== shown.item.UserData) showInHero(next, shown.railIndex, "show");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [heroItem]);
 
   function warmNeighbours(card: HTMLElement) {
     const wrap = card.closest<HTMLElement>(".media-card-wrap");
@@ -157,7 +204,7 @@ export function FeaturedRailsScreen({
     keepFocusedRailInView(target, false);
     const item = rail?.items[slot];
     restoredFocusRef.current = true;
-    if (item) heroRef.current?.show(item, restore.railIndex);
+    if (item) showInHero(item, restore.railIndex, "show");
     focusNavigationTarget(target);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -194,7 +241,7 @@ export function FeaturedRailsScreen({
     if (item && target) {
       focusedCardRef.current = { element: target, railId: record.railId, index: slot };
       restoredFocusRef.current = true;
-      heroRef.current?.show(item, railIndex);
+      showInHero(item, railIndex, "show");
       focusNavigationTarget(target);
       return;
     }
@@ -235,7 +282,6 @@ export function FeaturedRailsScreen({
       className="content-screen home-screen"
       onFocusCapture={(event) => {
         const card = (event.target as HTMLElement).closest<HTMLElement>("[data-media-id]");
-        const item = card?.dataset.mediaId ? itemsById.get(card.dataset.mediaId) : undefined;
         const focusable = (event.target as HTMLElement).closest<HTMLElement>("[data-tv-focusable='true']");
         const rail = focusable?.closest<HTMLElement>(".media-rail");
         const container = rail?.parentElement;
@@ -243,8 +289,15 @@ export function FeaturedRailsScreen({
           ? Array.from(container.children).indexOf(rail)
           : -1;
         if (railIndex >= 0) rowFocused(railIndex);
+        // This row's copy of the item: another row's copy of the same title can lack the position.
+        const cardWrap = card?.closest<HTMLElement>(".media-card-wrap");
+        const cardSlot = cardWrap?.parentElement ? Array.prototype.indexOf.call(cardWrap.parentElement.children, cardWrap) as number : -1;
+        const rowItem = railIndex >= 0 && cardSlot >= 0 ? displayRails[railIndex]?.items[cardSlot] : undefined;
+        const item = rowItem && rowItem.Id === card?.dataset.mediaId
+          ? rowItem
+          : card?.dataset.mediaId ? itemsById.get(card.dataset.mediaId) : undefined;
         if (item && card && railIndex >= 0) {
-          heroRef.current?.preview(item, railIndex);
+          showInHero(item, railIndex, "preview");
           // Not for the pointer: moving the rows would put a different card under it.
           if (!focusFromPointer()) keepFocusedRailInView(card);
           warmNeighbours(card);
