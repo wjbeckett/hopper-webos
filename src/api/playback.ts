@@ -201,7 +201,7 @@ export async function startPlaybackV3(session: Session, detail: WatchDetail, ver
   const subtitle = subtitleIndex != null && subtitleIndex >= 0
     ? { subtitle_track_id: `file:${version.file_id}:subtitle:${subtitleIndex}`, subtitle_track_index: subtitleIndex }
     : {};
-  const body = { installation_id: await playbackInstallationId(session), protocol_version: 3, client_features: features, file_id: version.file_id, profile_id: session.profileId, playback_attempt_id: playbackAttemptId, quality_preference: quality, subtitle_fidelity_preference: "compatible", start_position: startPosition ?? detail.user_data?.position_seconds ?? 0, ...(audioIndex == null ? {} : { audio_track_id: `file:${version.file_id}:audio:${audioIndex}`, audio_track_index: audioIndex }), ...subtitle, metered: false, ...snapshot() };
+  const body = { installation_id: await playbackInstallationId(session), protocol_version: 3, client_features: features, file_id: version.file_id, profile_id: session.profileId, playback_attempt_id: playbackAttemptId, quality_preference: quality, subtitle_fidelity_preference: "compatible", progress_persistence: "server", start_position: startPosition ?? detail.user_data?.position_seconds ?? 0, ...(audioIndex == null ? {} : { audio_track_id: `file:${version.file_id}:audio:${audioIndex}`, audio_track_index: audioIndex }), ...subtitle, metered: false, ...snapshot() };
   const decision = await requestV2<Decision>(session, "/playback/start", { method: "POST", body: JSON.stringify(body) });
   return { plan: requirePlan(decision), playbackAttemptId, planAttemptId: uuid("plan") };
 }
