@@ -112,6 +112,15 @@ function sectionTitle(section: AppSection) {
   return titles[section] ?? "Library";
 }
 
+/**
+ * The first screen when nobody is signed in. On a TV that is phone setup, whether or not a
+ * server is saved: the phone finds the TV and signs it in, with nothing to type. Its button
+ * leads to code sign-in. A browser has no pairing service and starts at code sign-in.
+ */
+function signedOutEntry(): AuthRoute {
+  return pairingAvailable() ? "phone-setup" : "device-login";
+}
+
 function initialState() {
   const active = serverRegistry.active();
   const activeUrl = effectiveServerUrl(active?.url ?? "");
@@ -121,7 +130,7 @@ function initialState() {
       : active.session;
     return { session, serverUrl: activeUrl, auth: "device-login" as AuthRoute };
   }
-  if (active) return { session: null, serverUrl: activeUrl, auth: "device-login" as AuthRoute };
+  if (active) return { session: null, serverUrl: activeUrl, auth: signedOutEntry() };
   if (import.meta.env.DEV) {
     return { session: null, serverUrl: DEV_SERVER_URL, auth: "device-login" as AuthRoute };
   }
@@ -173,7 +182,7 @@ export default function App() {
     setSession(null);
     setNavigationRestored(false);
     setRoute({ name: "main" });
-    setAuthRoute("device-login");
+    setAuthRoute(signedOutEntry());
   }), []);
 
   useEffect(() => {
@@ -335,6 +344,14 @@ export default function App() {
         // Server setup without a saved server was opened from phone setup, so Back returns there.
         // With a saved server, ServerSetupScreen handles Back itself.
         if (authRoute === "server-setup" && pairingAvailable() && !serverRegistry.active()) {
+          if (!event.repeat && !editingText) {
+            setAuthRoute("phone-setup");
+            event.preventDefault();
+          }
+          return;
+        }
+        // Code sign-in was opened from phone setup (the entry page on a TV), so Back returns there.
+        if (authRoute === "device-login" && pairingAvailable()) {
           if (!event.repeat && !editingText) {
             setAuthRoute("phone-setup");
             event.preventDefault();
@@ -520,7 +537,7 @@ export default function App() {
     setSession(null);
     setNavigationRestored(false);
     setRoute({ name: "main" });
-    setAuthRoute("device-login");
+    setAuthRoute(signedOutEntry());
   }
 
   function changeServer() {
@@ -640,7 +657,19 @@ export default function App() {
 
   const signedOutNotice = signedOutOf ? `You were signed out of ${signedOutOf}. Sign in again.` : undefined;
   if (!session) {
-    if (authRoute === "phone-setup") return <PhoneSetupScreen onPaired={login} onManual={() => setAuthRoute("server-setup")} />;
+    if (authRoute === "phone-setup") {
+      // With a server saved, the other way in is code sign-in for that server. Without one,
+      // the server's address comes first.
+      const savedServer = Boolean(serverRegistry.active());
+      return (
+        <PhoneSetupScreen
+          notice={signedOutNotice}
+          manualLabel={savedServer ? "Sign in with a code" : "Enter server address"}
+          onPaired={login}
+          onManual={() => setAuthRoute(savedServer ? "device-login" : "server-setup")}
+        />
+      );
+    }
     if (authRoute === "server-setup") return <ServerSetupScreen onContinue={(url) => { setSignedOutOf(""); chooseServer(url); }} />;
     if (authRoute === "first-run-setup") {
       return <FirstRunSetupScreen serverUrl={serverUrl} onComplete={login} onChangeServer={() => setAuthRoute("server-setup")} />;

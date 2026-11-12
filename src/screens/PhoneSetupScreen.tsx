@@ -19,12 +19,18 @@ type Push = Extract<PairingMessage, { type: "pushServer" }>;
  * First screen on a TV with no server (Android TvServerSetupScreen, phone-first):
  * advertises this TV so the Silo phone app can push its server, then runs the
  * device login against that server and reports the result to the phone.
- * "Enter server address" is the manual route (it ends in the QR sign-in).
+ * The button is the manual route: the server's address when none is saved, then QR sign-in.
+ * It is also the first screen after a sign-out, with the server still saved.
  */
 export function PhoneSetupScreen({
+  notice,
+  manualLabel = "Enter server address",
   onPaired,
   onManual
 }: {
+  /** Why the TV is signed out, when the server ended the sign-in. */
+  notice?: string;
+  manualLabel?: string;
   onPaired: (session: Session) => void;
   onManual: () => void;
 }) {
@@ -34,6 +40,10 @@ export function PhoneSetupScreen({
   /** True from the phone's push until that attempt ends: the user is now finishing on the phone. */
   const [attemptActive, setAttemptActive] = useState(false);
   const attemptRef = useRef(0);
+  // The caller passes a new function on every render. Pairing must not restart for that: a
+  // restart stops and starts the TV's advertisement, and the phone loses the TV.
+  const onPairedRef = useRef(onPaired);
+  onPairedRef.current = onPaired;
 
   useEffect(() => {
     if (!pairingAvailable()) {
@@ -87,7 +97,7 @@ export function PhoneSetupScreen({
             await sendPairingMessage({ type: "serverResult", serverURL: push.serverURL, status: "signedIn" }).catch(() => undefined);
             await closePairingConnection();
             await stopPairing();
-            onPaired(session);
+            onPairedRef.current(session);
             return;
           }
           if (result.status === "denied") { failure = "denied"; throw new Error("The request was declined."); }
@@ -141,7 +151,7 @@ export function PhoneSetupScreen({
       if (timer) window.clearTimeout(timer);
       void stopPairing();
     };
-  }, [onPaired]);
+  }, []);
 
   return (
     <main className="login-shell server-setup">
@@ -149,12 +159,13 @@ export function PhoneSetupScreen({
         <div className="phone-setup-copy">
           <div className="eyebrow">Hopper for LG webOS</div>
           <h1>Set up with your phone</h1>
+          {notice ? <div className="signed-out-notice" role="status">{notice}</div> : null}
           <p>It's the easiest way. There's nothing to type with the remote.</p>
           <p className="pair-status">{status}</p>
           {code ? <div className="pair-code">{code}</div> : null}
           {error ? <div className="error">{error}</div> : null}
           <p className="phone-setup-alt">No phone nearby?</p>
-          <TvButton onClick={onManual}>Enter server address</TvButton>
+          <TvButton onClick={onManual}>{manualLabel}</TvButton>
         </div>
         <SetupSteps finishing={attemptActive} />
       </section>
