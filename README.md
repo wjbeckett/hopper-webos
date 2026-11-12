@@ -34,7 +34,7 @@ Hopper is an independent, community-built client. It is not affiliated with or e
 ## Features
 
 **Getting started**
-- Phone pairing: the TV advertises itself on your network over mDNS. In the Silo phone app, choose "Sign in on TV" and pick the TV. The phone sends the server and approves the sign-in, so there's nothing to type with the remote.
+- Phone pairing: the TV advertises itself on your network over mDNS. In the Silo phone app, choose "Sign in on TV" and pick the TV. The phone sends the server and approves the sign-in, so there's nothing to type with the remote. This is the first screen whenever the TV is signed out; a button on it leads to code sign-in.
 - Sign in with a QR code or a code on another device, or with a username and password. If your server allows it, create an account on the TV with an invite code.
 - First-run setup for a brand-new Silo server.
 - Several saved servers, with switching and removal.
