@@ -112,6 +112,7 @@ Keep each concern in its own layer:
   - `pairing.ts` makes Luna calls to the bundled service.
   - `back.ts` hands Back over to the TV (`PalmSystem.platformBack()`: the exit popup on webOS 6 and later, the Home launcher before that). It does nothing in a desktop browser.
   - `audioDelay.ts` stays at 0..1000 ms (Android allows -1000..1000) unless a webOS-safe way to advance audio is demonstrated, because a WebAudio `DelayNode` can't advance audio.
+  - `keyboard.ts` tracks whether the TV's on-screen keyboard is showing (`keyboardStateChange`), so Back can leave it to the keyboard.
   - The other modules are `captions`, `dolbyVision`, `device` and `youtube`.
 - **`services/pairing/`** is a Node 12 webOS JS service (`com.hopperapp.hopper.service`). It advertises `_silopair-roku._tcp` over mDNS and relays phone pairing frames. `scripts/package-webos.sh` packages it into the same IPK. Write it in ES5-ish style: no optional chaining and no `??`. Browser mDNS doesn't exist, so keep manual and saved-server management in place.
 
@@ -132,7 +133,7 @@ Keep each concern in its own layer:
 ## TV navigation and browsing rules
 - **Focus across transitions:** keep focus on the intended control when the screen changes, and request initial content focus only after focusable content exists.
 - **One activation per press:** handle OK/Enter once per remote press. When activation changes screens, consume the matching key-up so the same press can't activate the newly focused control.
-- **Back on an entry page leaves the app** (LG requirement). The app's Back handler (`onBack` in `App.tsx`) calls `platformBack()` from `src/platform/back.ts` on Home with focus on the Home tab, on the full-screen profile picker, and on the sign-in screen shown first (phone setup, device sign-in, or server setup when there is no phone setup to return to). Anywhere deeper, Back goes one step back. A new screen that can be the first thing shown needs the same treatment.
+- **Back on an entry page leaves the app** (LG requirement). The app's Back handler (`onBack` in `App.tsx`) calls `platformBack()` from `src/platform/back.ts` on Home with focus on the Home tab, on the full-screen profile picker, and on the sign-in screen shown first (phone setup, device sign-in, first-run setup, or server setup when there is no phone setup to return to). Anywhere deeper, Back goes one step back: password sign-in returns to device sign-in. On password sign-in and first-run setup, Back does nothing while the TV's keyboard is open (`src/platform/keyboard.ts`), because the keyboard takes it. A new screen that can be the first thing shown needs the same treatment.
 - **Stable paging:** keep item keys stable and append cursor pages in the order the API returns them. Never re-sort already-rendered results when a later page arrives; keeping focus and scroll position matters more.
 - **Load at the edge:** when focus reaches the loaded edge of a paged grid, load the next page without moving the current selection until a destination card exists.
 - **Android as the starting point:** grid focus restoration and pagination follow Android TV's behaviour, implemented natively in React for webOS.
