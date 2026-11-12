@@ -15,7 +15,7 @@ Deliberate differences from the Android TV app. Do not "fix" these to match Andr
 - Back on first-run setup (a server with no accounts yet) opens the TV's exit popup, as code sign-in does. Android returns to server setup; in Hopper, server setup's Back reopens the saved server, which would show first-run setup again.
 - Invite sign-up availability is probed when the password sign-in screen opens. Android probes it when the server is chosen.
 - Text entry uses the webOS system keyboard on the focused field. Android's on-screen keyboard dialog is not ported.
-- Details and the Home hero show a time-left ring for partly watched titles, in the brand teal. No equivalent was found in the Android TV source.
+- Details, Series pages and the Home hero show a time-left ring for partly watched titles, in the brand teal. No equivalent was found in the Android TV source.
 - Playback is always negotiated as HLS. Original-file and progressive delivery are switched off in the device profile, because the LG browser can report codec support and still reject the container.
 - On a TV, the focus ring and scale on a card and the reveal of its artwork are instant, where Android animates them. Each animation made a compositor layer per card on every focus change, which cost more than it drew (`docs/PERFORMANCE.md`).
 - Dolby audio (AC-3, E-AC-3) reaches the TV through a second MediaSource buffer. webOS 22's browser refuses it in a buffer shared with video, so Hopper splits Silo's combined segments into video and audio itself (`src/platform/splitSourceBuffer.ts`). Android plays the combined stream directly.

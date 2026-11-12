@@ -10,6 +10,7 @@ import type { DetailPerson, DetailTrailer } from "../api/silo";
 import type { Session, SiloItem } from "../types";
 import { applyWatchedState, publishWatchState } from "../core/watchState";
 import { LoadingState } from "../components/LoadingState";
+import { ResumeProgress } from "../components/ResumeProgress";
 import { hidesEpisodeImage, hidesEpisodeOverview, useEpisodeSpoilerPreferences } from "../core/episodeSpoilers";
 
 type Props = {
@@ -58,14 +59,6 @@ function runtime(minutes?: number) {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return hours ? (rest ? `${hours}h ${rest}m` : `${hours}h`) : `${rest} min`;
-}
-
-function clock(seconds: number) {
-  const total = Math.floor(seconds);
-  const hours = Math.floor(total / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
-  const rest = String(total % 60).padStart(2, "0");
-  return hours ? `${hours}:${String(minutes).padStart(2, "0")}:${rest}` : `${minutes}:${rest}`;
 }
 
 function resumePosition(episode?: SiloItem) {
@@ -209,7 +202,8 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
   const highlightedId = focusedEpisodeId ?? nextUpRef.current?.Id;
   const target = focusedEpisode ?? (initialEpisode && railEpisodes.some(episode => episode.Id === initialEpisode.Id) ? initialEpisode : railEpisodes[0]);
   const resume = resumePosition(target);
-  const playLabel = target ? `${resume > 0 ? "Resume" : "Play"} ${code(target)}${resume > 0 ? ` ${clock(resume)}` : ""}` : "Play";
+  // Android's form ("Resume S2:E3"). The time left is a ring in the facts row, as on Details.
+  const playLabel = target ? `${resume > 0 ? "Resume" : "Play"} ${code(target)}` : "Play";
   const watchDetail = useWatchDetail(session, target);
   // Keep the last loaded detail on screen while the next episode's detail
   // resolves so the Options button and summary row hold their positions
@@ -304,6 +298,7 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
             {show.ContentRating ? <span className="details-rating-chip">{show.ContentRating}</span> : null}
             {metaTokens.map(token => <span key={token}>{token}</span>)}
             {rating ? <span>{`★ ${rating.toFixed(1)}`}</span> : null}
+            {target && resume > 0 ? <ResumeProgress position={resume} duration={(target.RunTimeTicks ?? 0) / 10_000_000} /> : null}
           </div>
           <p className="series-overview">{synopsis}</p>
           {extras?.cast.length ? <div className="details-credit">{`Starring ${extras.cast.slice(0, 3).map(member => member.name).join(", ")}`}</div> : null}
