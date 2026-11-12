@@ -41,12 +41,13 @@ gh api 'repos/wjbeckett/hopper-webos/issues?state=open&milestone=<number>&per_pa
 ```bash
 npm install
 SILO_DEV_SERVER=https://silo.example.com npm run dev   # Vite on 0.0.0.0; proxies /__silo -> SILO_DEV_SERVER (ws too, self-signed OK)
-npm run build                                          # tsc -b + vite build -> dist/  (the only verification gate)
+npm run build                                          # tsc -b + vite build -> dist/
+npm test                                               # unit tests (Vitest, jsdom): src/**/*.test.ts
 WEBOS_DEVICE=livingroom npm run webos:deploy           # build, package IPK (app + services/pairing), install, launch
 WEBOS_DEVICE=livingroom npm run webos:inspect          # LG Web Inspector
 npm run webos:check                                    # verify node/ares tooling and devices
 ```
-- There is no linter and no test suite yet. `npm run build`, which type-checks, is the check to run before committing. It fails on unused locals, imports and parameters (`noUnusedLocals`, `noUnusedParameters`); prefix a parameter you must keep with `_`.
+- There is no linter. `npm run build`, which type-checks, and `npm test` are the checks to run before committing; CI runs both. Tests sit next to the code as `*.test.ts` and cover logic only (API parsing, token refresh, navigation scoring, the Dolby splitter, resume and episode rules). Add one when you change that kind of logic. They do not replace a check on the TV. It fails on unused locals, imports and parameters (`noUnusedLocals`, `noUnusedParameters`); prefix a parameter you must keep with `_`.
 - Every build gets its own version, `<major>.<minor>.<commit count>` (for example 0.3.215), from `vite.config.ts`. It is stamped into the packaged `appinfo.json`, shown under Settings → Server with the commit hash, and sent in playback requests. `package.json` holds only `<major>.<minor>`; bump it there for a release. Don't hand-edit version numbers anywhere else.
 - `WEBOS_APP_ID` overrides the app ID for launch and inspect.
 - In the browser, arrow keys move focus, Enter selects, and Escape or Backspace act as Back.
@@ -62,7 +63,7 @@ new branch off main  ──pull request──►  main
 `main` is the only long-lived branch. There is no `dev` branch.
 
 1. **Branch off the latest `main`.** `git fetch origin main && git checkout -b <type>/<slug> origin/main`. Use `fix/<issue-number>-<slug>` for a GitHub issue, otherwise `feat/`, `chore/` or `docs/` plus a short slug. One feature or fix per branch.
-2. **Work on the branch.** Never commit directly to `main`. Run `npm run build`, then commit and push the branch after each verified step.
+2. **Work on the branch.** Never commit directly to `main`. Run `npm run build` and `npm test`, then commit and push the branch after each verified step.
 3. **Open a pull request into `main` for every change.** Once the work is verified and pushed, open the PR yourself with `gh pr create --base main` (ready for review, not a draft, so the build and the automated review run). Do not stop at a pushed branch or a drafted description. Follow `.github/pull_request_template.md` and say how the change was tested: build, browser, live server or physical TV. Several unrelated changes in one session get one branch and one PR each. The maintainer tests and merges.
 4. **Automation runs on the PR.** `ci.yml` builds it and `pr-intake.yml` labels it. `claude-review.yml` reviews every non-draft PR from a branch in this repository and may push small `review: ` fix commits to the branch, so pull before adding commits. PRs from forks get a read-only review from `pr-intake.yml` instead.
 5. **The maintainer tests on a physical TV before merging** whenever the change affects the app. A release is a tag on a tested `main` commit.
@@ -154,7 +155,7 @@ Keep each concern in its own layer:
 - Render with `brand/render.sh` (headless Chrome). Don't use Quick Look, which distorts non-square SVGs.
 
 ## After each verified step
-1. Run `npm run build`.
+1. Run `npm run build` and `npm test`.
 2. Update the docs the step affects (table below).
 3. Commit to the working branch and push it (never directly to `main`).
 4. When the change is complete, open the pull request (see Development procedure). Its "Docs updated" section lists the docs you changed, or says "None needed" and why.

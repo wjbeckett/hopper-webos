@@ -28,7 +28,7 @@ There is one long-lived branch, `main`. Every change arrives through a pull requ
 ## Your own change, step by step
 
 1. **You:** branch off `main`: `git fetch origin main && git checkout -b <type>/<slug> origin/main`. For a GitHub issue, run `/fix-issue <number>` in Claude Code and it does steps 1 to 3, including opening the PR. When Claude Code makes any other change for you, it also opens the PR itself (see Development procedure in `CLAUDE.md`).
-2. **You:** make the change and run `npm run build`.
+2. **You:** make the change and run `npm run build` and `npm test`.
 3. **You:** commit, push the branch, and open a pull request into `main`. Fill in the template.
 4. **Automatic:** **Build** runs, the PR is labelled, and **Claude PR review** starts. It takes a few minutes.
 5. **Automatic:** the reviewer posts one **Claude review** comment (verdict, a table of what it checked, what it changed) and inline suggestions. It may push `review: ` commits with small fixes.
@@ -71,7 +71,7 @@ Every build has its own version number: `<major>.<minor>.<commit count>`, for ex
 
 | Workflow | Runs on | What it does |
 | --- | --- | --- |
-| **Build** (`ci.yml`) | Every PR, and pushes to `main` | `npm ci` and `npm run build`. No secrets, so it is safe on outside code. |
+| **Build** (`ci.yml`) | Every PR, and pushes to `main` | `npm ci`, `npm run build` and `npm test`. No secrets, so it is safe on outside code. |
 | **PR intake** (`pr-intake.yml`), `triage` job | Every PR | Adds labels and welcomes outside contributors. Never checks out PR code. |
 | **PR intake**, `external-review` job | PRs from forks, and manual runs | Read-only Claude review. Cannot build, run or push. |
 | **Claude PR review** (`claude-review.yml`) | PRs from branches in this repository | Full Claude review: runs the build, pushes small `review: ` fixes, comments. If no review is posted (skipped, failed, cancelled), a **Claude review status** comment says why; it is deleted once a review is posted. |

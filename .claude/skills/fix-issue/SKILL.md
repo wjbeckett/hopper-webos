@@ -108,7 +108,8 @@ Then verify:
 
 ```bash
 npm install        # first time only
-npm run build      # type-check + build; the only automated gate
+npm run build      # type-check + build
+npm test           # unit tests
 ```
 
 The build must pass. Beyond that, check the change in a browser if a dev server is available. Keep track of which level you actually reached (build, browser, live server, physical TV), because the PR has to say so truthfully. "Builds" is not "works on a TV".
@@ -148,7 +149,7 @@ Fixes #<number>
 - <file>: <change and why>
 
 ## How it was tested
-- [x] `npm run build` passes
+- [x] `npm run build` and `npm test` pass
 - [ ] Browser (`npm run dev`): <what was checked, or "not checked: <reason>">
 - [ ] Live Silo server: <…>
 - [ ] Physical LG TV: <model / webOS version, or "not tested">

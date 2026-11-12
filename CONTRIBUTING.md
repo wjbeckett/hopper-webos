@@ -49,6 +49,7 @@ Developer Mode sessions expire. If deploys stop working, open the Developer Mode
 
 ```bash
 npm run build                                  # type-check and build to dist/
+npm test                                       # unit tests
 WEBOS_DEVICE=livingroom npm run webos:deploy   # build, package, install and launch
 WEBOS_DEVICE=livingroom npm run webos:inspect  # open LG Web Inspector for the app
 ```
@@ -59,6 +60,7 @@ WEBOS_DEVICE=livingroom npm run webos:inspect  # open LG Web Inspector for the a
 | --- | --- |
 | `npm run dev` | Vite dev server on all interfaces |
 | `npm run build` | Type-check and production build in `dist/` |
+| `npm test` | Unit tests (Vitest) |
 | `npm run preview` | Preview the production build |
 | `npm run webos:check` | Check Node, npm, the LG CLI and configured devices |
 | `npm run webos:package` | Build and package an IPK (app plus pairing service) into `release/` |
@@ -86,7 +88,7 @@ All changes reach `main` through a pull request from their own branch. By openin
 
 1. **Fork the repository** and create a branch from `main`: `git checkout -b fix/short-description origin/main`. (Maintainers branch in the main repository.)
 2. **Keep changes focused.** One feature or fix per pull request.
-3. **Run `npm run build`.** It must pass, because there is no separate lint or test step yet.
+3. **Run `npm run build` and `npm test`.** Both must pass; CI runs them on every pull request.
 4. **Open the pull request into `main`** and fill in the template. Say how you tested the change: browser, live Silo server, or physical LG TV (with the model or webOS version).
 5. **Leave "Allow edits by maintainers" ticked** so small fixes can be pushed to your branch.
 6. Don't include personal server URLs, tokens or screenshots of private libraries.
