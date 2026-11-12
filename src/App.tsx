@@ -33,6 +33,7 @@ import { PhoneSetupScreen } from "./screens/PhoneSetupScreen";
 import { ServerSetupScreen } from "./screens/ServerSetupScreen";
 import { pairingAvailable } from "./platform/pairing";
 import { platformBack } from "./platform/back";
+import { installKeyboardTracking, virtualKeyboardVisible } from "./platform/keyboard";
 import { FirstRunSetupScreen } from "./screens/FirstRunSetupScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { SectionBrowseScreen, type SectionBrowseArgs } from "./screens/SectionBrowseScreen";
@@ -158,6 +159,7 @@ export default function App() {
 
   useEffect(() => installSpatialNavigation(), [route.name, authRoute, session]);
   useEffect(() => installPointerNavigation(), []);
+  useEffect(() => installKeyboardTracking(), []);
 
   // A layout effect, so it runs before the screens' own effects send their first requests.
   useLayoutEffect(() => { watchServer(session?.serverUrl ?? ""); }, [session?.serverUrl]);
@@ -340,6 +342,22 @@ export default function App() {
           return;
         }
         if (authRoute === "phone-setup" || authRoute === "device-login" || authRoute === "server-setup") exitApp();
+        if (authRoute === "password-login" || authRoute === "first-run-setup") {
+          // While the TV's keyboard is open, Back is the keyboard's: it closes it, and the
+          // next press leaves the screen.
+          if (virtualKeyboardVisible()) return;
+          // Password sign-in was opened from code sign-in, so Back returns there.
+          if (authRoute === "password-login") {
+            if (!event.repeat && !editingText) {
+              setAuthRoute("device-login");
+              event.preventDefault();
+            }
+            return;
+          }
+          // First-run setup takes the place of code sign-in for a server with no accounts,
+          // so it is the entry page. Server setup would reopen the saved server and land here again.
+          exitApp();
+        }
         return;
       }
       if (document.querySelector(".player-shell")) return;

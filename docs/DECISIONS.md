@@ -12,6 +12,7 @@ Deliberate differences from the Android TV app. Do not "fix" these to match Andr
 - Hopper has its own name, mark, colours and startup animation. No Silo logo assets ship in the app.
 - Watch Party is not built. Gate inspected on 2026-11-10: Android puts it behind a device-local Settings → Experimental → Watch Party toggle (`WatchPartyExperiment`, preference `silo_experimental`/`watch_party`) that defaults on in debug builds and off in release builds; turning it off hides every entry point. It is an opt-in experiment, not a shipped Android TV destination, so Hopper does not implement it and must not imply it is available. If product scope later requires it, implement the complete room lifecycle, realtime sync and player coordination, not just its hub screen.
 - Sign-in, first-run setup and invite sign-up use Hopper's centred card layout, not Android's marquee layout with the "use your phone" card.
+- Back on first-run setup (a server with no accounts yet) opens the TV's exit popup, as code sign-in does. Android returns to server setup; in Hopper, server setup's Back reopens the saved server, which would show first-run setup again.
 - Invite sign-up availability is probed when the password sign-in screen opens. Android probes it when the server is chosen.
 - Text entry uses the webOS system keyboard on the focused field. Android's on-screen keyboard dialog is not ported.
 - Details and the Home hero show a time-left ring for partly watched titles, in the brand teal. No equivalent was found in the Android TV source.
