@@ -182,11 +182,12 @@ function slideScrollTop(container: HTMLElement, delta: number) {
 }
 
 /**
- * Keeps a focused grid card in view by scrolling whatever holds the grid, through the same
+ * Keeps a focused card in view by scrolling whatever holds it (a grid's container, a Details
+ * page), through the same
  * slide as library Browse: eased for one press, a jump while a key is held. A native smooth
  * scroll per press stacked up under a held key and left the selector off screen (#83).
  */
-function keepGridCardInView(element: HTMLElement) {
+function keepInViewVertically(element: HTMLElement) {
   let container: HTMLElement | null = element.parentElement;
   while (container && container !== document.body) {
     const overflow = getComputedStyle(container).overflowY;
@@ -266,6 +267,8 @@ function focusElement(element: HTMLElement) {
   const rail = element.closest<HTMLElement>(RAIL_SELECTOR);
   if (rail?.dataset.slide === "true") {
     slideRailItem(rail, element);
+    // Home moves its band itself. Elsewhere (Details, Series) the page scrolls to the row.
+    if (!element.closest(".home-rails")) keepInViewVertically(element);
     return;
   }
   if (rail && rail.scrollWidth > rail.clientWidth + 1) {
@@ -281,7 +284,7 @@ function focusElement(element: HTMLElement) {
   }
   if (element.closest(".library-screen, .home-rails")) return;
   if (element.closest(".library-grid")) {
-    keepGridCardInView(element);
+    keepInViewVertically(element);
     return;
   }
   element.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
@@ -889,7 +892,23 @@ export function installSpatialNavigation() {
       }
     }
 
+    // Up from the first row under the buttons goes back to Play (Android returnToHero, which
+    // only the first body rail has). From a lower row it goes to the row above, below.
     const castRow = current.closest<HTMLElement>(".detail-cast-track, .detail-trailer-track, .rail-track");
+    const detailScreen = current.closest<HTMLElement>(".details-shell, .series-screen");
+    const bodyRows = detailScreen
+      ? Array.from(detailScreen.querySelectorAll<HTMLElement>(".episode-rail, .detail-cast-track, .detail-trailer-track, .rail-track"))
+        .filter(row => row.offsetParent !== null && row.querySelector("[data-tv-focusable='true']"))
+      : [];
+    if (castRow && direction === "up" && !current.closest(".series-body") && bodyRows.indexOf(castRow) > 0) {
+      const above = bodyRows[bodyRows.indexOf(castRow) - 1];
+      const target = focusables("[data-tv-focusable='true']").find(item => above.contains(item));
+      if (target) {
+        focusElement(target);
+        event.preventDefault();
+        return;
+      }
+    }
     if (castRow && direction === "up" && !current.closest(".series-body")) {
       const play = document.querySelector<HTMLElement>(".details-shell .details-actions .tv-button")
         ?? current.closest<HTMLElement>(".details-shell, .series-screen")?.querySelector<HTMLElement>(".details-actions .tv-button");
