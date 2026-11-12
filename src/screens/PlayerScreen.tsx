@@ -1886,7 +1886,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
               // Pointer: a click on the bar seeks there.
               const rect = event.currentTarget.getBoundingClientRect();
               if (duration > 0 && rect.width > 0) seekToPosition(clampSeek(((event.clientX - rect.left) / rect.width) * duration, duration));
-            }} tabIndex={-1}>
+            }}>
             {segments.map(([start, end], index) => {
               const span = end - start;
               if (span <= 0) return null;
