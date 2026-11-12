@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Start every session with the open issues.** The work list is GitHub issues, grouped by milestone (see "What to work on"). There is no handoff or backlog file. Read `docs/DECISIONS.md` before changing behaviour: it lists what Hopper does differently on purpose.
 
 ## What this is
-Hopper (`com.hopperapp.hopper`) is an LG webOS TV client for the Silo media server. The goal is a first-class TV client in its own right. It stays close to the official Android TV and Apple tvOS clients in features and behaviour, and may differ from them on purpose. It is built with React 19, TypeScript and Vite and packaged with LG `@webos-tools/cli`. It is a 10-foot UI: every interactive element must be reachable with Up/Down/Left/Right/OK/Back, and mouse/pointer support is secondary.
+Hopper (`com.hopperapp.hopper`) is an LG webOS TV client for the Silo media server. The goal is a first-class TV client in its own right. It stays close to the official Android TV and Apple tvOS clients in features and behaviour, and may differ from them on purpose. It is built with React 19, TypeScript and Vite and packaged with LG `@webos-tools/cli`. It is a 10-foot UI: every interactive element must be reachable with Up/Down/Left/Right/OK/Back. The Magic Remote pointer must work too (an LG requirement): it drives focus, so a control that the D-pad can reach works with the pointer without extra code.
 
 ## Hard rules
 1. **No bulk overwrites.** Never do bulk checkouts, resets, restores, regenerations or whole-tree copies over `src/`. Make targeted edits to specific files, and rewrite a whole file only when that single file needs it. Commit to your working branch and push it after each verified step so work never lives only in the working tree (see Development procedure).
@@ -91,6 +91,7 @@ Keep each concern in its own layer:
   - `events.ts` is the realtime socket (`user_state`/`catalog` events).
   - `settings.ts` resolves effective server and profile settings.
   - `subtitles.ts` and `diagnostics.ts` cover their own areas.
+- **Leaving the app during playback:** the Home key hides the page, and the TV pauses the video and plays it again on return. `PlayerScreen.tsx` saves the position when the page is hidden, and starts the stream again if it was hidden for more than ten minutes. A hidden app may be closed by the TV without notice; `pagehide` stops the playback session.
 - **Playback** should direct play when the TV supports it, but it must always be negotiated through Silo PlaybackInfo/device profiles. Never seek the video at start-up: a seek rebuilds the TV's media pipeline and costs seconds (`docs/PERFORMANCE.md`). A stream that fails for a reason other than the network is started again at the same position, once as it was and once with Dolby audio left out of the client's capabilities so Silo converts it (`recoverStream` in `PlayerScreen.tsx`, `allowDolbyAudio` in `src/api/playback.ts`).
 
 ### Navigation
@@ -98,6 +99,10 @@ Keep each concern in its own layer:
   - Focusable elements are marked `data-tv-focusable="true"`, with `data-nav-primary` for the preferred target.
   - The handler steps aside entirely while `.player-shell` exists. `PlayerScreen` owns its own key map, mirroring Android's player.
   - Screens use `focusFirstContentCard`, `attemptFirstContentFocus` and `focusTopNavigation` for focus on entry.
+- **`src/navigation/pointer.ts`** is the Magic Remote pointer. Pointing at a control focuses it, which is its selection effect; text fields are the exception (focus opens the TV's keyboard) and get a hover style.
+  - While the pointer is over a row of cards (`RAIL_SELECTOR`), arrows at the row's edges page it by focusing a card further along.
+  - `focusFromPointer()` is true while the pointer is moving focus. Code that brings the focused item into view must skip that then, or the page moves under the pointer.
+  - New controls need `data-tv-focusable="true"` (or to be a button in the player) and a visible focus style. No `:hover` styles for them.
 
 ### Platform and pairing
 - **`src/platform/`:**
@@ -112,7 +117,8 @@ Keep each concern in its own layer:
 
 ### State, screens and styling
 - **`src/core/`** holds client-side state that isn't API or UI:
-  - `serverRegistry.ts` stores saved servers and sessions in `localStorage`.
+  - `serverRegistry.ts` stores saved servers and sessions in `localStorage`, without their tokens.
+  - `secureStore.ts` holds the tokens. The refresh and profile tokens are encrypted with AES-GCM under a non-extractable WebCrypto key kept in IndexedDB (`hopper-keys`), and stored in `silo-webos-sealed-v1`. The access token is never stored: `ensureAccessToken` in `src/api/silo.ts` renews it before the first request after a launch. `main.tsx` waits for `loadSecrets` (and the one-time migration of plain sessions) before rendering. Where WebCrypto or IndexedDB is missing (an insecure page), or an encrypted write fails, tokens stay in plain storage as before; a failed write is retried and the plain copy removed once it succeeds. A refresh that returns after the sign-in was cleared or replaced is discarded, never saved.
   - `watchState.ts` is a pub/sub. `publishWatchState` updates cards and rails in place, and `publishRailsChanged` triggers refetches.
   - The other modules cover artwork and title art, theme music, profile launch/PIN gating, subtitle styling and sync, browse prefs and episode navigation.
 - **Home, For You and library Recommended** are `FeaturedRailsScreen`. It is built for a slow TV, so keep these properties when changing it (measurements and reasons in `docs/PERFORMANCE.md`):
@@ -170,6 +176,6 @@ There is no change log, handoff or backlog file. The history is the merged pull 
 The README is public and user-facing: keep build and setup material in `CONTRIBUTING.md`, brand material in `brand/README.md`, and personal device or server details out of both.
 
 ## Local notes
-- Never commit personal server URLs, tokens or `localStorage` backups. Any change to a TV's `localStorage` must back it up first and keep `silo-webos-device-id`.
+- Never commit personal server URLs, tokens or `localStorage` backups. Any change to a TV's `localStorage` must back it up first and keep `silo-webos-device-id`. A `localStorage` backup alone no longer restores a sign-in: the tokens in it are encrypted under a key in the app's IndexedDB, which cannot be exported.
 - Shell heredocs have hung the agent tool runner before. Prefer file edits or `sed`/`perl`.
 - `getBrowseCatalogPage` and `getBrowseFilterOptions` in `src/api/silo.ts` are unused on purpose (parked for Global Browse, see `docs/DECISIONS.md`). Leave them.

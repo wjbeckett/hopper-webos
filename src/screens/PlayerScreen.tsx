@@ -38,6 +38,8 @@ const PLAY_THROUGH_SEEK_SECONDS = 3;
 const MAX_OUTAGE_RESTARTS = 3;
 /** Stream failures closer together than this count as the same problem (see recoverStream). */
 const STREAM_FAILURE_WINDOW_MS = 60000;
+/** After this long in the background the stream is started again on return: the server may have closed it. */
+const BACKGROUND_RESTART_MS = 10 * 60 * 1000;
 
 // Seek grammar mirrors the Android TV player exactly (TvSeekRateLadder):
 // a signed 1x..32x ladder, a 100 ms tick carrying 2.0s of content per tick
@@ -227,6 +229,12 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   // as it was, then once with Dolby audio converted to AAC by the server.
   const streamFailures = useRef({ count: 0, at: 0 });
   const recoverStream = useRef<(reason: string) => boolean>(() => false);
+  // The restart in progress (see resumeAfterOutage), 0 when none. hls.js and the video element
+  // can both report the same fault, so a failure reported while a restart is under way belongs
+  // to it. Only the newest restart may install its plan.
+  const restartId = useRef(0);
+  const restartIdCounter = useRef(0);
+  const restartStream = useRef<(at: number) => void>(() => undefined);
   const unmounted = useRef(false);
   // Goes up to run the start-up again when the network was lost before anything played.
   const [startAttempt, setStartAttempt] = useState(0);
@@ -728,6 +736,27 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     } catch { localStorage.removeItem(ACTIVE_PLAYBACK_KEY); }
   }, [session]);
 
+  // Home key, or another app in front: the page is hidden but keeps running, and the TV pauses
+  // the video by itself and plays it again on return. The position is saved at once, because
+  // the TV may close a hidden app without telling it. Closing the page is handled below.
+  useEffect(() => {
+    let hiddenAt = 0;
+    const onVisibility = () => {
+      const active = stateRef.current;
+      if (!active || closedSessions.current.has(active.plan.session_id)) return;
+      if (document.hidden) {
+        hiddenAt = Date.now();
+        void reportProgress(session, active.plan.session_id, sourcePosition(), true).catch(() => undefined);
+        return;
+      }
+      const away = hiddenAt ? Date.now() - hiddenAt : 0;
+      hiddenAt = 0;
+      if (away > BACKGROUND_RESTART_MS) restartStream.current(sourcePosition());
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [session, sourcePosition]);
+
   useEffect(() => {
     const unload = () => closePlayback(true);
     window.addEventListener("pagehide", unload);
@@ -795,7 +824,9 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     const timer = window.setInterval(() => {
       const active = stateRef.current;
       const video = videoRef.current;
-      if (active && video) void reportProgress(session, active.plan.session_id, sourcePosition(), video.paused).catch(() => undefined);
+      // Not while a stream is being started again: the old one is closed and the video is
+      // empty, so the position would be reported as the start of the old stream.
+      if (active && video && !closedSessions.current.has(active.plan.session_id)) void reportProgress(session, active.plan.session_id, sourcePosition(), video.paused).catch(() => undefined);
     }, 10_000);
     return () => window.clearInterval(timer);
   }, [session, sourcePosition]);
@@ -1344,6 +1375,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       return;
     }
     outageRestarts.current += 1;
+    const id = ++restartIdCounter.current;
+    restartId.current = id;
     const audio = active.plan.selected_tracks.audio;
     const subtitle = active.plan.selected_tracks.subtitle;
     setBusy(true);
@@ -1352,11 +1385,11 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       // Subtitles the viewer turned off stay off: -1, which startPlaybackV3 sends as no index.
       const subtitleIndex = subtitle ? subtitle.index : -1;
       const started = await startPlaybackV3(session, detail, version, qualityRef.current, audio?.index, subtitleIndex, at);
-      if (unmounted.current) { void stopPlayback(session, started.plan.session_id).catch(() => undefined); return; }
+      if (unmounted.current || restartId.current !== id) { void stopPlayback(session, started.plan.session_id).catch(() => undefined); return; }
       installPlan({ ...started, attemptedKeys: [] });
       setOutage(false);
     } catch (reason) {
-      if (unmounted.current) return;
+      if (unmounted.current || restartId.current !== id) return;
       if (reason instanceof NetworkError) {
         // Lost again before the stream started: keep waiting.
         outageWait.current = onceReachable(() => { outageWait.current = null; void resumeAfterOutage(at); });
@@ -1365,9 +1398,17 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       setOutage(false);
       setError(reason instanceof Error ? reason.message : "Playback could not start again.");
     } finally {
-      if (!unmounted.current) setBusy(false);
+      // A newer restart owns the busy state once it has taken over.
+      if (restartId.current === id) {
+        restartId.current = 0;
+        if (!unmounted.current) setBusy(false);
+      }
     }
   }
+
+  restartStream.current = (at: number) => {
+    if (!outageWait.current && !busy && !restartId.current) void resumeAfterOutage(at);
+  };
 
   // Returns false when the stream has already been restarted several times without playing:
   // the server answers but the stream does not load, so the caller shows the error instead.
@@ -1387,6 +1428,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   recoverStream.current = (reason: string) => {
     const active = stateRef.current;
     if (!active || !detail || !version || outageWait.current) return false;
+    // Already starting again: the same fault reported twice, not a second failure.
+    if (restartId.current) return true;
     const failures = streamFailures.current;
     const now = performance.now();
     if (now - failures.at > STREAM_FAILURE_WINDOW_MS) failures.count = 0;
@@ -1874,6 +1917,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         <h2 className="player-title-text">{detail?.title ?? item.Name}</h2>
 
         <div ref={scrubberRef} className="player-scrubber" tabIndex={-1} data-active={scrubberFocused || scrubPreview != null} data-focused={scrubberFocused}
+          role="slider" aria-label="Playback position" aria-valuemin={0} aria-valuemax={Math.round(duration)} aria-valuenow={Math.round(labelSeconds)} aria-valuetext={`${formatClock(labelSeconds)} of ${formatClock(duration)}`}
           onFocus={() => setScrubberFocused(true)} onBlur={() => setScrubberFocused(false)}>
           {previewSeconds != null && (previewCard || autoSeekRate !== 0) ? <div className="scrub-preview-stack" data-fast={autoSeekRate !== 0} style={{ left: `clamp(168px, ${playedFraction * 100}%, calc(100% - 168px))` }}>
             {previewCard ? <div className="scrub-preview-card">
@@ -1883,7 +1927,12 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
             {autoSeekRate !== 0 ? <div className="auto-seek-chip"><svg viewBox="0 0 24 24" aria-hidden="true"><path d={autoSeekRate < 0 ? "M20.8 6.4 19.1 9.2 16.2 7.9" : "M3.2 6.4 4.9 9.2 7.8 7.9"} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" /><path d={autoSeekRate < 0 ? "M12 4a8 8 0 1 0 7.4 4.9" : "M12 4a8 8 0 1 1-7.4 4.9"} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" /></svg>{Math.abs(autoSeekRate)}x</div> : null}
           </div> : null}
           {skipFeedback && !cleanSeek && !panel && !upNextCard && hud ? <div className="skip-feedback-docked" data-raised={previewSeconds != null && previewCard != null} data-nonce={skipFeedback.nonce}><div className="skip-feedback-chip"><strong>{skipFeedback.delta < 0 ? `−${-skipFeedback.delta}s` : `+${skipFeedback.delta}s`}</strong><span>{formatClock(skipFeedback.target)}</span></div></div> : null}
-          <div ref={timelineRef} className="scrub-bar" role="slider" aria-label="Playback position" aria-valuemin={0} aria-valuemax={Math.round(duration)} aria-valuenow={Math.round(labelSeconds)} tabIndex={-1}>
+          <div ref={timelineRef} className="scrub-bar"
+            onClick={event => {
+              // Pointer: a click on the bar seeks there.
+              const rect = event.currentTarget.getBoundingClientRect();
+              if (duration > 0 && rect.width > 0) seekToPosition(clampSeek(((event.clientX - rect.left) / rect.width) * duration, duration));
+            }}>
             {segments.map(([start, end], index) => {
               const span = end - start;
               if (span <= 0) return null;
@@ -1923,29 +1972,32 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
           </div>
         </div>
       </div>
-
-      {pill && !panel && !upNextCard ? <div className="skip-pill" data-controls={hud}>
-        {pill.undo ? <small className="skip-pill-caption">Intro skipped</small> : null}
-        <div ref={pillRef} className="skip-pill-capsule" tabIndex={-1} onClick={selectPill} data-prompt={pill.kind}>
-          {pillFill != null ? <b className="skip-pill-fill" style={{ width: `${Math.max(0, Math.min(1, pillFill)) * 100}%` }} /> : null}
-          <span>{pill.label}</span>
-        </div>
-      </div> : null}
-
-      {cleanSeek ? <div className="hold-seek-indicator">
-        <div className="hold-seek-frame" style={holdCard ?? undefined} />
-        <div className="hold-seek-chip"><strong>{cleanSeek.rate === 0 ? "Paused" : `${cleanSeek.rate < 0 ? "-" : ""}${Math.abs(cleanSeek.rate)}×`}</strong><span>{formatClock(cleanSeek.preview)}</span></div>
-        {duration > 0 ? <div className="hold-seek-track"><b style={{ width: `${Math.max(0, Math.min(1, cleanSeek.preview / duration)) * 100}%` }} /></div> : null}
-        <div className="hold-seek-hint">← → speed · ◉ play · ↩ cancel</div>
-      </div> : null}
-
-      {skipFeedback && !cleanSeek && !panel && !upNextCard && !hud ? <div className="skip-feedback" data-nonce={skipFeedback.nonce} data-controls={hud}>
-        <div className="skip-feedback-chip"><strong>{skipFeedback.delta < 0 ? `−${-skipFeedback.delta}s` : `+${skipFeedback.delta}s`}</strong><span>{formatClock(skipFeedback.target)}</span></div>
-        {!hud && duration > 0 ? <div className="skip-feedback-track"><b style={{ width: `${Math.max(0, Math.min(1, skipFeedback.target / duration)) * 100}%` }} /></div> : null}
-      </div> : null}
     </div>
 
-    {/* Outside .player-chrome, which is invisible while the controls are hidden: loading, network loss and errors must always show. */}
+    {/* Outside .player-chrome, which is invisible while the controls are hidden. The skip pill shows in
+        both states (Android's TvIntroAutoSkipBanner), and the hold-seek preview and skip chip exist only
+        while the controls are hidden (#67). */}
+    {pill && !panel && !upNextCard ? <div className="skip-pill" data-controls={hud}>
+      {pill.undo ? <small className="skip-pill-caption">Intro skipped</small> : null}
+      <div ref={pillRef} className="skip-pill-capsule" tabIndex={-1} role="button" onClick={selectPill} data-prompt={pill.kind}>
+        {pillFill != null ? <b className="skip-pill-fill" style={{ width: `${Math.max(0, Math.min(1, pillFill)) * 100}%` }} /> : null}
+        <span>{pill.label}</span>
+      </div>
+    </div> : null}
+
+    {cleanSeek ? <div className="hold-seek-indicator">
+      <div className="hold-seek-frame" style={holdCard ?? undefined} />
+      <div className="hold-seek-chip"><strong>{cleanSeek.rate === 0 ? "Paused" : `${cleanSeek.rate < 0 ? "-" : ""}${Math.abs(cleanSeek.rate)}×`}</strong><span>{formatClock(cleanSeek.preview)}</span></div>
+      {duration > 0 ? <div className="hold-seek-track"><b style={{ width: `${Math.max(0, Math.min(1, cleanSeek.preview / duration)) * 100}%` }} /></div> : null}
+      <div className="hold-seek-hint">← → speed · ◉ play · ↩ cancel</div>
+    </div> : null}
+
+    {skipFeedback && !cleanSeek && !panel && !upNextCard && !hud ? <div className="skip-feedback" data-nonce={skipFeedback.nonce} data-controls={hud}>
+      <div className="skip-feedback-chip"><strong>{skipFeedback.delta < 0 ? `−${-skipFeedback.delta}s` : `+${skipFeedback.delta}s`}</strong><span>{formatClock(skipFeedback.target)}</span></div>
+      {!hud && duration > 0 ? <div className="skip-feedback-track"><b style={{ width: `${Math.max(0, Math.min(1, skipFeedback.target / duration)) * 100}%` }} /></div> : null}
+    </div> : null}
+
+    {/* Also outside .player-chrome: loading, network loss and errors must always show. */}
     {(outage || (serverUnreachable && buffering)) && !error ? <div className="player-outage" role="alert">Connection lost<small>Playback continues when the server answers. Press Back to leave.</small></div> : null}
     {busy || outage || (buffering && !error) ? <div className="player-loading" role="status" aria-label="Loading"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="28" /></svg></div> : null}
     {error ? <div className="player-error" role="alert">{error}</div> : null}

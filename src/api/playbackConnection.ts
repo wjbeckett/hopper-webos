@@ -1,6 +1,6 @@
 import { getDeviceId } from "../platform/device";
 import type { Session } from "../types";
-import { refreshSession, v2Url } from "./silo";
+import { ensureAccessToken, refreshSession, v2Url } from "./silo";
 
 export type PlaybackLearnedLimit = { kbps: number; observed_at: string; expires_at: string };
 export type PlaybackSample = { kbps: number; measured_at: string };
@@ -22,6 +22,7 @@ const authHeaders = (session: Session): Record<string, string> => ({
 });
 
 async function exchange(session: Session, path: string, init: RequestInit): Promise<Response> {
+  await ensureAccessToken(session);
   let response = await fetch(v2Url(session, path), { ...init, headers: { ...authHeaders(session), ...(init.headers as Record<string, string> | undefined) } });
   if (response.status === 401 && session.refreshToken && !path.startsWith("/auth")) {
     await refreshSession(session);

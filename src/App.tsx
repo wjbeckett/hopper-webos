@@ -6,6 +6,7 @@ import { TopNav, type AppSection, type LibraryLanding } from "./components/TopNa
 import { advanceShuffle, createShuffle, deleteShuffle, getCatalogItem, getEpisodes, getLibraries, getProfileAppearance, getRequestsFeatureStatus, getSeasons, getSetupStatus, restoreDefaultProfile } from "./api/silo";
 import { serverRegistry } from "./core/serverRegistry";
 import { focusTopNavigation, installSpatialNavigation } from "./navigation/spatial";
+import { installPointerNavigation } from "./navigation/pointer";
 import { DetailsScreen } from "./screens/DetailsScreen";
 import { CalendarScreen } from "./screens/CalendarScreen";
 import { CollectionsScreen } from "./screens/CollectionsScreen";
@@ -156,6 +157,7 @@ export default function App() {
   sessionRef.current = session;
 
   useEffect(() => installSpatialNavigation(), [route.name, authRoute, session]);
+  useEffect(() => installPointerNavigation(), []);
 
   // A layout effect, so it runs before the screens' own effects send their first requests.
   useLayoutEffect(() => { watchServer(session?.serverUrl ?? ""); }, [session?.serverUrl]);
