@@ -27,7 +27,7 @@ export type PlaybackPlan = {
     hls_rendition?: { group_id: string; name: string; format?: string; mime_type?: string };
   };
   available_qualities: Quality[];
-  claims?: { video?: { dolby_vision?: boolean } };
+  claims?: { video?: { dolby_vision?: boolean }; audio?: { codec?: string } };
   source?: { dolby_vision_profile?: number };
 };
 type Decision = { outcome: string; session_id?: string; playback_plan?: PlaybackPlan; terminal?: { message: string; reason: string } };
@@ -74,10 +74,19 @@ function randomUuid(): string {
 
 const uuid = (prefix: string) => `${prefix}:${randomUuid()}`;
 
+/**
+ * While false, Dolby audio (AC-3, E-AC-3) is left out of what the client says it can play, so
+ * Silo converts it to AAC. The player turns it off for a title whose Dolby stream keeps
+ * failing and back on when the next title opens (see PlayerScreen).
+ */
+let dolbyAudioAllowed = true;
+export function allowDolbyAudio(allowed: boolean) { dolbyAudioAllowed = allowed; }
+export const isDolbyAudio = (codec?: string) => /^(e?-?ac-?3|ec-3)$/i.test(codec ?? "");
+
 function snapshot() {
   const detected = probePlaybackCapabilities();
   const video = Object.entries(detected.codecs).filter(([name, ok]) => ok && ["h264", "hevc", "vp9", "av1"].includes(name)).map(([name]) => name);
-  const audio = Object.entries(detected.codecs).filter(([name, ok]) => ok && ["aac", "ac3", "eac3", "opus"].includes(name)).map(([name]) => name);
+  const audio = Object.entries(detected.codecs).filter(([name, ok]) => ok && ["aac", "ac3", "eac3", "opus"].includes(name) && (dolbyAudioAllowed || !isDolbyAudio(name))).map(([name]) => name);
   const subtitles = { embedded_text: false, sidecar_text: true, ass_styling: false, embedded_bitmap: false, sidecar_bitmap: false, font_attachments: false };
   const delivery = (containers: string[]) => ({ enabled: true, supported_on_device: true, containers, video_codecs: video, audio_decode_codecs: audio, audio_passthrough_codecs: [], max_channels: 8, subtitles, features: [], auth_header_refresh: false, validated_claims: [], transformations: [] });
   const unavailable = { ...delivery([]), enabled: false, supported_on_device: false, failure_reason: "webos_html_video_requires_hls_execution" };
