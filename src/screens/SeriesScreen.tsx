@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { placeRailItem, resetSlidingRail } from "../navigation/spatial";
 import { backdropUrl, getCatalogItem, getEpisodes, getSeasons, getShuffleCapability, getSimilarItems, imageUrl, isFavorite, isInWatchlist, mediaLogoUrl, setFavorite, setWatched, setWatchlist } from "../api/silo";
 import { CastSection, FactsSection, TrailersSection, factsFor, useDetailExtras } from "../components/DetailSections";
@@ -485,7 +486,9 @@ function EpisodeCard({ session, episode, current, onFocus, onOpen, onSetWatched,
       <strong>{captionTitle(episode)}</strong>
       <small>{meta || " "}</small>
     </button>
-    {menuOpen ? (
+    {/* In document.body, like MediaCard's menu: the episode row is a transformed, clipping
+        strip, so a fixed overlay inside it is placed against the strip, not the screen. */}
+    {menuOpen ? createPortal(
       <div className="details-more-scrim" data-modal="true" onClick={() => { setMenuOpen(false); requestAnimationFrame(() => cardRef.current?.focus({ preventScroll: true })); }}>
         <div className="details-more card-menu" role="dialog" aria-label={`${episode.Name} Actions`} onClick={event => event.stopPropagation()}>
           <button ref={menuFirstRef} type="button" data-tv-focusable="true" className="browse-panel-row" onClick={onOpen}>
@@ -504,7 +507,8 @@ function EpisodeCard({ session, episode, current, onFocus, onOpen, onSetWatched,
             <span>{menuFavorite ? "Remove from Favorites" : "Add to Favorites"}</span>
           </button>
         </div>
-      </div>
+      </div>,
+      document.body
     ) : null}
     </div>
   );

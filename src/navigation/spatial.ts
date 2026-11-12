@@ -275,7 +275,17 @@ function focusElement(element: HTMLElement) {
     return;
   }
   if (element.closest(".details-actions")) {
-    element.closest<HTMLElement>(".details-shell, .series-screen, .person-screen")?.scrollTo({ top: 0, behavior: "smooth" });
+    const page = element.closest<HTMLElement>(".details-shell, .series-screen, .person-screen");
+    // A slide down that is still running would carry on after this scroll up and leave the
+    // buttons off screen.
+    for (const scroller of [page, document.scrollingElement as HTMLElement | null]) {
+      const running = scroller ? verticalSlides.get(scroller) : undefined;
+      if (scroller && running) {
+        cancelAnimationFrame(running.frame);
+        verticalSlides.delete(scroller);
+      }
+    }
+    page?.scrollTo({ top: 0, behavior: "smooth" });
     window.scrollTo({ top: 0, behavior: "smooth" });
     return;
   }

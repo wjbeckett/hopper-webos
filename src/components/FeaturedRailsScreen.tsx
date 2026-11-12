@@ -192,13 +192,15 @@ export function FeaturedRailsScreen({
 
   // Back from a details page: return to the card that was focused, without animating there.
   useLayoutEffect(() => {
+    // Consumed on every mount, even one with nothing to restore, so a later visit from the top
+    // bar is not taken for a return.
+    const returning = Boolean(restoreKey) && pendingOpenReturn === restoreKey;
+    pendingOpenReturn = null;
     if (!restorePending.current || !restore) return;
     restorePending.current = false;
     // Something else holds focus (the top navigation, when Home was chosen from it), or an
     // Explore return is pending: leave focus alone and build the rows from the top.
     const active = document.activeElement;
-    const returning = Boolean(restoreKey) && pendingOpenReturn === restoreKey;
-    pendingOpenReturn = null;
     const focusHeld = active instanceof HTMLElement && active !== document.body && active.isConnected;
     if ((focusHeld && !returning) || pendingExploreReturn) {
       setLive({ from: -IDLE_ABOVE, to: IDLE_BELOW });
