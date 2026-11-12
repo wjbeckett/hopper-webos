@@ -124,11 +124,7 @@ export const MediaCard = memo(function MediaCard({ session, item, image, onOpen,
           width={landscape ? 640 : 400}
           height={landscape ? 360 : 600}
         />
-        {watched ? (
-          browse
-            ? <span className="media-card-watched-check" aria-label="Watched">✓</span>
-            : <span className="media-card-watched" aria-label="Watched">✓ Watched</span>
-        ) : null}
+        {watched ? <span className="media-card-watched-check" aria-label="Watched">✓</span> : null}
         {!browse && progress > 0 && progress < 100 ? (
           <div className="progress-track" aria-label={`${Math.round(progress)}% watched`}><span style={{ width: `${progress}%` }} /></div>
         ) : null}
