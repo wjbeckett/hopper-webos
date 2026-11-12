@@ -1073,7 +1073,9 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const sheetImages = useRef(new Map<number, HTMLImageElement>());
   const sheetLoads = useRef(new Map<number, "loading" | "ready" | "failed">());
   const previewSeconds = scrubPreview ?? tapPreview;
-  const wantedTile = trickplay && previewSeconds != null ? trickplayTileAt(trickplay, previewSeconds) : null;
+  // A hold-seek with the controls hidden previews its own position.
+  const tileSeconds = cleanSeek?.preview ?? previewSeconds;
+  const wantedTile = trickplay && tileSeconds != null ? trickplayTileAt(trickplay, tileSeconds) : null;
   if (wantedTile) {
     for (const index of [wantedTile.sheet, wantedTile.sheet + 1]) {
       if (index >= trickplay!.sheets.length || sheetLoads.current.has(index)) continue;
