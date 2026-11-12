@@ -1361,9 +1361,11 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   function exitPlayer() {
     stopAutoSeek();
     stopCleanSeek();
-    closePlayback(false);
     // The title's position, not the stream's clock: a resumed stream starts its clock near 0.
-    onBack(sourcePosition());
+    // Read it before closing: destroying hls.js detaches the video, which can reset its clock.
+    const position = sourcePosition();
+    closePlayback(false);
+    onBack(position);
   }
 
   /** Starts the stream again where it stopped, once the server answers. */
