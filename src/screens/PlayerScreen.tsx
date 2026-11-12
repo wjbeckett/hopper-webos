@@ -979,7 +979,10 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     setSkipFeedback({ delta: Math.round(deltaSeconds), target, nonce: nonceRef.current });
     if (feedbackTimer.current) window.clearTimeout(feedbackTimer.current);
     feedbackTimer.current = window.setTimeout(() => setSkipFeedback(null), SKIP_FEEDBACK_HIDE_MS);
-    if (reveal) revealHud();
+    // Controls that were hidden come up with focus on the timeline, where the next Left or Right
+    // skips again (Android TV: TvIdleOverlayFocusTarget.Scrubber). Without it the next press
+    // moved along the buttons instead.
+    if (reveal) revealHud(ui.current.hud ? undefined : "scrubber");
   }, [revealHud, seekToPosition]);
 
   // The intro pill's countdown creeps only while playback runs; a pause holds
