@@ -131,7 +131,6 @@ Keep each concern in its own layer:
 - **Styling:** everything is in `src/styles.css`. `main.tsx` adds the `webos` class on TVs to turn on lighter paint rules. Theme values are CSS custom properties set from `THEME_TOKENS`.
 - **Text size floor:** at the default text size, nothing a viewer reads is under 20 px (LG's recommendation for 1920x1080). Overviews (Home hero, Details, Series, Person) are 24 px. `body` is 1.25rem, so text without a size of its own starts at 20 px, and `<small>` never drops below it. Give new sizes in rem (1.25rem = 20 px) so the profile's text-size setting (`html[data-text-scale]`, from the server's appearance settings) still scales them. Only icon glyphs (the ✓ check on cards, the numbers inside the skip icons, the ✎ edit badge) stay smaller.
 
-
 ## TV navigation and browsing rules
 - **Focus across transitions:** keep focus on the intended control when the screen changes, and request initial content focus only after focusable content exists.
 - **One activation per press:** handle OK/Enter once per remote press. When activation changes screens, consume the matching key-up so the same press can't activate the newly focused control.
