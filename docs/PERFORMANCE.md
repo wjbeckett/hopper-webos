@@ -98,7 +98,7 @@ LG tests playback at 512 kbps, 1 Mbps, 7 Mbps and 17.5 Mbps. Measured on the LG 
 | 512 kbps | first picture 19.5 s at 1080p; stalled every few seconds, then the stream was restarted, still 1080p | lowered at 20 s, before the first picture; first picture 27 s at 480p (695 kbps); lowered again at 38 s to 276 kbps; then real time, 30 s buffered |
 | 1 Mbps | first picture 13.3 s at 1080p; 56 s played in 77 s, under 6 s buffered | first picture 13.8 s at 1080p; lowered at 22 s to 480p (695 kbps); then real time, 16 s buffered |
 | 7 Mbps | not measured | first picture 3.9 s at 1080p, 30 s buffered, no lowering |
-| 17.5 Mbps | not measured | (pending) |
+| 17.5 Mbps | not measured | first picture 2.1 s at 1080p, 30 s buffered, no lowering |
 | Unthrottled | first picture 4.2 s at 1080p | unchanged |
 
 Two things the TV does differently from Android's Media3:
