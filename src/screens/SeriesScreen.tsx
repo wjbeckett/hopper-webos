@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { placeRailItem, resetSlidingRail } from "../navigation/spatial";
+import { focusFromPointer } from "../navigation/pointer";
 import { backdropUrl, getCatalogItem, getEpisodes, getSeasons, getShuffleCapability, getSimilarItems, imageUrl, isFavorite, isInWatchlist, mediaLogoUrl, setFavorite, setWatched, setWatchlist } from "../api/silo";
 import { CastSection, FactsSection, TrailersSection, factsFor, useDetailExtras } from "../components/DetailSections";
 import { PlaybackOptionsDialog, PlaybackSummary, useWatchDetail } from "../components/PlaybackOptions";
@@ -109,6 +110,9 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
   const moreRef = useRef<HTMLButtonElement>(null);
   const moreFirstRef = useRef<HTMLButtonElement>(null);
   const railRef = useRef<HTMLDivElement>(null);
+  const seasonTabsRef = useRef<HTMLDivElement>(null);
+  /** The season was chosen by pointing at its button: the row stays still under the pointer. */
+  const seasonFromPointer = useRef(false);
   const entryHandled = useRef(false);
 
   useEffect(() => {
@@ -196,6 +200,13 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
     ?? seasons[0];
   const railSeasonNumber = activeSeason ? seasonNumber(activeSeason) : 0;
   const railEpisodes = episodesBySeason[railSeasonNumber] ?? [];
+  // The selected season's button is brought into its row, without animating, whenever the
+  // season changes (on entry it may be far along the row).
+  useEffect(() => {
+    if (seasonFromPointer.current) { seasonFromPointer.current = false; return; }
+    const tab = seasonTabsRef.current?.querySelector<HTMLElement>(`[data-season-tab="${railSeasonNumber}"]`);
+    if (tab) placeRailItem(tab);
+  }, [railSeasonNumber, seasons.length]);
   const focusedEpisode = allEpisodes.find(episode => episode.Id === focusedEpisodeId && episode.ParentIndexNumber === railSeasonNumber);
   const highlightedId = focusedEpisodeId ?? nextUpRef.current?.Id;
   const target = focusedEpisode ?? (initialEpisode && railEpisodes.some(episode => episode.Id === initialEpisode.Id) ? initialEpisode : railEpisodes[0]);
@@ -337,7 +348,8 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
       </div>
 
       <section className="series-body">
-        <div className="season-tabs" role="tablist">
+        {/* Slides like the other rows: a long run of seasons never scrolls. */}
+        <div className="season-tabs" role="tablist" ref={seasonTabsRef} data-slide="true"><div className="rail-strip">
           {seasons.map(season => {
             const id = String(seasonNumber(season));
             return (
@@ -349,14 +361,14 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
                 data-tv-focusable="true"
                 data-season-tab={id}
                 className={`season-tab ${railSeasonNumber === seasonNumber(season) ? "active" : ""}`}
-                onFocus={() => selectMode(id)}
+                onFocus={() => { seasonFromPointer.current = focusFromPointer() && seasonNumber(season) !== railSeasonNumber; selectMode(id); }}
                 onClick={() => selectMode(id)}
               >
                 {seasonLabel(season)}
               </button>
             );
           })}
-        </div>
+        </div></div>
         {/* Slides like Home's rows (navigation/spatial slideRailItem): the strip moves, the row never scrolls. */}
         <div className="episode-rail" ref={railRef} data-slide="true"><div className="rail-strip">
           {loading ? <LoadingState label="Loading episodes" /> : railEpisodes.length ? railEpisodes.map(episode => (

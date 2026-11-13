@@ -125,7 +125,7 @@ export function resetSlidingRail(rail: HTMLElement | null) {
 
 /** Brings a card into its sliding row at once, without animating (on entry, or when focus is restored). */
 export function placeRailItem(element: HTMLElement) {
-  const rail = element.closest<HTMLElement>(RAIL_SELECTOR);
+  const rail = element.closest<HTMLElement>(`${RAIL_SELECTOR}, .season-tabs`);
   const strip = rail?.firstElementChild as HTMLElement | null | undefined;
   if (rail?.dataset.slide !== "true" || !strip) { pinFocusedRailItem(element); return; }
   strip.style.transition = "none";
@@ -281,6 +281,9 @@ function focusElement(element: HTMLElement) {
     return;
   }
   if (element.closest(".details-actions, .overview-button, .season-tabs")) {
+    // The season buttons are a sliding row of their own; the page still goes back to the top.
+    const seasons = element.closest<HTMLElement>(".season-tabs");
+    if (seasons?.dataset.slide === "true") slideRailItem(seasons, element);
     const page = element.closest<HTMLElement>(".details-shell, .series-screen, .person-screen");
     // A slide down that is still running would carry on after this scroll up and leave the
     // buttons off screen.
@@ -928,6 +931,14 @@ export function installSpatialNavigation() {
         event.preventDefault();
         return;
       }
+    }
+
+    // Left and Right stay on the season buttons and stop at the ends of the row.
+    if (current.matches(".season-tab") && (direction === "left" || direction === "right")) {
+      const row = current.closest<HTMLElement>(".season-tabs");
+      focusAdjacent(current, focusables(".season-tab").filter(tab => row?.contains(tab)), direction);
+      event.preventDefault();
+      return;
     }
 
     if (current.matches(".season-tab") && direction === "up") {

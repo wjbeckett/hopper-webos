@@ -5172,10 +5172,12 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 }
 /* The same for rows that are not MediaRails: episodes, cast, trailers, the player's On Deck.
    Their strip takes the row's flex layout. */
+.season-tabs[data-slide],
 .episode-rail[data-slide],
 .detail-cast-track[data-slide],
 .detail-trailer-track[data-slide],
 .player-on-deck-row[data-slide] { overflow: hidden; }
+.season-tabs[data-slide] > .rail-strip,
 .episode-rail[data-slide] > .rail-strip,
 .detail-cast-track[data-slide] > .rail-strip,
 .detail-trailer-track[data-slide] > .rail-strip,
@@ -5291,6 +5293,9 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
   height: calc(1.5rem * 1.45 * 3 + 32px);
 }
 .series-credit { min-height: 1.5em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* Season buttons keep their label on one line ("Diamond & Pearl: Sinnoh League Victors"). */
+.season-tab { flex: 0 0 auto; white-space: nowrap; }
 
 /* Buffering quality (playerBufferingQuality; Android TvPlayerNoticeOverlay at 2 px per dp):
    top left, a notice over the pill. The pill's fill tracks the time left. */
