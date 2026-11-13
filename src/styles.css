@@ -5231,10 +5231,6 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 .webos body,
 .webos #root,
 .webos .library-results { scroll-behavior: auto; }
-/* Library Browse on a TV moves its content by transform, as Home's rows do, instead of scrolling
-   (navigation/spatial transformInner, #83). The padding moves to the moving layer. */
-.webos .library-results { overflow: hidden; padding: 0; }
-.webos .library-results-inner { padding: 10px 16px 32px; will-change: transform; }
 
 /* The overview on Details and Series: three lines, a focus stop above the buttons, and OK
    opens the whole text (components/ExpandableOverview.tsx; Android TV's TvExpandableSynopsis). */

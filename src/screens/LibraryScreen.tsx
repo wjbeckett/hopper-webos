@@ -6,7 +6,7 @@ import { MediaCard } from "../components/MediaCard";
 import { browsePrefsKey, readBrowsePrefs, readPreserve, writeBrowsePrefs, writePreserve } from "../core/browsePrefs";
 import { LibraryBrowsePanels } from "./LibraryBrowsePanels";
 import type { BrowseSortKey, BrowseSortOption } from "./LibraryBrowsePanels";
-import { attemptFirstContentFocus, focusFirstContentCard, focusNavigationTarget, resetLibraryResults } from "../navigation/spatial";
+import { attemptFirstContentFocus, focusFirstContentCard, focusNavigationTarget } from "../navigation/spatial";
 import type { Session, SiloItem, SiloLibrary } from "../types";
 import { LoadingState } from "../components/LoadingState";
 import { isTvDevice } from "../core/artwork";
@@ -388,7 +388,7 @@ export function LibraryScreen({
     setLoadingMore(false);
     setError("");
     pendingDownFocusRef.current = null;
-    resetLibraryResults(resultsRef.current);
+    resultsRef.current?.scrollTo?.(0, 0);
     browseItemsRef.current = [];
     browseCursorsRef.current = {};
     browseStreamsRef.current = {};
@@ -643,8 +643,6 @@ export function LibraryScreen({
     <main className={`content-screen library-screen ${showAlphaRail ? "has-alpha-rail" : ""}`}>
       <div className="library-main">
         <div ref={resultsRef} className="library-results" data-has-more={hasMoreBrowseItems}>
-          {/* On a TV this moves by transform, not scrolling (navigation/spatial transformInner, #83). */}
-          <div className="library-results-inner">
           <div className="library-controls">
             {header}
             {hideControls ? null : <div className="browse-toolbar">
@@ -762,7 +760,6 @@ export function LibraryScreen({
               ) : null}
             </>
           )}
-          </div>
         </div>
       </div>
       {showAlphaRail ? (

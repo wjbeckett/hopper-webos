@@ -9,7 +9,7 @@
  * Rows of cards cannot be scrolled with the pointer (Home's rows do not scroll at all), so
  * while the pointer is over a row, arrows at its edges page it sideways.
  */
-import { focusNavigationTarget, RAIL_SELECTOR, scrollLibraryResultsBy } from "./spatial";
+import { focusNavigationTarget, RAIL_SELECTOR } from "./spatial";
 
 /** Controls the D-pad can reach. The player moves focus itself and does not mark its buttons, so they are named here. */
 const FOCUSABLE = "[data-tv-focusable='true'], .player-shell button";
@@ -149,19 +149,12 @@ export function installPointerNavigation() {
 
   pager.previous.addEventListener("click", pagePrevious);
   pager.next.addEventListener("click", pageNext);
-  // Library Browse on a TV moves by transform, so the wheel cannot scroll it natively (#83).
-  const onWheel = (event: WheelEvent) => {
-    const results = event.target instanceof Element ? event.target.closest<HTMLElement>(".library-results") : null;
-    if (results && scrollLibraryResultsBy(results, event.deltaY)) event.preventDefault();
-  };
-  document.addEventListener("wheel", onWheel, { passive: false });
   document.addEventListener("mousemove", onMove, { passive: true });
   document.addEventListener("click", onClick, true);
   document.addEventListener("cursorStateChange", onCursor);
   window.addEventListener("keydown", hidePager, true);
   return () => {
     window.clearTimeout(settle);
-    document.removeEventListener("wheel", onWheel);
     document.removeEventListener("mousemove", onMove);
     document.removeEventListener("click", onClick, true);
     document.removeEventListener("cursorStateChange", onCursor);

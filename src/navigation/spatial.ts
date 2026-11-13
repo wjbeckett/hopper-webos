@@ -151,50 +151,6 @@ const VERTICAL_SLIDE_MS = 140;
 let keyHeld = false;
 const verticalSlides = new WeakMap<HTMLElement, { frame: number; goal: number }>();
 
-/**
- * Library Browse on a TV moves its content by transform instead of scrolling (#83). Scrolling
- * the results box while focus moved inside it repainted the box on every step: measured on
- * webOS 22, scrolling alone or focus moves alone ran at about 60 fps, both together at about
- * 17 fps. A transformed layer moves on the compositor, as Home's rows do. The box keeps
- * `overflow: hidden`, its content sits in `.library-results-inner`, and the offset lives in the
- * inner element's `data-offset`.
- */
-function transformInner(container: HTMLElement | null): HTMLElement | null {
-  if (!container || !document.documentElement.classList.contains("webos") || !container.classList.contains("library-results")) return null;
-  const inner = container.firstElementChild as HTMLElement | null;
-  return inner?.classList.contains("library-results-inner") ? inner : null;
-}
-
-const innerSlides = new WeakMap<HTMLElement, number>();
-
-/** Moves a transform scroller's content to `goal` (clamped); eased for a single press, at once otherwise. */
-function slideInner(container: HTMLElement, inner: HTMLElement, goal: number, animate = true) {
-  const max = Math.max(0, inner.offsetHeight - container.clientHeight);
-  const y = Math.round(Math.max(0, Math.min(max, goal)));
-  if (y === Number(inner.dataset.offset ?? 0)) return;
-  const now = performance.now();
-  const recent = now - (innerSlides.get(inner) ?? -Infinity) < VERTICAL_SLIDE_MS;
-  innerSlides.set(inner, now);
-  inner.style.transition = animate && !keyHeld && !recent ? `transform ${VERTICAL_SLIDE_MS}ms ease-out` : "none";
-  inner.dataset.offset = String(y);
-  inner.style.transform = y ? `translate3d(0, ${-y}px, 0)` : "";
-}
-
-/** Puts Browse back at its top, without animating (a new sort or filter). */
-export function resetLibraryResults(container: HTMLElement | null) {
-  const inner = transformInner(container);
-  if (inner && container) slideInner(container, inner, 0, false);
-  else container?.scrollTo?.(0, 0);
-}
-
-/** Scrolls Browse by `delta` px at once: the Magic Remote's wheel, which cannot scroll a clipped box. */
-export function scrollLibraryResultsBy(container: HTMLElement, delta: number) {
-  const inner = transformInner(container);
-  if (!inner) return false;
-  slideInner(container, inner, Number(inner.dataset.offset ?? 0) + delta, false);
-  return true;
-}
-
 function slideScrollTop(container: HTMLElement, delta: number) {
   const running = verticalSlides.get(container);
   if (running) cancelAnimationFrame(running.frame);
@@ -275,21 +231,6 @@ function focusElement(element: HTMLElement) {
   const row = element.closest<HTMLElement>(RAIL_SELECTOR);
   if (row && !row.closest(".home-rails")) lastInRow.set(row, element);
   const libraryResults = element.closest<HTMLElement>(".library-results");
-  const inner = transformInner(libraryResults);
-  if (libraryResults && inner && !element.closest(".library-filter-row")) {
-    // In the inner element's own coordinates, so a slide still running does not skew the maths.
-    const elementRect = element.getBoundingClientRect();
-    const innerRect = inner.getBoundingClientRect();
-    const top = elementRect.top - innerRect.top;
-    const bottom = elementRect.bottom - innerRect.top;
-    const height = libraryResults.clientHeight;
-    const offset = Number(inner.dataset.offset ?? 0);
-    const leading = height * 0.12;
-    const trailing = height * 0.22;
-    const goal = top < offset + leading ? top - leading : bottom > offset + height - trailing ? bottom - (height - trailing) : offset;
-    if (goal !== offset) slideInner(libraryResults, inner, goal);
-    return;
-  }
   if (libraryResults) {
     const elementRect = element.getBoundingClientRect();
     const resultsRect = libraryResults.getBoundingClientRect();
@@ -373,10 +314,7 @@ function focusElement(element: HTMLElement) {
 
   if (element.closest(".tv-nav")) {
     window.scrollTo({ top: 0, behavior: "smooth" });
-    const results = document.querySelector<HTMLElement>(".library-results");
-    const resultsInner = transformInner(results);
-    if (results && resultsInner) slideInner(results, resultsInner, 0);
-    else results?.scrollTo({ top: 0, behavior: "smooth" });
+    document.querySelector<HTMLElement>(".library-results")?.scrollTo({ top: 0, behavior: "smooth" });
     return;
   }
   if (element.closest(".library-screen, .home-rails")) return;
@@ -742,18 +680,7 @@ function navigateLibrary(current: HTMLElement, direction: Direction) {
 /** Columns of a CSS grid, cached so a key press does not force a style pass (gridWindow). */
 const gridColumnCount = gridColumns;
 
-/** Anything that scrolls a transform scroller natively (scrollIntoView, a focus without preventScroll) is folded into its offset. */
-function foldNativeScroll(event: Event) {
-  const container = event.target instanceof HTMLElement ? event.target : null;
-  const inner = transformInner(container);
-  if (!container || !inner || !container.scrollTop) return;
-  const scrolled = container.scrollTop;
-  container.scrollTop = 0;
-  slideInner(container, inner, Number(inner.dataset.offset ?? 0) + scrolled, false);
-}
-
 export function installSpatialNavigation() {
-  document.addEventListener("scroll", foldNativeScroll, true);
   const pendingPress: { current: { element: HTMLElement; timer: number } | null } = { current: null };
   const onKeyDown = (event: KeyboardEvent) => {
     // The player owns the remote end to end (its key map is the Android TV
@@ -1156,7 +1083,6 @@ export function installSpatialNavigation() {
     target?.focus({ preventScroll: true });
   });
   return () => {
-    document.removeEventListener("scroll", foldNativeScroll, true);
     window.removeEventListener("keydown", onKeyDown);
     window.removeEventListener("keyup", onKeyUp);
   };
