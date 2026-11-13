@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { connectionStatus, holdConnectionDialog, NetworkError, onceReachable, reportNetworkFailure, subscribeConnection } from "../api/connection";
 import type Hls from "hls.js";
 import { pinFocusedRailItem } from "../navigation/spatial";
-import { allowDolbyAudio, bestVersionForDevice, getMarkers, isDolbyAudio, getTrickplay, getWatchDetail, playbackUrl, replanPlaybackV3, reportProgress, saveAudioPreference, saveSubtitlePreference, startPlaybackV3, stopPlayback, stopPlaybackKeepalive, type AudioTrack, type FileMarkers, type MarkerSegment, type PlaybackChoices, type PlaybackPlan, type Quality, type SubtitleInventory, type Trickplay, type WatchDetail } from "../api/playback";
+import { allowDirectPlay, isDirectPlay, allowDolbyAudio, bestVersionForDevice, getMarkers, isDolbyAudio, getTrickplay, getWatchDetail, playbackUrl, replanPlaybackV3, reportProgress, saveAudioPreference, saveSubtitlePreference, startPlaybackV3, stopPlayback, stopPlaybackKeepalive, type AudioTrack, type FileMarkers, type MarkerSegment, type PlaybackChoices, type PlaybackPlan, type Quality, type SubtitleInventory, type Trickplay, type WatchDetail } from "../api/playback";
 import type { HomeRail, Session, SiloItem } from "../types";
 import { getEffectiveSettings, putScopedSetting } from "../api/settings";
 import { artUrl, getHomeRails, getShuffle, skipShuffle } from "../api/silo";
@@ -38,6 +38,13 @@ const PLAY_THROUGH_SEEK_SECONDS = 3;
 const MAX_OUTAGE_RESTARTS = 3;
 /** Stream failures closer together than this count as the same problem (see recoverStream). */
 const STREAM_FAILURE_WINDOW_MS = 60000;
+
+/** `url` with one query parameter added (or replaced). */
+function withQueryParam(url: string, name: string, value: string) {
+  const parsed = new URL(url, window.location.href);
+  parsed.searchParams.set(name, value);
+  return parsed.toString();
+}
 /** After this long in the background the stream is started again on return: the server may have closed it. */
 const BACKGROUND_RESTART_MS = 10 * 60 * 1000;
 
@@ -527,7 +534,9 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         hls.attachMedia(video);
       }).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not load HLS playback support."));
     } else {
-      video.src = streamUrl;
+      // Direct play: the TV's player fetches the file itself and cannot send headers, so the
+      // access token goes in the server's `token` parameter (see allowDirectPlay).
+      video.src = isDirectPlay(next.plan) && session.accessToken ? withQueryParam(streamUrl, "token", session.accessToken) : streamUrl;
       video.load();
       video.onloadedmetadata = beginNative;
     }
@@ -794,6 +803,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       setPlayerSettingsLoaded(true);
     });
     allowDolbyAudio(true);
+    allowDirectPlay(true);
     getWatchDetail(session, item).then(async (watch) => {
       if (!alive) return;
       const selectedVersion = watch.versions.find(entry => entry.file_id === choices?.fileId)
@@ -1438,6 +1448,14 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     if (!active || !detail || !version || outageWait.current) return false;
     // Already starting again: the same fault reported twice, not a second failure.
     if (restartId.current) return true;
+    // A file the TV would not play as it is: play it again over HLS, before any other recovery.
+    if (isDirectPlay(active.plan)) {
+      clientDiagnostic("direct play failed; starting again over HLS", { reason });
+      allowDirectPlay(false);
+      setError("");
+      void resumeAfterOutage(sourcePosition());
+      return true;
+    }
     const failures = streamFailures.current;
     const now = performance.now();
     if (now - failures.at > STREAM_FAILURE_WINDOW_MS) failures.count = 0;

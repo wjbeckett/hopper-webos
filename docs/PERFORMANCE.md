@@ -100,6 +100,17 @@ Holding Down for 3 s with key repeats every 80 ms, on webOS 22. "Off screen" cou
 
 The fix was to stop starting a native smooth scroll on every press: grids now jump while a key is held. The selector stays on screen, but the frames did not get faster. A CPU profile of the held key in Browse showed no long tasks and a mostly idle main thread, so the cost is in painting and rasterising the newly exposed rows, not in script. Translating the grid instead of scrolling it, as Home does with its rows, is the next thing to try.
 
+## Direct play (#58)
+
+The same MP4 film (H.264, AAC, 1080p) over HLS (a server remux) and played directly, on the LG 50UQ9000PSD (webOS 22), from the OK press on Play to the first frame, and from a pointer click on the timeline to playing at the new position.
+
+| | HLS | Direct |
+| --- | --- | --- |
+| First frame | 3.7 s, 2.2 s | 3.4 s, 3.0 s (6.9 s on the first play after launch) |
+| Long seek | 2 to 5 s (a replan when the target is before the stream's start, see "Playback start") | 0.35 s, 0.35 s, 0.77 s |
+
+Direct play starts no faster, but it seeks in under a second, and the server runs no packaging process for it.
+
 ## Rules that came out of this
 
 - Keep the number of mounted cards small. Do not render what is far off screen.
