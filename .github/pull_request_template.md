@@ -7,7 +7,7 @@ Fixes #
 -
 
 ## How it was tested
-- [ ] `npm run build` passes
+- [ ] `npm run build` and `npm test` pass
 - [ ] Browser (`npm run dev`):
 - [ ] Live Silo server:
 - [ ] Physical LG TV (model / webOS version):

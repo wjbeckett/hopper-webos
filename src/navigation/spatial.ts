@@ -1,4 +1,4 @@
-type Direction = "left" | "right" | "up" | "down";
+export type Direction = "left" | "right" | "up" | "down";
 
 const directionKeys: Record<string, Direction> = {
   ArrowLeft: "left",
@@ -16,7 +16,7 @@ function center(rect: DOMRect) {
   };
 }
 
-function candidateScore(from: DOMRect, to: DOMRect, direction: Direction) {
+export function candidateScore(from: DOMRect, to: DOMRect, direction: Direction) {
   const a = center(from);
   const b = center(to);
   const dx = b.x - a.x;
