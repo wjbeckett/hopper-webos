@@ -57,6 +57,7 @@ Hopper is an independent, community-built client. It is not affiliated with or e
 - HLS playback with resume, seek previews (trickplay), chapter markers, and skip intro and credits.
 - Up Next with an auto-play countdown, "Still watching?" prompts and shuffle.
 - Audio, subtitle, version and quality switching while you watch.
+- On a slow connection, quality lowers when playback keeps buffering (or asks first, per the "Lower quality when buffering" setting), with an option to restore it.
 - Subtitle appearance, sync and online search, plus AI subtitle translation where the server supports it.
 - Playback speed, sleep timer, audio delay, and HDR / Dolby Vision options.
 - Dolby Digital and Dolby Digital Plus audio is sent to the TV untouched, so the TV can pass it to a soundbar or receiver. If the stream fails, playback starts again where it stopped, and the server converts the audio if it fails a second time.

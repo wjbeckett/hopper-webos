@@ -89,6 +89,25 @@ Left over:
 - Resumes whose keyframe gap is over 10 s still seek.
 - The first play after launch pays for loading hls.js. It could be loaded while Details is on screen.
 
+## Slow connections (#63)
+
+LG tests playback at 512 kbps, 1 Mbps, 7 Mbps and 17.5 Mbps. Measured on the LG 50UQ9000PSD (webOS 22) with the inspector's network throttling (30 ms latency), on a 1080p HEVC film whose source is 1.7 Mbps. The server offers it as one stream, so hls.js has no lower level to switch to: only a replan lowers it.
+
+| Speed | Before | After (buffering quality) |
+| --- | --- | --- |
+| 512 kbps | first picture 19.5 s at 1080p; stalled every few seconds, then the stream was restarted, still 1080p | lowered at 20 s, before the first picture; first picture 27 s at 480p (695 kbps); lowered again at 38 s to 276 kbps; then real time, 30 s buffered |
+| 1 Mbps | first picture 13.3 s at 1080p; 56 s played in 77 s, under 6 s buffered | first picture 13.8 s at 1080p; lowered at 22 s to 480p (695 kbps); then real time, 16 s buffered |
+| 7 Mbps | not measured | first picture 3.9 s at 1080p, 30 s buffered, no lowering |
+| 17.5 Mbps | not measured | (pending) |
+| Unthrottled | first picture 4.2 s at 1080p | unchanged |
+
+Two things the TV does differently from Android's Media3:
+
+- **webOS does not always report a stall.** At 512 kbps after the first lowering, playback crawled at 0.6× speed with under a second buffered and fired no `waiting` event, so nothing lowered again. The player now also watches the playhead (`src/screens/playerBufferingQuality.ts`).
+- **The first segment is slow to measure.** At 512 kbps a 10 s 1080p segment takes over 30 s, longer than the stall timer, and a lowering before the first picture needs a measured throughput. Bytes are now counted as they arrive, from the segment requests' progress events. That brought the first picture at 512 kbps from 53 s to 27 s.
+
+Not done: a start estimate from a recent speed test, as Android sends, which would start low instead of lowering after 20 s.
+
 ## Browse grids
 
 Holding Down for 3 s with key repeats every 80 ms, on webOS 22. "Off screen" counts samples, taken every 250 ms, where the focused card was outside the screen.
