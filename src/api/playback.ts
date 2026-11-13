@@ -6,6 +6,8 @@ import { clientIdentity } from "../platform/device";
 import type { Session, SiloItem } from "../types";
 import { getDeviceId } from "../platform/device";
 import { requestV2 } from "./silo";
+import { freshProbeKbps, notePlaybackStarted } from "../core/bandwidthProbe";
+import { BUFFERING_QUALITY_V1_FEATURE, LEARNED_LIMIT_IGNORE, withKeptStepDownEstimate, type BufferingQualityMode, type BufferingQualityReplan, type KeptStepDownEstimate } from "../core/bufferingQuality";
 
 export type AudioTrack = { index?: number; codec?: string; channels?: number; layout?: string; language?: string; title?: string; embedded_title?: string; default?: boolean };
 export type SubtitleTrack = { index?: number; codec?: string; language?: string; title?: string; embedded_title?: string; forced?: boolean; hearing_impaired?: boolean; default?: boolean; external?: boolean; source?: string; file_name?: string };
@@ -29,23 +31,44 @@ export type PlaybackPlan = {
   };
   available_qualities: Quality[];
   claims?: { video?: { dolby_vision?: boolean }; audio?: { codec?: string } };
-  source?: { dolby_vision_profile?: number };
+  source?: { dolby_vision_profile?: number; bitrate_kbps?: number };
+  effective_recipe?: { bitrate_kbps?: number; height?: number };
+  degradation_warnings?: string[];
+  /** The available_qualities label the plan delivers, from a server with plan_active_quality_v1. */
+  active_quality?: string;
 };
-type Decision = { outcome: string; session_id?: string; playback_plan?: PlaybackPlan; terminal?: { message: string; reason: string } };
+type Decision = { outcome: string; session_id?: string; playback_plan?: PlaybackPlan; terminal?: { message: string; reason: string }; server_features?: string[] };
 
 const features = ["playback_plan_v3", "neutral_playback_v3_contract_v1", "playback_route_diagnostics", "seek_reanchor_v1", "direct_stream_resume_v1", "plan_source_duration_v1"];
 const installations = new Map<string, string>();
+
+/** The server's speed-test settings (with connection_speed_v1), from /playback/capabilities. */
+export type BandwidthProbeSettings = { automatic: boolean; maxAgeSeconds: number | null; targetKbps: number | null };
+const probeSettings = new Map<string, BandwidthProbeSettings>();
 
 async function playbackInstallationId(session: Session): Promise<string> {
   const key = `${session.serverUrl}|${session.profileId ?? ""}`;
   const cached = installations.get(key);
   if (cached) return cached;
-  const capabilities = await requestV2<{ installation_id?: string }>(session, "/playback/capabilities", {
+  const capabilities = await requestV2<{ installation_id?: string; features?: string[]; bandwidth_probe_automatic?: boolean; bandwidth_probe_max_age_seconds?: number; bandwidth_probe_target_kbps?: number }>(session, "/playback/capabilities", {
     headers: { "X-Silo-Device-Id": getDeviceId() }
   });
   if (!capabilities.installation_id) throw new Error("Silo did not return a playback installation id.");
   installations.set(key, capabilities.installation_id);
+  // The first start after a launch already knows what the server supports.
+  if (Array.isArray(capabilities.features)) serverFeatures = capabilities.features;
+  probeSettings.set(key, {
+    automatic: capabilities.bandwidth_probe_automatic !== false,
+    maxAgeSeconds: capabilities.bandwidth_probe_max_age_seconds ?? null,
+    targetKbps: capabilities.bandwidth_probe_target_kbps ?? null
+  });
   return capabilities.installation_id;
+}
+
+/** The server's speed-test settings for this sign-in, reading the capabilities once. */
+export async function bandwidthProbeSettings(session: Session): Promise<BandwidthProbeSettings> {
+  await playbackInstallationId(session);
+  return probeSettings.get(`${session.serverUrl}|${session.profileId ?? ""}`) ?? { automatic: true, maxAgeSeconds: null, targetKbps: null };
 }
 
 function cachedInstallationId(session: Session): string {
@@ -209,26 +232,83 @@ export function getMarkers(session: Session, itemId: string): Promise<FileMarker
   return optionalSiloJson(session, `/markers/items/${encodeURIComponent(itemId)}`);
 }
 
+/*
+ * Buffering quality (core/bufferingQuality, the server's docs/design/2026-10-17-buffering-quality.md).
+ * The server rejects unknown fields, so bandwidth_estimate_source, observed_throughput_kbps and
+ * learned_limit go out, and buffering_quality_v1 joins client_features, only when the server
+ * advertises the feature; bandwidth_estimate_kbps is an older field and always goes. Android's
+ * BufferingQualityRequestGating does the same.
+ */
+let serverFeatures: string[] = [];
+let bufferingMode: BufferingQualityMode = "always";
+/** The step-down estimate this playback attempt's Auto was last lowered with (see withKeptStepDownEstimate). */
+let keptEstimate: KeptStepDownEstimate | null = null;
+
+/** The effective playback.buffering_quality_mode: `never` also tells the server to ignore its learned limit. */
+export function setBufferingQualityMode(mode: BufferingQualityMode) { bufferingMode = mode; }
+
+function noteServerFeatures(decision: Decision) {
+  if (Array.isArray(decision.server_features)) serverFeatures = decision.server_features;
+}
+
+function bufferingFeatureOn() { return serverFeatures.includes(BUFFERING_QUALITY_V1_FEATURE); }
+
+function clientFeatures() { return bufferingFeatureOn() ? [...features, BUFFERING_QUALITY_V1_FEATURE] : features; }
+
 /**
  * `subtitleIndex` -1 is the app's "subtitles off". The server accepts only 0 and up and refuses the
  * whole start for -1 (422 "subtitle_track_index is invalid"). Leaving the index out is how a start
  * asks for off, so -1 is never sent. Android's client does the same.
  */
-export async function startPlaybackV3(session: Session, detail: WatchDetail, version: FileVersion, quality = "auto", audioIndex?: number, subtitleIndex?: number, startPosition?: number) {
+export async function startPlaybackV3(session: Session, detail: WatchDetail, version: FileVersion, quality = "auto", audioIndex?: number, subtitleIndex?: number, startPosition?: number, bandwidthEstimateKbps?: number | null) {
   if (!session.profileId) throw new Error("A Silo profile is required for playback.");
   const playbackAttemptId = uuid("webos");
   const subtitle = subtitleIndex != null && subtitleIndex >= 0
     ? { subtitle_track_id: `file:${version.file_id}:subtitle:${subtitleIndex}`, subtitle_track_index: subtitleIndex }
     : {};
-  const body = { installation_id: await playbackInstallationId(session), protocol_version: 3, client_features: features, file_id: version.file_id, profile_id: session.profileId, playback_attempt_id: playbackAttemptId, quality_preference: quality, subtitle_fidelity_preference: "compatible", progress_persistence: "server", start_position: startPosition ?? detail.user_data?.position_seconds ?? 0, ...(audioIndex == null ? {} : { audio_track_id: `file:${version.file_id}:audio:${audioIndex}`, audio_track_index: audioIndex }), ...subtitle, metered: false, ...snapshot() };
+  // A new attempt never inherits a kept estimate.
+  keptEstimate = null;
+  // Without an estimate of the caller's own, the current automatic speed-test reading.
+  if (bandwidthEstimateKbps == null) bandwidthEstimateKbps = freshProbeKbps(session);
+  notePlaybackStarted();
+  // First: it also tells this function what the server supports, which the fields below depend on.
+  const installationId = await playbackInstallationId(session);
+  const buffering = {
+    // A current speed-test reading (core/bandwidthProbe), as Android sends it with source "probe".
+    ...(bandwidthEstimateKbps != null && bandwidthEstimateKbps > 0 ? { bandwidth_estimate_kbps: Math.round(bandwidthEstimateKbps), ...(bufferingFeatureOn() ? { bandwidth_estimate_source: "probe" } : {}) } : {}),
+    ...(bufferingFeatureOn() && bufferingMode === "never" ? { learned_limit: LEARNED_LIMIT_IGNORE } : {})
+  };
+  const body = { installation_id: installationId, protocol_version: 3, client_features: clientFeatures(), ...buffering, file_id: version.file_id, profile_id: session.profileId, playback_attempt_id: playbackAttemptId, quality_preference: quality, subtitle_fidelity_preference: "compatible", progress_persistence: "server", start_position: startPosition ?? detail.user_data?.position_seconds ?? 0, ...(audioIndex == null ? {} : { audio_track_id: `file:${version.file_id}:audio:${audioIndex}`, audio_track_index: audioIndex }), ...subtitle, metered: false, ...snapshot() };
   const decision = await requestV2<Decision>(session, "/playback/start", { method: "POST", body: JSON.stringify(body) });
+  noteServerFeatures(decision);
   return { plan: requirePlan(decision), playbackAttemptId, planAttemptId: uuid("plan") };
 }
 
-export async function replanPlaybackV3(session: Session, state: { plan: PlaybackPlan; playbackAttemptId: string; planAttemptId: string; attemptedKeys: string[] }, operation: "track_change" | "quality_change" | "seek_reanchor", position: number, quality: string, selected: { audio?: TrackIdentity; subtitle?: TrackIdentity }) {
+/**
+ * `bufferingQuality` is the buffering-quality controller's replan (a lowering or a restore), or
+ * null for one the player sends for its own reasons. Either way the kept-estimate rule applies, so
+ * a track change or seek after a lowering stays at the lowered quality.
+ */
+export async function replanPlaybackV3(session: Session, state: { plan: PlaybackPlan; playbackAttemptId: string; planAttemptId: string; attemptedKeys: string[] }, operation: "track_change" | "quality_change" | "seek_reanchor", position: number, quality: string, selected: { audio?: TrackIdentity; subtitle?: TrackIdentity }, bufferingQuality: BufferingQualityReplan | null = null) {
   const attemptedKeys = [state.plan.plan_attempt_key];
-  const body = { installation_id: await playbackInstallationId(session), protocol_version: 3, client_features: features, operation, playback_attempt_id: state.playbackAttemptId, replan_request_id: uuid("replan"), failed_plan_id: state.plan.plan_id, plan_attempt_id: state.planAttemptId, plan_attempt_key: state.plan.plan_attempt_key, attempted_plan_keys: attemptedKeys, attempt_count: attemptedKeys.length, quality_preference: quality, position_seconds: position, metered: false, selected_tracks: selected, local_mutations: [], ...snapshot() };
+  const fields = withKeptStepDownEstimate({
+    operation,
+    playbackAttemptId: state.playbackAttemptId,
+    qualityPreference: quality,
+    bandwidthEstimateKbps: bufferingQuality?.bandwidthEstimateKbps,
+    bandwidthEstimateSource: bufferingQuality?.bandwidthEstimateSource,
+    learnedLimit: bufferingQuality?.learnedLimit ?? (bufferingMode === "never" ? LEARNED_LIMIT_IGNORE : undefined)
+  }, keptEstimate, bufferingQuality);
+  keptEstimate = fields.kept;
+  const gated = bufferingFeatureOn();
+  const buffering = {
+    ...(fields.request.bandwidthEstimateKbps != null ? { bandwidth_estimate_kbps: fields.request.bandwidthEstimateKbps } : {}),
+    ...(gated && fields.request.bandwidthEstimateKbps != null && fields.request.bandwidthEstimateSource ? { bandwidth_estimate_source: fields.request.bandwidthEstimateSource } : {}),
+    ...(gated && fields.request.learnedLimit ? { learned_limit: fields.request.learnedLimit } : {})
+  };
+  const body = { installation_id: await playbackInstallationId(session), protocol_version: 3, client_features: clientFeatures(), ...buffering, operation, playback_attempt_id: state.playbackAttemptId, replan_request_id: uuid("replan"), failed_plan_id: state.plan.plan_id, plan_attempt_id: state.planAttemptId, plan_attempt_key: state.plan.plan_attempt_key, attempted_plan_keys: attemptedKeys, attempt_count: attemptedKeys.length, quality_preference: quality, position_seconds: position, metered: false, selected_tracks: selected, local_mutations: [], ...snapshot() };
   const decision = await requestV2<Decision>(session, `/playback/${encodeURIComponent(state.plan.session_id)}/replan`, { method: "POST", body: JSON.stringify(body) });
+  noteServerFeatures(decision);
   return { plan: requirePlan(decision), playbackAttemptId: state.playbackAttemptId, planAttemptId: uuid("plan"), attemptedKeys: [] };
 }
 
