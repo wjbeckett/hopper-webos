@@ -899,9 +899,11 @@ export function installSpatialNavigation() {
       event.preventDefault();
       return;
     }
-    if (current.closest(".details-actions") && direction === "up") {
-      const overview = current.closest<HTMLElement>(".details-shell, .series-screen")?.querySelector<HTMLElement>(".overview-button");
-      if (overview) focusElement(overview);
+    const overview = current.closest(".details-actions") && direction === "up"
+      ? current.closest<HTMLElement>(".details-shell, .series-screen")?.querySelector<HTMLElement>(".overview-button")
+      : null;
+    if (overview) {
+      focusElement(overview);
       event.preventDefault();
       return;
     }

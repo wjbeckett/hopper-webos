@@ -23,8 +23,9 @@ export function ExpandableOverview({ className, preview, text, title }: {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  // A different title or episode under an open popup closes it.
-  useEffect(() => setOpen(false), [text, title]);
+  // A different title or episode under an open popup closes it, with focus back on the overview.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (open) close(); }, [text, title]);
 
   useEffect(() => {
     if (!open) return;
@@ -32,6 +33,8 @@ export function ExpandableOverview({ className, preview, text, title }: {
     const onKey = (event: KeyboardEvent) => {
       const back = BACK_KEYS.includes(event.key) || event.keyCode === 461 || event.keyCode === 10009;
       const step = event.key === "ArrowDown" ? SCROLL_STEP : event.key === "ArrowUp" ? -SCROLL_STEP : 0;
+      // The dialog is the popup's only stop; Tab (a keyboard) must not reach the page behind it.
+      if (event.key === "Tab") { event.preventDefault(); event.stopImmediatePropagation(); return; }
       if (!back && !step) return;
       event.preventDefault();
       event.stopImmediatePropagation();
