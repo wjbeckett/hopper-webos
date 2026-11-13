@@ -18,7 +18,7 @@ There is one long-lived branch, `main`. Every change arrives through a pull requ
 | Size, area and `external` labels | Automatic | Automatic |
 | Welcome comment explaining the process | Not posted | Automatic |
 | Claude review: summary comment and inline suggestions | Automatic | Automatic for returning contributors. **You** add the `claude-review` label once for a first-time contributor |
-| Small fixes pushed to the branch | Automatic (`review: ` commits) | Not possible. The contributor applies suggestions, or **you** push to their branch |
+| Small fixes pushed to the branch | Automatic (`review: ` commits). **You** approve the held Build and Claude review runs on each one, or push again (see step 6) | Not possible. The contributor applies suggestions, or **you** push to their branch |
 | Re-review after each push | Automatic | Automatic once the first review has run |
 | Read the review and decide | **You** | **You** |
 | Test on a TV | **You**, when the change affects the app | **You** |
@@ -33,6 +33,12 @@ There is one long-lived branch, `main`. Every change arrives through a pull requ
 4. **Automatic:** **Build** runs, the PR is labelled, and **Claude PR review** starts. It takes a few minutes.
 5. **Automatic:** the reviewer posts one **Claude review** comment (verdict, a table of what it checked, what it changed) and inline suggestions. It may push `review: ` commits with small fixes.
 6. **You:** pull, so you have any `review: ` commits. Read the summary, then apply or dismiss the inline suggestions. Each push is reviewed again and the same comment is updated.
+
+   A `review: ` commit is pushed by `github-actions[bot]`, which GitHub treats as a first-time contributor. Its **Build** and **Claude PR review** runs are held, and the PR shows them as waiting. If nobody approves them, they end hours later as **failure** without having run. Do one of these:
+   - On the PR's **Checks** tab, or the held run's page, click **Approve and run**.
+   - Push your own commit on top. Your push builds and reviews the whole branch, including the `review: ` commit, and the held runs can be ignored.
+
+   A **failure** on a `review: ` commit whose run has no jobs is one of these held runs, not a broken build.
 7. **You:** if the change affects the app, test on a TV from the PR branch: `WEBOS_DEVICE=<name> npm run webos:deploy`.
 8. **You:** merge.
 
@@ -144,7 +150,7 @@ Do not add the Claude review as a required check. It does not run on PRs that ch
 This decides whose pull requests need your click before **Build** runs.
 
 1. **Settings → Actions → General**.
-2. Under **Approval for running fork pull request workflows from contributors**, choose **Require approval for first-time contributors**. This is GitHub's default: one click per new contributor, none after their first merged PR.
+2. Under **Approval for running fork pull request workflows from contributors**, choose **Require approval for first-time contributors**. This is GitHub's default: one click per new contributor, none after their first merged PR. It also holds the runs on the reviewer's `review: ` commits (step 6 of "Your own change").
 3. Under **Workflow permissions**, keep **Read repository contents and packages permissions**. Each workflow asks for what it needs.
 4. Save.
 
