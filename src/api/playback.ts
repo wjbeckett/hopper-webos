@@ -1,4 +1,5 @@
-import { displaySupportsHdr, localDolbyVisionEnabled, localHdrEnabled } from "../core/playerSettings";
+import { localDolbyVisionEnabled, localHdrEnabled } from "../core/playerSettings";
+import { displaySupportsHdr } from "../platform/displayHdr";
 import { advertisableDolbyVisionProfiles } from "../platform/dolbyVision";
 import { probePlaybackCapabilities } from "../platform/capabilities";
 import { clientIdentity } from "../platform/device";
