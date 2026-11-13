@@ -142,6 +142,9 @@ Write:
 
 Fixes #<number>
 
+## Release note
+<One line for the release notes, written for viewers: "New: …", "Changed: …" or "Fixed: …". "None" for changes viewers will not notice. scripts/release-notes.mjs reads it.>
+
 ## Root cause
 <What was actually going wrong, with file references.>
 

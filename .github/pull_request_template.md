@@ -3,6 +3,10 @@
 
 Fixes #
 
+## Release note
+<!-- One line for the release notes, written for viewers: start with "New:", "Changed:" or "Fixed:".
+     Write "None" for changes viewers will not notice (tests, docs, workflows, refactors). -->
+
 ## What changed
 -
 

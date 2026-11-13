@@ -63,9 +63,21 @@ To review any pull request on demand through the read-only path: **Actions → P
 
 ## Releases
 
-`main` is always the latest accepted code. To cut a release, tag a commit on `main` that you have tested on a TV, and update the README Availability table.
+`main` is always the latest accepted code. A release is a tested `main` commit, packaged as an IPK for sideloading and published as a GitHub release.
 
-Every build has its own version number: `<major>.<minor>.<commit count>`, for example 0.3.215. The build stamps it into the packaged app, where the TV's app details show it, and into Settings → Server, next to the commit hash. To tell which build a TV is running, look there. To start a new release line, change `<major>.<minor>` in `package.json`; the third number takes care of itself. A hash ending in `+` means the build had uncommitted changes.
+**Version.** Every build has its own version number: `<major>.<minor>.<commit count>`, for example 0.3.215. The build stamps it into the packaged app, where the TV's app details show it, and into Settings → Server, next to the commit hash. A release is named after the build it ships: Hopper 0.3.331, tag `v0.3.331`. To start a new release line (say 0.4 for the first LG Content Store submission, 1.0 at launch), change `<major>.<minor>` in `package.json` in a PR; the third number takes care of itself. A hash ending in `+` means the build had uncommitted changes.
+
+**Release notes** come from the pull requests. Each PR's description has a **Release note** line written for viewers: "New: …", "Changed: …" or "Fixed: …", or "None" for changes they will not notice. `scripts/release-notes.mjs` collects the lines of every PR merged since the previous release into *New and improved*, *Fixed* and a collapsed *Behind the scenes*. Older PRs without the line are sorted by labels. There is no change log file: the releases are the record of what shipped.
+
+**To cut a release:**
+
+1. **You:** make sure the `main` commit you want to ship has been tested on a TV.
+2. **You:** Actions → **Release** → **Run workflow**, on `main`. Leave **pre-release** ticked while Hopper is 0.x and not in the LG Content Store.
+3. **Automatic:** the workflow runs the tests, builds and packages the IPK (app plus pairing service), writes `SHA256SUMS`, and creates a **draft** release `v<version>` with both attached and the notes filled in. The run's summary links to the draft. It stops if that version already has a release or tag.
+4. **You:** open the draft, write two or three lines under **Highlights** for viewers, trim or reword any note, and **Publish**. Publishing creates the tag on the commit that was built.
+5. **You:** update the README Availability table (GitHub Releases row: status and version) in a PR.
+
+To check a release before publishing, install the attached IPK on a TV: `ares-install --device <tv> com.hopperapp.hopper_<version>_all.ipk`. A draft can be deleted and the workflow run again.
 
 ## What each workflow does
 
@@ -74,6 +86,7 @@ Every build has its own version number: `<major>.<minor>.<commit count>`, for ex
 | **Build** (`ci.yml`) | Every PR, and pushes to `main` | `npm ci`, `npm run build` and `npm test`. No secrets, so it is safe on outside code. |
 | **PR intake** (`pr-intake.yml`), `triage` job | Every PR | Adds labels and welcomes outside contributors. Never checks out PR code. |
 | **PR intake**, `external-review` job | PRs from forks, and manual runs | Read-only Claude review. Cannot build, run or push. |
+| **Release** (`release.yml`) | You, by hand from `main` | Tests, builds and packages the IPK, writes the release notes from the PRs' Release note lines, and creates a draft GitHub release with the IPK and `SHA256SUMS`. See "Releases". |
 | **Claude PR review** (`claude-review.yml`) | PRs from branches in this repository | Full Claude review: runs the build, pushes small `review: ` fixes, comments. If no review is posted (skipped, failed, cancelled), a **Claude review status** comment says why; it is deleted once a review is posted. |
 
 ## Labels
