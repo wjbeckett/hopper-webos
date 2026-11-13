@@ -37,11 +37,6 @@ function decodeBase64(hash: string): Uint8Array | null {
   return Uint8Array.from(bytes);
 }
 
-function toLinear(value: number, scale: number): number {
-  const normalized = Math.min(1, Math.max(0, (value / 8191) * scale));
-  return normalized <= 0.055 ? normalized / 12.92 : Math.pow((normalized + 0.055) / 1.055, 2.4);
-}
-
 const thumbhashCache = new Map<string, string | null>();
 const MAX_CACHE_ENTRIES = 256;
 
@@ -64,98 +59,105 @@ export function thumbhashToDataURL(hash: string | null | undefined): string | nu
   return decoded;
 }
 
+/**
+ * The reference ThumbHash decoder (https://evanw.github.io/thumbhash/, `thumbHashToRGBA`), as
+ * Android ports it in android-shared ThumbHash.kt: a picture at most 32 px on its long edge.
+ * Returns null for bytes that are not a ThumbHash.
+ */
+export function thumbHashToRGBA(hash: Uint8Array): { width: number; height: number; rgba: Uint8ClampedArray } | null {
+  if (hash.length < 5) return null;
+  const header24 = hash[0] | (hash[1] << 8) | (hash[2] << 16);
+  const header16 = hash[3] | (hash[4] << 8);
+  const lDc = (header24 & 63) / 63;
+  const pDc = ((header24 >> 6) & 63) / 31.5 - 1;
+  const qDc = ((header24 >> 12) & 63) / 31.5 - 1;
+  const lScale = ((header24 >> 18) & 31) / 31;
+  const hasAlpha = (header24 >> 23) !== 0;
+  const lCount = header16 & 7;
+  const pScale = ((header16 >> 3) & 63) / 63;
+  const qScale = ((header16 >> 9) & 63) / 63;
+  const isLandscape = (header16 >> 15) !== 0;
+  const lx = Math.max(3, isLandscape ? (hasAlpha ? 5 : 7) : lCount);
+  const ly = Math.max(3, isLandscape ? lCount : (hasAlpha ? 5 : 7));
+  if (hasAlpha && hash.length < 6) return null;
+  const aDc = hasAlpha ? (hash[5] & 15) / 15 : 1;
+  const aScale = hasAlpha ? (hash[5] >> 4) / 15 : 0;
+
+  // AC terms: one 4-bit stream shared by all channels.
+  const acStart = hasAlpha ? 6 : 5;
+  let acIndex = 0;
+  let truncated = false;
+  const decodeChannel = (nx: number, ny: number, scale: number) => {
+    const ac: number[] = [];
+    for (let cy = 0; cy < ny; cy++) {
+      for (let cx = cy ? 0 : 1; cx * ny < nx * (ny - cy); cx++) {
+        const at = acStart + (acIndex >> 1);
+        if (at >= hash.length) truncated = true;
+        ac.push((((hash[at] >> ((acIndex & 1) << 2)) & 15) / 7.5 - 1) * scale);
+        acIndex++;
+      }
+    }
+    return ac;
+  };
+  const lAc = decodeChannel(lx, ly, lScale);
+  const pAc = decodeChannel(3, 3, pScale * 1.25);
+  const qAc = decodeChannel(3, 3, qScale * 1.25);
+  const aAc = hasAlpha ? decodeChannel(5, 5, aScale) : [];
+  if (truncated) return null;
+
+  const ratio = lx / ly;
+  const width = Math.max(1, Math.round(ratio > 1 ? 32 : 32 * ratio));
+  const height = Math.max(1, Math.round(ratio > 1 ? 32 / ratio : 32));
+  const rgba = new Uint8ClampedArray(width * height * 4);
+  const fx: number[] = new Array(Math.max(lx, hasAlpha ? 5 : 3)).fill(0);
+  const fy: number[] = new Array(Math.max(ly, hasAlpha ? 5 : 3)).fill(0);
+  for (let y = 0, i = 0; y < height; y++) {
+    for (let x = 0; x < width; x++, i += 4) {
+      let l = lDc, p = pDc, q = qDc, a = aDc;
+      for (let cx = 0; cx < fx.length; cx++) fx[cx] = Math.cos(Math.PI / width * (x + 0.5) * cx);
+      for (let cy = 0; cy < fy.length; cy++) fy[cy] = Math.cos(Math.PI / height * (y + 0.5) * cy);
+      for (let cy = 0, j = 0; cy < ly; cy++) {
+        const fy2 = fy[cy] * 2;
+        for (let cx = cy ? 0 : 1; cx * ly < lx * (ly - cy); cx++, j++) l += lAc[j] * fx[cx] * fy2;
+      }
+      for (let cy = 0, j = 0; cy < 3; cy++) {
+        const fy2 = fy[cy] * 2;
+        for (let cx = cy ? 0 : 1; cx < 3 - cy; cx++, j++) {
+          const f = fx[cx] * fy2;
+          p += pAc[j] * f;
+          q += qAc[j] * f;
+        }
+      }
+      if (hasAlpha) {
+        for (let cy = 0, j = 0; cy < 5; cy++) {
+          const fy2 = fy[cy] * 2;
+          for (let cx = cy ? 0 : 1; cx < 5 - cy; cx++, j++) a += aAc[j] * fx[cx] * fy2;
+        }
+      }
+      const b = l - 2 / 3 * p;
+      const r = (3 * l - b + q) / 2;
+      const g = r - q;
+      rgba[i] = 255 * Math.min(1, Math.max(0, r));
+      rgba[i + 1] = 255 * Math.min(1, Math.max(0, g));
+      rgba[i + 2] = 255 * Math.min(1, Math.max(0, b));
+      rgba[i + 3] = 255 * Math.min(1, Math.max(0, a));
+    }
+  }
+  return { width, height, rgba };
+}
+
 function decodeThumbhash(hash: string): string | null {
   if (typeof document === "undefined") return null;
   const bytes = decodeBase64(hash);
-  if (!bytes || bytes.length < 3) return null;
-  const h0 = bytes[0];
-  const h1 = bytes[1];
-  if ((h0 & 0b1110_0001) !== 0b0010_0001) return null;
-  const hasAlpha = (h1 & 0b0010_0000) !== 0;
-  const dcBits = (((h1 >> 6) & 3) << 3) | (h1 & 0b0001_1111);
-  const acBits = (h1 >> 5) & 1 ? dcBits : 0;
-  if (acBits === 0 || dcBits <= 0) return null;
-  const width = (bytes[2] & 0b1111) + 1;
-  const height = ((bytes[2] >> 4) & 0b1111) + 1;
-  const dcCount = hasAlpha ? 4 : 3;
-  const dcWidth = dcBits / 3;
-
-  let bitIndex = 24;
-  const next = (count: number): number | null => {
-    if (bitIndex + count > bytes.length * 8) return null;
-    let value = 0;
-    for (let i = 0; i < count; i++) {
-      const at = bitIndex + i;
-      value |= (((bytes[at >> 3] >> (at & 7)) & 1) << i);
-    }
-    bitIndex += count;
-    return value;
-  };
-
-  const dc: number[] = [];
-  for (let i = 0; i < dcCount; i++) {
-    const value = next(dcWidth);
-    if (value == null) return null;
-    dc.push(value);
-  }
-  const acCount = 5 * dcCount;
-  const ac: number[] = [];
-  const acWidth = Math.max(1, Math.round(acBits / 5));
-  for (let i = 0; i < acCount; i++) {
-    const value = next(acWidth);
-    if (value == null) return null;
-    ac.push(value);
-  }
-
-  const dcScale = 1 / (1 << dcWidth);
-  const dcR = toLinear(dc[0], dcScale);
-  const dcG = toLinear(dc[1], dcScale);
-  const dcB = toLinear(dc[2], dcScale);
-  const dcA = hasAlpha ? Math.min(1, Math.max(0, dc[3] / ((1 << dcWidth) - 1))) : 1;
-
-  // AC basis (thumbhash spec): L = cos(pi*fx)*cos(pi*fy),
-  // P = cos(pi*fx)*sin(pi*fy), Q = sin(pi*fx)*sin(pi*fy).
-  const basis = (kind: number, fx: number, fy: number) => {
-    if (kind === 0) return Math.cos(Math.PI * fx) * Math.cos(Math.PI * fy);
-    if (kind === 1) return Math.cos(Math.PI * fx) * Math.sin(Math.PI * fy);
-    return Math.sin(Math.PI * fx) * Math.sin(Math.PI * fy);
-  };
-
-  const canvasWidth = Math.max(8, width * 8);
-  const canvasHeight = Math.max(8, height * 8);
+  const decoded = bytes ? thumbHashToRGBA(bytes) : null;
+  if (!decoded) return null;
   const canvas = document.createElement("canvas");
-  canvas.width = canvasWidth;
-  canvas.height = canvasHeight;
+  canvas.width = decoded.width;
+  canvas.height = decoded.height;
   const context = canvas.getContext("2d");
   if (!context) return null;
-  const image = context.createImageData(canvasWidth, canvasHeight);
-  for (let y = 0; y < canvasHeight; y++) {
-    for (let x = 0; x < canvasWidth; x++) {
-      const fx = x / canvasWidth;
-      const fy = y / canvasHeight;
-      let r = dcR;
-      let g = dcG;
-      let b = dcB;
-      let a = dcA;
-      for (let i = 0; i < acCount; i++) {
-        const coefficient = ac[i];
-        if (!coefficient) continue;
-        const channel = (i / 5) | 0;
-        const kind = i % 5;
-        const scale = kind < 2 ? 1 / 31 : kind < 4 ? 1 / 63 : 1 / 7;
-        const contribution = ((coefficient / 31) * scale) * basis(kind % 3, fx, fy);
-        if (channel === 0) r += contribution;
-        else if (channel === 1) g += contribution;
-        else if (channel === 2) b += contribution;
-        else a += contribution * 0.1;
-      }
-      const at = (y * canvasWidth + x) * 4;
-      image.data[at] = Math.round(Math.min(1, Math.max(0, r)) * 255);
-      image.data[at + 1] = Math.round(Math.min(1, Math.max(0, g)) * 255);
-      image.data[at + 2] = Math.round(Math.min(1, Math.max(0, b)) * 255);
-      image.data[at + 3] = Math.round(Math.min(1, Math.max(0, a)) * 255);
-    }
-  }
+  const image = context.createImageData(decoded.width, decoded.height);
+  image.data.set(decoded.rgba);
   context.putImageData(image, 0, 0);
   try {
     return canvas.toDataURL("image/png");
