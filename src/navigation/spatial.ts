@@ -1,3 +1,4 @@
+import { gridColumns } from "./gridWindow";
 export type Direction = "left" | "right" | "up" | "down";
 
 const directionKeys: Record<string, Direction> = {
@@ -676,12 +677,8 @@ function navigateLibrary(current: HTMLElement, direction: Direction) {
   return false;
 }
 
-/** Columns of a CSS grid, read from its computed template (one style read, no per-card layout). */
-function gridColumnCount(grid: HTMLElement) {
-  const template = getComputedStyle(grid).gridTemplateColumns;
-  const count = template && template !== "none" ? template.trim().split(/\s+/).length : 1;
-  return Math.max(1, count);
-}
+/** Columns of a CSS grid, cached so a key press does not force a style pass (gridWindow). */
+const gridColumnCount = gridColumns;
 
 export function installSpatialNavigation() {
   const pendingPress: { current: { element: HTMLElement; timer: number } | null } = { current: null };

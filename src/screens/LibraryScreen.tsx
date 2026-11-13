@@ -160,6 +160,16 @@ function sortedSafePrefix(
   accepts: (item: SiloItem) => boolean,
   previousItems: SiloItem[] = []
 ) {
+  // One library: the server's order is final, so nothing needs merging or sorting (a full sort
+  // of a few hundred items cost about 200 ms on a TV each time a page landed).
+  const keys = Object.keys(streams);
+  if (keys.length === 1) {
+    const seen = new Set<string>();
+    const items = (streams[keys[0]] ?? []).filter(item => accepts(item) && !seen.has(item.Id) && Boolean(seen.add(item.Id)));
+    const previousIds = new Set(previousItems.map(item => item.Id));
+    const stablePrefix = previousItems.filter(item => seen.has(item.Id));
+    return [...stablePrefix, ...items.filter(item => !previousIds.has(item.Id))];
+  }
   const activeStreams = Object.entries(cursors)
     .filter(([, cursor]) => Boolean(cursor))
     .map(([key]) => streams[key] ?? []);
