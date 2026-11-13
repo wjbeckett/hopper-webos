@@ -25,6 +25,9 @@ export function SearchScreen({
   });
   const [query, setQuery] = useState(returned?.query ?? "");
   const [items, setItems] = useState<SiloItem[]>(returned?.items ?? []);
+  // The query the shown results came from. The field can be ahead of it while a search is
+  // pending, and Back must return the results with the query that found them.
+  const resultsQuery = useRef(returned?.query ?? "");
   // The results shown on return are the ones already fetched; only a changed query searches again.
   const skipSearch = useRef(returned !== null);
   const [loading, setLoading] = useState(false);
@@ -58,7 +61,7 @@ export function SearchScreen({
       setError("");
       try {
         const results = await searchItems(session, trimmed);
-        if (alive) setItems(results);
+        if (alive) { resultsQuery.current = trimmed; setItems(results); }
       } catch (cause) {
         if (alive) setError(cause instanceof Error ? cause.message : "Search failed.");
       } finally {
@@ -114,7 +117,7 @@ export function SearchScreen({
             session={session}
             item={item}
             image={imageUrl(session, item)}
-            onOpen={() => { openedFrom = { owner: homeRailsKey(session), query, items, index }; onOpen(item); }}
+            onOpen={() => { openedFrom = { owner: homeRailsKey(session), query: resultsQuery.current, items, index }; onOpen(item); }}
           />
         ))}
       </div> : null}

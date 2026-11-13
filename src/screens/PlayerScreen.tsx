@@ -1673,7 +1673,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         if (event.repeat) return;
         // Focus stays on the timeline or a button after the controls hide, so the hidden state
         // is checked before where focus is; otherwise Down did nothing once they had been shown.
-        if (onPill) revealHud("transport");
+        // A hold-seek running or about to start must not carry on under the controls.
+        if (onPill) { stopCleanSeek(); revealHud("transport"); }
         else if (snapshot.cleanSeek) stopCleanSeek();
         else if (snapshot.hud && onScrubber) focusTransport();
         else if (snapshot.hud && onTransportButton) { /* bottom row: stay */ }
