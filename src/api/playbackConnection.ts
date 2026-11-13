@@ -47,8 +47,10 @@ const PROBE_MAX_MS = 10_000;
 
 export type SpeedTestResult = { kbps: number; saved: boolean };
 
-/** Downloads the server's probe payload, times it, and reports the result. */
-/** `manual` false for the automatic test the app runs in the background (core/bandwidthProbe). */
+/**
+ * Downloads the server's probe payload, times it, and reports the result. `manual` is false for
+ * the automatic test the app runs in the background (core/bandwidthProbe).
+ */
 export async function runSpeedTest(session: Session, manual = true): Promise<SpeedTestResult> {
   const started = performance.now();
   const response = await exchange(session, `/playback/bandwidth-probe?size=${PROBE_BYTES}`, {});
