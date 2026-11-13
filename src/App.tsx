@@ -45,6 +45,7 @@ import { applyResumeState, applyWatchedState, publishWatchState } from "./core/w
 import { firstEpisodeOfSeason, nextEpisodeAfter } from "./core/episodeNavigation";
 import { publishRailsChanged } from "./core/watchState";
 import { connectEventsSocket } from "./api/events";
+import { scheduleBandwidthProbe } from "./core/bandwidthProbe";
 import { subscribeReload, subscribeSessionExpired, watchServer } from "./api/connection";
 import { ConnectionLost } from "./components/ConnectionLost";
 import type { HomeRail, Session, SiloCollection, SiloItem, SiloLibrary, SiloProfile } from "./types";
@@ -187,6 +188,9 @@ export default function App() {
     setRoute({ name: "main" });
     setAuthRoute(signedOutEntry());
   }), []);
+
+  // The automatic speed test (core/bandwidthProbe), so playback starts at the right quality.
+  useEffect(() => { if (session?.profileId) scheduleBandwidthProbe(session); }, [session?.serverUrl, session?.profileId]);
 
   useEffect(() => {
     if (!session) return;

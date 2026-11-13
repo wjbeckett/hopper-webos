@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { connectionStatus, holdConnectionDialog, NetworkError, onceReachable, reportNetworkFailure, subscribeConnection } from "../api/connection";
 import type Hls from "hls.js";
 import { pinFocusedRailItem } from "../navigation/spatial";
-import { allowDolbyAudio, bestVersionForDevice, getMarkers, isDolbyAudio, getTrickplay, getWatchDetail, playbackUrl, replanPlaybackV3, reportProgress, saveAudioPreference, saveSubtitlePreference, startPlaybackV3, stopPlayback, stopPlaybackKeepalive, type AudioTrack, type FileMarkers, type MarkerSegment, type PlaybackChoices, type PlaybackPlan, type Quality, type SubtitleInventory, type Trickplay, type WatchDetail } from "../api/playback";
+import { allowDolbyAudio, setBufferingQualityMode, bestVersionForDevice, getMarkers, isDolbyAudio, getTrickplay, getWatchDetail, playbackUrl, replanPlaybackV3, reportProgress, saveAudioPreference, saveSubtitlePreference, startPlaybackV3, stopPlayback, stopPlaybackKeepalive, type AudioTrack, type FileMarkers, type MarkerSegment, type PlaybackChoices, type PlaybackPlan, type Quality, type SubtitleInventory, type Trickplay, type WatchDetail } from "../api/playback";
 import type { HomeRail, Session, SiloItem } from "../types";
 import { getEffectiveSettings, putScopedSetting } from "../api/settings";
 import { artUrl, getHomeRails, getShuffle, skipShuffle } from "../api/silo";
@@ -16,6 +16,8 @@ import { putDeviceSubtitleAppearance, putProfileSubtitleAppearance, type Subtitl
 import { applySubtitleDelay, attachSidecarSubtitle, sidecarSubtitleArtifact } from "../core/subtitleSidecar";
 import { audioDelaySupported, setAudioDelay } from "../platform/audioDelay";
 import { patientGapController } from "../platform/startGap";
+import { BUFFERING_COPY, usePlayerBufferingQuality } from "./playerBufferingQuality";
+import { bufferingQualityModeFrom, DEFAULT_BUFFERING_QUALITY_MODE, PROMPT_SECONDS, type BufferingQualityReplan } from "../core/bufferingQuality";
 import { SubtitleSearchDialog } from "../components/SubtitleSearchDialog";
 import { languageSearchCode } from "../core/languageNames";
 import { AiTranslateDialog, type AiSource } from "../components/AiTranslateDialog";
@@ -196,6 +198,14 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const closedSessions = useRef(new Set<string>());
   const stateRef = useRef<PlaybackState | undefined>(undefined);
   const qualityRef = useRef("auto");
+  // Buffering quality: lowers Auto (or offers to) when playback keeps buffering. See
+  // playerBufferingQuality. The sender is set once installPlan exists, below.
+  const bufferingSend = useRef<(replan: BufferingQualityReplan) => Promise<boolean>>(async () => false);
+  /** The next plan installed answers the buffering controller's own replan. */
+  const bufferingInitiated = useRef(false);
+  const bufferQuality = usePlayerBufferingQuality({ videoRef, sendReplan: replan => bufferingSend.current(replan) });
+  const bufferingPillRef = useRef<HTMLDivElement>(null);
+  const bufferingPillKind = bufferQuality.pill.kind;
   const [detail, setDetail] = useState<WatchDetail>();
   const [version, setVersion] = useState<WatchDetail["versions"][number]>();
   const [plan, setPlan] = useState<PlaybackPlan>();
@@ -316,6 +326,17 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const [autoPlayNext, setAutoPlayNext] = useState(true);
   const [upNext, setUpNext] = useState<SiloItem | null>(null);
   const [upNextCard, setUpNextCard] = useState<{ videoEnded: boolean } | null>(null);
+  // A skip pill or Up Next outranks the buffering pill, which waits behind them.
+  useEffect(() => { bufferQuality.controller.setOtherPillVisible(pill != null || upNextCard != null); }, [bufferQuality.controller, pill != null, upNextCard != null]);
+  // The buffering pill takes focus once when it appears, unless a menu or a scrub has it.
+  useEffect(() => {
+    if (bufferingPillKind === "hidden") return;
+    const frame = requestAnimationFrame(() => {
+      if (ui.current.panel || ui.current.scrubPreview != null || ui.current.cleanSeek) return;
+      bufferingPillRef.current?.querySelector<HTMLButtonElement>("button.primary")?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [bufferingPillKind]);
   const [upNextCountdown, setUpNextCountdown] = useState<{ seconds: number; total: number } | null>(null);
   const [shuffleScope, setShuffleScope] = useState(shuffle?.scopeLabel);
   const [shufflePicking, setShufflePicking] = useState(false);
@@ -401,7 +422,10 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   }, []);
 
   const installPlan = useCallback((next: PlaybackState, playThroughSeconds = PLAY_THROUGH_SEEK_SECONDS) => {
+    const replacesPlaying = stateRef.current?.playbackAttemptId === next.playbackAttemptId;
     stateRef.current = next;
+    bufferQuality.adopt(next.plan, next.planAttemptId, qualityRef.current, bufferingInitiated.current, replacesPlaying);
+    bufferingInitiated.current = false;
     localStorage.setItem(ACTIVE_PLAYBACK_KEY, JSON.stringify({ sessionId: next.plan.session_id, serverUrl: session.serverUrl, profileId: session.profileId }));
     setPlan(next.plan);
     const video = videoRef.current;
@@ -499,12 +523,14 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
           xhrSetup: (xhr, url) => {
             // Opening here lets the segment URL get its token back; hls.js skips its own open.
             if (!xhr.readyState) xhr.open("GET", /\.m3u8(?:\?|$)/i.test(url) ? url : withPlaylistToken(url, segmentToken), true);
+            if (!/\.m3u8(?:\?|$)/i.test(url)) bufferQuality.trackMediaRequest(xhr);
             Object.entries(headers).forEach(([name, value]) => xhr.setRequestHeader(name, value));
           }
         });
         hlsRef.current = hls;
         hls.on(HlsPlayer.Events.MANIFEST_PARSED, () => { void video.play().catch(() => setHud(true)); });
         hls.on(HlsPlayer.Events.ERROR, (_event, data) => {
+          if (data.type === HlsPlayer.ErrorTypes.NETWORK_ERROR && !data.fatal && (data.details === HlsPlayer.ErrorDetails.FRAG_LOAD_ERROR || data.details === HlsPlayer.ErrorDetails.FRAG_LOAD_TIMEOUT)) bufferQuality.noteTransportError();
           clientDiagnostic("HLS playback error", { fatal: data.fatal, type: data.type, details: data.details, reason: data.reason, responseCode: data.response?.code, responseUrl: data.response?.url });
           // No answer from the server (no HTTP status), or a proxy answering for a server that is down.
           const code = data.response?.code;
@@ -531,12 +557,31 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       video.load();
       video.onloadedmetadata = beginNative;
     }
-  }, [session]);
+  }, [session, bufferQuality.adopt, bufferQuality.trackMediaRequest]);
+
+  // The buffering controller's replan: a lowering or a restore, at the same position and tracks.
+  bufferingSend.current = async (replan: BufferingQualityReplan) => {
+    const active = stateRef.current;
+    if (!active) return false;
+    try {
+      const next = await replanPlaybackV3(session, active, "quality_change", sourcePosition(), replan.qualityPreference, active.plan.selected_tracks, replan);
+      if (stateRef.current !== active) return false;
+      qualityRef.current = replan.qualityPreference;
+      bufferingInitiated.current = true;
+      installPlan(next);
+      return true;
+    } catch (reason) {
+      clientDiagnostic("buffering quality replan failed", { reason: reason instanceof Error ? reason.message : String(reason) });
+      return false;
+    }
+  };
 
   const closePlayback = useCallback((keepalive = false) => {
     const active = stateRef.current;
     if (!active || closedSessions.current.has(active.plan.session_id)) return;
     closedSessions.current.add(active.plan.session_id);
+    // The playing plan ends here: a restart (same title) keeps the controller's per-title state.
+    bufferQuality.controller.onNewAttempt();
     localStorage.removeItem(ACTIVE_PLAYBACK_KEY);
     const video = videoRef.current;
     const currentPosition = sourcePosition();
@@ -550,7 +595,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     video?.pause();
     hlsRef.current?.destroy();
     hlsRef.current = null;
-  }, [session, sourcePosition]);
+  }, [session, sourcePosition, bufferQuality.controller]);
 
   useEffect(() => {
     if (!upNextCard) { setUpNextRect(null); return; }
@@ -776,11 +821,14 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     setAutoPlayNext(true);
     // Settings never block the stream: they apply whenever they land, while /playback/start
     // goes out as soon as /watch resolves (usually instantly, cached from Details).
-    getEffectiveSettings(session, ["playback.intro_skip_mode", "playback.auto_skip_credits", "playback.auto_play_next", "playback.subtitle_appearance", "catalog.hide_unwatched_episode_overviews", "catalog.hide_unwatched_episode_images", "player.video_skip_back_seconds", "player.video_skip_forward_seconds"]).catch(() => new Map()).then((settings) => {
+    getEffectiveSettings(session, ["playback.buffering_quality_mode", "playback.intro_skip_mode", "playback.auto_skip_credits", "playback.auto_play_next", "playback.subtitle_appearance", "catalog.hide_unwatched_episode_overviews", "catalog.hide_unwatched_episode_images", "player.video_skip_back_seconds", "player.video_skip_forward_seconds"]).catch(() => new Map()).then((settings) => {
       if (!alive) return;
       const configuredMode = settings.get("playback.intro_skip_mode")?.value;
       if (configuredMode === "never" || configuredMode === "ask" || configuredMode === "always") setIntroSkipMode(configuredMode);
       setAutoSkipCredits(settings.get("playback.auto_skip_credits")?.value === true);
+      const bufferingMode = bufferingQualityModeFrom(settings.get("playback.buffering_quality_mode")?.value) ?? DEFAULT_BUFFERING_QUALITY_MODE;
+      bufferQuality.setMode(bufferingMode);
+      setBufferingQualityMode(bufferingMode);
       setAutoPlayNext(settings.get("playback.auto_play_next")?.value !== false);
       const loadedAppearance = parseSubtitleAppearance(settings.get("playback.subtitle_appearance")?.value);
       const appearanceSource = settings.get("playback.subtitle_appearance")?.source;
@@ -805,6 +853,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       const playbackStart = startPosition === 0
         ? 0
         : resumePositionWithRewind(resumePosition, localResumeRewindSeconds());
+      bufferQuality.controller.reset();
       const started = await startPlaybackV3(session, watch, selectedVersion, "auto", choices?.audioIndex ?? selectedVersion.effective_audio_track_index, choices?.subtitleOff ? -1 : choices?.subtitleIndex, playbackStart);
       if (!alive) { void stopPlayback(session, started.plan.session_id); return; }
       installPlan({ ...started, attemptedKeys: [] }, PLAY_THROUGH_RESUME_SECONDS);
@@ -1125,9 +1174,12 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     const active = stateRef.current;
     if (!active) return;
     setBusy(true); setError("");
+    const pick = operation === "quality_change";
+    if (pick) bufferQuality.controller.onQualityPickSent();
     try {
       const next = await replanPlaybackV3(session, active, operation, sourcePosition(), quality, { audio, subtitle });
       qualityRef.current = quality;
+      if (pick) bufferQuality.controller.onViewerQualityChange();
       installPlan(next);
       if (panel) {
         requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-hud-row="${hudTab === "Audio" ? "audio-track" : hudTab === "Subtitles" ? "subtitle-track" : "quality"}"]`)?.focus());
@@ -1136,7 +1188,10 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         revealHud();
         focusTransport();
       }
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Silo could not change playback."); }
+    } catch (reason) {
+      if (pick) bufferQuality.controller.onQualityPickRefused();
+      setError(reason instanceof Error ? reason.message : "Silo could not change playback.");
+    }
     finally { setBusy(false); }
   }
 
@@ -1244,6 +1299,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     const subtitleIndex = activeSubtitle ? (matchingSubtitleIndex != null && matchingSubtitleIndex >= 0 ? matchingSubtitleIndex : undefined) : -1;
     setBusy(true);
     setError("");
+    bufferQuality.controller.onViewerQualityChange();
     closePlayback(false);
     try {
       const started = await startPlaybackV3(session, detail, nextVersion, qualityRef.current, audioIndex, subtitleIndex != null && subtitleIndex >= 0 ? subtitleIndex : subtitleIndex === -1 ? -1 : undefined, positionNow);
@@ -1495,6 +1551,28 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
+      // The buffering pill (Android TvBufferingPillCard): Left and Right move between its actions
+      // and never leave it, OK acts on key-up, Back is Keep quality on the prompt and hides the
+      // undo. Back reaches it from anywhere while it shows.
+      const bufferingCard = bufferingPillRef.current;
+      const inBufferingPill = Boolean(bufferingCard && document.activeElement instanceof HTMLElement && bufferingCard.contains(document.activeElement));
+      if (isBackKey(event) && bufferQuality.controller.pill.kind !== "hidden") {
+        event.preventDefault(); event.stopPropagation();
+        if (!event.repeat) bufferQuality.controller.back();
+        return;
+      }
+      if (inBufferingPill && bufferingCard) {
+        event.preventDefault(); event.stopPropagation();
+        if (event.repeat) return;
+        if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+          const buttons = Array.from(bufferingCard.querySelectorAll<HTMLButtonElement>("button"));
+          const next = buttons[buttons.indexOf(document.activeElement as HTMLButtonElement) + (event.key === "ArrowRight" ? 1 : -1)];
+          next?.focus();
+        } else if (event.key === "ArrowDown") {
+          revealHud("transport");
+        }
+        return;
+      }
       if (ui.current.upNextOpen) {
         if (isBackKey(event)) {
           event.preventDefault(); event.stopPropagation();
@@ -1761,6 +1839,12 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     };
 
     const onKeyUp = (event: KeyboardEvent) => {
+      const bufferingCard = bufferingPillRef.current;
+      if (bufferingCard && document.activeElement instanceof HTMLElement && bufferingCard.contains(document.activeElement) && (event.key === "Enter" || event.key === "OK" || event.key === " ")) {
+        event.preventDefault(); event.stopPropagation();
+        (document.activeElement as HTMLElement).click();
+        return;
+      }
       // Media keys act on keydown only (TvPlayerRemoteKeyAction.ConsumeOnly on
       // ACTION_UP); swallow the keyup so the system media-key fallback or the
       // browser cannot act on it a second time. webOS remotes also emit a
@@ -1988,6 +2072,20 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     {/* Outside .player-chrome, which is invisible while the controls are hidden. The skip pill shows in
         both states (Android's TvIntroAutoSkipBanner), and the hold-seek preview and skip chip exist only
         while the controls are hidden (#67). */}
+    {/* Buffering quality (Android TvPlayerNoticeOverlay): top left, a notice over the pill. */}
+    {!panel && (bufferQuality.notice || bufferQuality.pill.kind !== "hidden") ? <div className="buffering-overlay">
+      {bufferQuality.notice ? <div className="buffering-notice" role="status">{bufferQuality.notice === "lowered" ? BUFFERING_COPY.lowered : BUFFERING_COPY.cantLower}</div> : null}
+      {bufferQuality.pill.kind !== "hidden" ? <div className="buffering-pill" ref={bufferingPillRef} role="group" aria-label={bufferQuality.pill.kind === "prompt" ? BUFFERING_COPY.promptTitle : BUFFERING_COPY.lowered}>
+        <b className="buffering-pill-fill" style={{ width: `${(bufferQuality.pill.secondsRemaining / PROMPT_SECONDS) * 100}%` }} />
+        {bufferQuality.pill.kind === "prompt" ? <strong>{BUFFERING_COPY.promptTitle}</strong> : <small>{BUFFERING_COPY.lowered}</small>}
+        <div className="buffering-pill-actions">
+          {bufferQuality.pill.kind === "prompt" ? <>
+            <button type="button" className="buffering-pill-button primary" onClick={() => bufferQuality.controller.selectLower()}>{BUFFERING_COPY.lower}</button>
+            <button type="button" className="buffering-pill-button" onClick={() => bufferQuality.controller.selectKeep()}>{BUFFERING_COPY.keep}</button>
+          </> : <button type="button" className="buffering-pill-button primary" onClick={() => bufferQuality.controller.selectRestore()}>{BUFFERING_COPY.restore}</button>}
+        </div>
+      </div> : null}
+    </div> : null}
     {pill && !panel && !upNextCard ? <div className="skip-pill" data-controls={hud}>
       {pill.undo ? <small className="skip-pill-caption">Intro skipped</small> : null}
       <div ref={pillRef} className="skip-pill-capsule" tabIndex={-1} role="button" onClick={selectPill} data-prompt={pill.kind}>
