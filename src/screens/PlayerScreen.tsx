@@ -1859,7 +1859,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     ? [detail?.series_title ?? item.SeriesName, episodeCode].filter(Boolean).join(" · ")
     : "Movie";
   const audioTracks = version?.audio_tracks ?? [];
-  const plannedAudioIndex = Number(plan?.selected_tracks.audio?.id.match(/audio:(\\d+)$/)?.[1]);
+  const plannedAudioIndex = Number(plan?.selected_tracks.audio?.id.match(/audio:(\d+)$/)?.[1]);
   const effectiveAudioIndex = Number.isFinite(plannedAudioIndex) ? plannedAudioIndex : version?.effective_audio_track_index;
   const selectedAudioTrack = audioTracks.find(track => track.index === effectiveAudioIndex) ?? audioTracks.find(track => track.default) ?? audioTracks[0];
   const audioTrackDescription = (track: AudioTrack | undefined, index = 0) => track ? [track.title || track.language || `Track ${index + 1}`, track.codec?.toUpperCase(), track.channels ? `${track.channels} ch` : ""].filter(Boolean).join(" · ") : "Default";
