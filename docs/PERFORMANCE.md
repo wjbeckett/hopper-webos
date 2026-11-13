@@ -78,6 +78,17 @@ Left over:
 - Resumes whose keyframe gap is over 10 s still seek.
 - The first play after launch pays for loading hls.js. It could be loaded while Details is on screen.
 
+## Blur placeholders
+
+Measured on the LG 50UQ9000PSD (webOS 22) with 140 ThumbHashes from a real server, run in the app's page:
+
+| Decoder | Per hash |
+| --- | --- |
+| Reference algorithm, 32 px, canvas and PNG | 6.6 ms (decode 3.7, canvas 1.1, PNG 1.4) |
+| Cosines once per row and column, 16 px, BMP written by hand (`src/core/artwork.ts`) | about 2 ms while the code is new to the JIT, 0.6 ms after |
+
+A season of 130 episodes decodes in well under 150 ms once, and results are cached.
+
 ## Rules that came out of this
 
 - Keep the number of mounted cards small. Do not render what is far off screen.
