@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { placeRailItem, resetSlidingRail } from "../navigation/spatial";
+import { focusFromPointer } from "../navigation/pointer";
 import { backdropUrl, getCatalogItem, getEpisodes, getSeasons, getShuffleCapability, getSimilarItems, imageUrl, isFavorite, isInWatchlist, mediaLogoUrl, setFavorite, setWatched, setWatchlist } from "../api/silo";
 import { CastSection, FactsSection, TrailersSection, factsFor, useDetailExtras } from "../components/DetailSections";
 import { PlaybackOptionsDialog, PlaybackSummary, useWatchDetail } from "../components/PlaybackOptions";
@@ -110,6 +111,8 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
   const moreFirstRef = useRef<HTMLButtonElement>(null);
   const railRef = useRef<HTMLDivElement>(null);
   const seasonTabsRef = useRef<HTMLDivElement>(null);
+  /** The season was chosen by pointing at its button: the row stays still under the pointer. */
+  const seasonFromPointer = useRef(false);
   const entryHandled = useRef(false);
 
   useEffect(() => {
@@ -200,6 +203,7 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
   // The selected season's button is brought into its row, without animating, whenever the
   // season changes (on entry it may be far along the row).
   useEffect(() => {
+    if (seasonFromPointer.current) { seasonFromPointer.current = false; return; }
     const tab = seasonTabsRef.current?.querySelector<HTMLElement>(`[data-season-tab="${railSeasonNumber}"]`);
     if (tab) placeRailItem(tab);
   }, [railSeasonNumber, seasons.length]);
@@ -357,7 +361,7 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
                 data-tv-focusable="true"
                 data-season-tab={id}
                 className={`season-tab ${railSeasonNumber === seasonNumber(season) ? "active" : ""}`}
-                onFocus={() => selectMode(id)}
+                onFocus={() => { seasonFromPointer.current = focusFromPointer() && seasonNumber(season) !== railSeasonNumber; selectMode(id); }}
                 onClick={() => selectMode(id)}
               >
                 {seasonLabel(season)}

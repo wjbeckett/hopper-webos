@@ -113,7 +113,8 @@ export function installPointerNavigation() {
     const target = event.target instanceof Element ? event.target : null;
     if (!target) return;
     if (!target.closest(".pointer-pager")) {
-      const rail = target.closest<HTMLElement>(RAIL_SELECTOR);
+      // The season buttons are a sliding row too: the arrows are how the pointer reaches the clipped ones.
+      const rail = target.closest<HTMLElement>(`${RAIL_SELECTOR}, .season-tabs`);
       if (rail !== pager.rail) { pager.rail = rail; placePager(pager); }
     }
     const control = target.closest<HTMLElement>(FOCUSABLE);
