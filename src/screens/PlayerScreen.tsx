@@ -202,6 +202,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const sidecarTrack = useRef<TextTrack | null>(null);
   const closedSessions = useRef(new Set<string>());
   const stateRef = useRef<PlaybackState | undefined>(undefined);
+  /** The source position a plan was asked to start at, until its stream first plays. */
+  const startingAt = useRef<number | null>(null);
   const qualityRef = useRef("auto");
   const [detail, setDetail] = useState<WatchDetail>();
   const [version, setVersion] = useState<WatchDetail["versions"][number]>();
@@ -402,6 +404,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
 
   const sourcePosition = useCallback(() => {
     if (pendingSeekTarget.current != null) return pendingSeekTarget.current;
+    // Until the stream first plays its clock reads 0: the requested start is the position.
+    if (startingAt.current != null) return startingAt.current;
     const video = videoRef.current;
     const active = stateRef.current?.plan;
     return Math.max(0, (video?.currentTime ?? 0) + (active?.timeline.timeline_offset_seconds ?? 0));
@@ -409,10 +413,18 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
 
   const installPlan = useCallback((next: PlaybackState, playThroughSeconds = PLAY_THROUGH_SEEK_SECONDS) => {
     stateRef.current = next;
+    startingAt.current = next.plan.timeline.timeline_offset_seconds + next.plan.timeline.player_start_seconds;
     localStorage.setItem(ACTIVE_PLAYBACK_KEY, JSON.stringify({ sessionId: next.plan.session_id, serverUrl: session.serverUrl, profileId: session.profileId }));
     setPlan(next.plan);
     const video = videoRef.current;
     if (!video) return;
+    // A previous plan's start handler must not run for this one's media.
+    video.onloadedmetadata = null;
+    // Direct play fetches in CORS mode, so the audio-delay graph (platform/audioDelay) may read a
+    // file from another origin instead of playing silence. HLS media is a same-origin blob.
+    if (isDirectPlay(next.plan)) video.crossOrigin = "anonymous";
+    else video.removeAttribute("crossorigin");
+    video.addEventListener("playing", () => { if (stateRef.current === next) startingAt.current = null; }, { once: true });
     const streamUrl = playbackUrl(session, next.plan.stream.url);
     const sidecarHeaders = {
       Authorization: `Bearer ${session.accessToken}`,
