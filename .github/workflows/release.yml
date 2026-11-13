@@ -1,0 +1,91 @@
+name: Release
+
+# Builds the sideloadable IPK from main and drafts a GitHub release for it.
+#
+# Run it from the Actions tab ("Run workflow", branch main). It:
+#   1. builds, tests and packages the app with the pairing service (`npm run webos:package`);
+#   2. reads the version the build stamped into appinfo.json (<major>.<minor>.<commit count>);
+#   3. writes release notes from the merged pull requests' "Release note" lines
+#      (scripts/release-notes.mjs);
+#   4. creates a DRAFT release v<version> with the IPK and SHA256SUMS attached.
+# Review the draft, fill in Highlights, and publish it: publishing creates the tag on the commit
+# that was built. See docs/MAINTAINING.md, "Releases".
+
+on:
+  workflow_dispatch:
+    inputs:
+      prerelease:
+        description: Mark the release as a pre-release (Hopper is 0.x and not in the LG Content Store yet)
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # The version's third number is the commit count, and the notes need the previous tag.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm test
+
+      - name: Install the webOS CLI
+        run: npm install --global @webos-tools/cli@3.2.6
+
+      - name: Build and package the IPK
+        run: npm run webos:package
+
+      - name: Read the version
+        id: version
+        run: |
+          version="$(node -p "require('./dist/appinfo.json').version")"
+          ipk="$(ls release/*.ipk)"
+          if gh release view "v$version" >/dev/null 2>&1 || git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+            echo "::error::A release or tag v$version already exists. Merge a new commit to main first."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "ipk=$ipk" >> "$GITHUB_OUTPUT"
+          echo "Version $version, package $ipk"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Checksums
+        working-directory: release
+        run: sha256sum *.ipk > SHA256SUMS && cat SHA256SUMS
+
+      - name: Release notes
+        run: node scripts/release-notes.mjs --version "${{ steps.version.outputs.version }}" --ipk "$(basename "${{ steps.version.outputs.ipk }}")" > release-notes.md && cat release-notes.md
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Draft the release
+        run: |
+          gh release create "v${{ steps.version.outputs.version }}" \
+            --draft \
+            --target "$GITHUB_SHA" \
+            --title "Hopper ${{ steps.version.outputs.version }}" \
+            --notes-file release-notes.md \
+            ${{ inputs.prerelease && '--prerelease' || '' }} \
+            "${{ steps.version.outputs.ipk }}" release/SHA256SUMS
+          echo "Draft: $(gh release view "v${{ steps.version.outputs.version }}" --json url --jq .url)" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          GH_TOKEN: ${{ github.token }}
