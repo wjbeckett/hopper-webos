@@ -89,8 +89,10 @@ export function allowDolbyAudio(allowed: boolean) { dolbyAudioAllowed = allowed;
  * player is known to open; MKV (LG's player may claim a codec and still refuse the container) and
  * everything else stays on HLS. A <video src> cannot send headers, so the player puts the access
  * token in the URL's `token` parameter, the server's documented media-element fallback
- * (GET /api/v2/stream/{session_id}). A PIN-locked profile's proof travels only as a header, so
- * those profiles stay on HLS. A file the TV rejects is played again over HLS (allowDirectPlay).
+ * (GET /api/v2/stream/{session_id}). The request declares no profile, so a PIN-locked profile's
+ * proof (X-Profile-Token, "required only when the declared profile is locked") is not needed: the
+ * session was created with it. Checked on a TV with a PIN-locked profile. A file the TV rejects
+ * is played again over HLS (allowDirectPlay).
  */
 const DIRECT_PLAY_CONTAINERS = ["mp4", "mov", "m4v"];
 const DIRECT_PLAY_VIDEO = ["h264", "hevc"];
@@ -100,14 +102,14 @@ export function allowDirectPlay(allowed: boolean) { directPlayAllowed = allowed;
 export const isDirectPlay = (plan: PlaybackPlan | undefined) => plan?.delivery === "original_http";
 export const isDolbyAudio = (codec?: string) => /^(e?-?ac-?3|ec-3)$/i.test(codec ?? "");
 
-function snapshot(session?: Session) {
+function snapshot(_session?: Session) {
   const detected = probePlaybackCapabilities();
   const video = Object.entries(detected.codecs).filter(([name, ok]) => ok && ["h264", "hevc", "vp9", "av1"].includes(name)).map(([name]) => name);
   const audio = Object.entries(detected.codecs).filter(([name, ok]) => ok && ["aac", "ac3", "eac3", "opus"].includes(name) && (dolbyAudioAllowed || !isDolbyAudio(name))).map(([name]) => name);
   const subtitles = { embedded_text: false, sidecar_text: true, ass_styling: false, embedded_bitmap: false, sidecar_bitmap: false, font_attachments: false };
   const delivery = (containers: string[]) => ({ enabled: true, supported_on_device: true, containers, video_codecs: video, audio_decode_codecs: audio, audio_passthrough_codecs: [], max_channels: 8, subtitles, features: [], auth_header_refresh: false, validated_claims: [], transformations: [] });
   const unavailable = { ...delivery([]), enabled: false, supported_on_device: false, failure_reason: "webos_html_video_requires_hls_execution" };
-  const direct = directPlayAllowed && !session?.profileToken
+  const direct = directPlayAllowed
     ? { ...delivery(DIRECT_PLAY_CONTAINERS), video_codecs: video.filter(codec => DIRECT_PLAY_VIDEO.includes(codec)), audio_decode_codecs: audio.filter(codec => DIRECT_PLAY_AUDIO.includes(codec)) }
     : unavailable;
   const hdrOutput = localHdrEnabled() && displaySupportsHdr();
