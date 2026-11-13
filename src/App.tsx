@@ -755,8 +755,8 @@ export default function App() {
           const parentSeries = route.returnTo?.series ?? { Id: route.item.SeriesId ?? "", Name: route.item.SeriesName ?? "Series", Type: "Series" };
           setRoute({ name: "player", item: next, startPosition: 0, autoAdvanceCount, returnTo: { series: parentSeries, selectedEpisode: next } });
         }}
-        onBack={(elapsed) => {
-          publishWatchState(applyResumeState(route.item, elapsed));
+        onBack={(position) => {
+          publishWatchState(applyResumeState(route.item, position));
           leavePlayer(route);
         }}
         onEnded={route.shuffleId ? () => void advanceShuffleRoute(route.shuffleId!, route.item) : () => {
