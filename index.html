@@ -49,7 +49,12 @@
       .bs-mark { position: relative; width: 412px; height: 521px; }
       .bs-layer, .bs-react, .bs-body { position: absolute; top: 0; left: 0; width: 412px; height: 521px; }
       .bs-layer { display: block; overflow: visible; }
-      .bs-tile, .bs-body, .bs-play, .bs-glow, .bs-word { opacity: 0; will-change: transform, opacity; }
+      /* Not 0: a layer at opacity 0 is not rasterised, so on a TV busy launching the app each
+         shape only appeared once its layer had been drawn, mid-animation or after it. At
+         0.004 every layer is drawn from the first paint, behind LG's launch splash, and is
+         still invisible (about one grey level on this backdrop). The animation's first
+         keyframe takes them to 0. */
+      .bs-tile, .bs-body, .bs-play, .bs-glow, .bs-word { opacity: .004; will-change: transform, opacity; }
       .bs-react { will-change: transform; transform-origin: 206px 480.3px; }
       .bs-body { transform-origin: 206px 480.3px; }
       .bs-tile-a { transform-origin: 121px 119.8px; }
@@ -174,7 +179,7 @@
         // margin for the system's hand-over, then start. This does not wait for the load
         // event: the layers are animated by the compositor, so the animation can run while
         // the bundle loads.
-        var VISIBLE_MARGIN_MS = 250;
+        var VISIBLE_MARGIN_MS = 500;
         var armed = false;
         function whenVisible() {
           if (armed || document.hidden) return;
