@@ -816,6 +816,7 @@ export async function getCalendar(
       airTime: typeof raw.air_time === "string" ? raw.air_time : undefined,
       localAirDate: String(raw.local_air_date ?? day.date),
       posterUrl: typeof raw.poster_url === "string" ? raw.poster_url : undefined,
+      posterThumbhash: typeof raw.poster_thumbhash === "string" ? raw.poster_thumbhash : undefined,
       watched: raw.watched === true,
       badges: Array.isArray(raw.badges) ? raw.badges.filter((badge): badge is string => typeof badge === "string") : []
     })).filter(item => item.contentId)

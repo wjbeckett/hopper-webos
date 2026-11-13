@@ -32,6 +32,7 @@ function calendarItemToSiloItem(item: SiloCalendarItem): SiloItem {
     IndexNumber: item.episodeNumber,
     ProductionYear: Number(item.airDate.slice(0, 4)) || undefined,
     PosterUrl: item.posterUrl,
+    PosterThumbhash: item.posterThumbhash,
     UserData: { Played: item.watched }
   };
 }
