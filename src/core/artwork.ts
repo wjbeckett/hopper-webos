@@ -12,29 +12,15 @@
  * equivalent of LocalImagePresentationDeferral + DeferImagePresentationWhileScrolling.
  */
 
-const BASE64: Record<string, number> = {};
-{
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/".split("");
-  for (let i = 0; i < alphabet.length; i++) BASE64[alphabet[i]] = i;
-}
-
 function decodeBase64(hash: string): Uint8Array | null {
-  const clean = hash.replace(/=+$/, "");
-  if (!clean || /[^A-Za-z0-9+/]/.test(clean)) return null;
-  if (clean.length % 4 === 1) return null;
-  const bytes: number[] = [];
-  let bits = 0;
-  let buffered = 0;
-  for (const char of clean) {
-    bits = (bits << 6) | BASE64[char];
-    buffered += 6;
-    if (buffered >= 8) {
-      buffered -= 8;
-      bytes.push((bits >> buffered) & 255);
-      bits &= buffered === 0 ? 0 : (1 << buffered) - 1;
-    }
+  try {
+    const binary = atob(hash);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  } catch {
+    return null;
   }
-  return Uint8Array.from(bytes);
 }
 
 const thumbhashCache = new Map<string, string | null>();
@@ -61,10 +47,10 @@ export function thumbhashToDataURL(hash: string | null | undefined): string | nu
 
 /**
  * The reference ThumbHash decoder (https://evanw.github.io/thumbhash/, `thumbHashToRGBA`), as
- * Android ports it in android-shared ThumbHash.kt: a picture at most 32 px on its long edge.
+ * Android ports it in android-shared ThumbHash.kt: a picture at most `maxEdge` px on its long edge.
  * Returns null for bytes that are not a ThumbHash.
  */
-export function thumbHashToRGBA(hash: Uint8Array): { width: number; height: number; rgba: Uint8ClampedArray } | null {
+export function thumbHashToRGBA(hash: Uint8Array, maxEdge = 32): { width: number; height: number; rgba: Uint8ClampedArray } | null {
   if (hash.length < 5) return null;
   const header24 = hash[0] | (hash[1] << 8) | (hash[2] << 16);
   const header16 = hash[3] | (hash[4] << 8);
@@ -106,16 +92,22 @@ export function thumbHashToRGBA(hash: Uint8Array): { width: number; height: numb
   if (truncated) return null;
 
   const ratio = lx / ly;
-  const width = Math.max(1, Math.round(ratio > 1 ? 32 : 32 * ratio));
-  const height = Math.max(1, Math.round(ratio > 1 ? 32 / ratio : 32));
+  const width = Math.max(1, Math.round(ratio > 1 ? maxEdge : maxEdge * ratio));
+  const height = Math.max(1, Math.round(ratio > 1 ? maxEdge / ratio : maxEdge));
   const rgba = new Uint8ClampedArray(width * height * 4);
-  const fx: number[] = new Array(Math.max(lx, hasAlpha ? 5 : 3)).fill(0);
-  const fy: number[] = new Array(Math.max(ly, hasAlpha ? 5 : 3)).fill(0);
+  // The cosines depend only on the column or the row, so they are worked out once each (the
+  // reference recomputes them for every pixel, which costs several ms per hash on a TV).
+  const nx = Math.max(lx, hasAlpha ? 5 : 3);
+  const ny = Math.max(ly, hasAlpha ? 5 : 3);
+  const cosX = new Float64Array(width * nx);
+  const cosY = new Float64Array(height * ny);
+  for (let x = 0; x < width; x++) for (let cx = 0; cx < nx; cx++) cosX[x * nx + cx] = Math.cos(Math.PI / width * (x + 0.5) * cx);
+  for (let y = 0; y < height; y++) for (let cy = 0; cy < ny; cy++) cosY[y * ny + cy] = Math.cos(Math.PI / height * (y + 0.5) * cy);
   for (let y = 0, i = 0; y < height; y++) {
+    const fy = cosY.subarray(y * ny, y * ny + ny);
     for (let x = 0; x < width; x++, i += 4) {
+      const fx = cosX.subarray(x * nx, x * nx + nx);
       let l = lDc, p = pDc, q = qDc, a = aDc;
-      for (let cx = 0; cx < fx.length; cx++) fx[cx] = Math.cos(Math.PI / width * (x + 0.5) * cx);
-      for (let cy = 0; cy < fy.length; cy++) fy[cy] = Math.cos(Math.PI / height * (y + 0.5) * cy);
       for (let cy = 0, j = 0; cy < ly; cy++) {
         const fy2 = fy[cy] * 2;
         for (let cx = cy ? 0 : 1; cx * ly < lx * (ly - cy); cx++, j++) l += lAc[j] * fx[cx] * fy2;
@@ -146,24 +138,49 @@ export function thumbHashToRGBA(hash: Uint8Array): { width: number; height: numb
   return { width, height, rgba };
 }
 
-function decodeThumbhash(hash: string): string | null {
-  if (typeof document === "undefined") return null;
-  const bytes = decodeBase64(hash);
-  const decoded = bytes ? thumbHashToRGBA(bytes) : null;
-  if (!decoded) return null;
-  const canvas = document.createElement("canvas");
-  canvas.width = decoded.width;
-  canvas.height = decoded.height;
-  const context = canvas.getContext("2d");
-  if (!context) return null;
-  const image = context.createImageData(decoded.width, decoded.height);
-  image.data.set(decoded.rgba);
-  context.putImageData(image, 0, 0);
-  try {
-    return canvas.toDataURL("image/png");
-  } catch {
-    return null;
+/**
+ * The decoded picture as a BMP data URL. Writing the few kilobytes of a BMP by hand is several
+ * times cheaper on a TV than drawing to a canvas and encoding a PNG.
+ */
+const BYTE_CHARS = Array.from({ length: 256 }, (_, byte) => String.fromCharCode(byte));
+
+function bmpDataUrl({ width, height, rgba }: { width: number; height: number; rgba: Uint8ClampedArray }): string {
+  const headerSize = 14 + 108;
+  const bytes = new Uint8Array(headerSize + width * height * 4);
+  const view = new DataView(bytes.buffer);
+  bytes[0] = 0x42; bytes[1] = 0x4d; // "BM"
+  view.setUint32(2, bytes.length, true);
+  view.setUint32(10, headerSize, true);
+  view.setUint32(14, 108, true); // BITMAPV4HEADER, which carries an alpha mask
+  view.setInt32(18, width, true);
+  view.setInt32(22, -height, true); // top row first
+  view.setUint16(26, 1, true);
+  view.setUint16(28, 32, true);
+  view.setUint32(30, 3, true); // BI_BITFIELDS
+  view.setUint32(34, width * height * 4, true);
+  view.setUint32(54, 0x00ff0000, true);
+  view.setUint32(58, 0x0000ff00, true);
+  view.setUint32(62, 0x000000ff, true);
+  view.setUint32(66, 0xff000000, true);
+  view.setUint32(70, 0x73524742, true); // "sRGB"
+  for (let i = 0, o = headerSize; i < rgba.length; i += 4, o += 4) {
+    bytes[o] = rgba[i + 2];
+    bytes[o + 1] = rgba[i + 1];
+    bytes[o + 2] = rgba[i];
+    bytes[o + 3] = rgba[i + 3];
   }
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += BYTE_CHARS[bytes[i]];
+  return `data:image/bmp;base64,${btoa(binary)}`;
+}
+
+function decodeThumbhash(hash: string): string | null {
+  const bytes = decodeBase64(hash);
+  // 16 px, not Android's 32: a ThumbHash holds only a few low-frequency terms, so the browser's
+  // scaling draws the same blur, and a quarter of the pixels keeps a 130-episode season to a few
+  // tens of ms on a TV.
+  const decoded = bytes ? thumbHashToRGBA(bytes, 16) : null;
+  return decoded ? bmpDataUrl(decoded) : null;
 }
 
 /**
