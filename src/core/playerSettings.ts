@@ -67,9 +67,6 @@ export function setLocalDolbyVisionEnabled(value: boolean) {
   writeLocal("player.dolby_vision_enabled", value);
 }
 
-export function displaySupportsHdr() {
-  try { return typeof matchMedia === "function" && matchMedia("(dynamic-range: high)").matches; } catch { return false; }
-}
 
 function clampedMs(key: string, limit: number) {
   const value = Number(readLocal(key));

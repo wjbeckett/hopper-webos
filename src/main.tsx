@@ -5,10 +5,13 @@ import "./styles.css";
 import { afterBootSplashStarts, releaseBootSplashWhenDone } from "./core/bootSplash";
 import { migratePlainSessions, serverRegistry } from "./core/serverRegistry";
 import { loadSecrets } from "./core/secureStore";
+import { probeDisplayHdr } from "./platform/displayHdr";
 
 // webOS TVs run an old Chromium (87 on webOS 22) on a weak GPU. This class
 // switches on the lighter paint rules in styles.css.
 if (/Web0S|webOS/i.test(navigator.userAgent)) document.documentElement.classList.add("webos");
+// Asked now so the answer is in before the first playback request (platform/displayHdr).
+probeDisplayHdr();
 
 // Sign-in tokens are encrypted at rest (core/secureStore). Decrypt them before anything reads
 // a session; the static splash in index.html is already on screen meanwhile.
