@@ -105,6 +105,24 @@ const uuid = (prefix: string) => `${prefix}:${randomUuid()}`;
  */
 let dolbyAudioAllowed = true;
 export function allowDolbyAudio(allowed: boolean) { dolbyAudioAllowed = allowed; }
+
+/*
+ * Direct play (original_http): the TV's own player opens the file as it is, and Silo only sends
+ * it. Offered for MP4, MOV and M4V with H.264 or HEVC video and AAC audio, the files the TV's
+ * player is known to open; MKV (LG's player may claim a codec and still refuse the container) and
+ * everything else stays on HLS. A <video src> cannot send headers, so the player puts the access
+ * token in the URL's `token` parameter, the server's documented media-element fallback
+ * (GET /api/v2/stream/{session_id}). The request declares no profile, so a PIN-locked profile's
+ * proof (X-Profile-Token, "required only when the declared profile is locked") is not needed: the
+ * session was created with it. Checked on a TV with a PIN-locked profile. A file the TV rejects
+ * is played again over HLS (allowDirectPlay).
+ */
+const DIRECT_PLAY_CONTAINERS = ["mp4", "mov", "m4v"];
+const DIRECT_PLAY_VIDEO = ["h264", "hevc"];
+const DIRECT_PLAY_AUDIO = ["aac"];
+let directPlayAllowed = true;
+export function allowDirectPlay(allowed: boolean) { directPlayAllowed = allowed; }
+export const isDirectPlay = (plan: PlaybackPlan | undefined) => plan?.delivery === "original_http";
 export const isDolbyAudio = (codec?: string) => /^(e?-?ac-?3|ec-3)$/i.test(codec ?? "");
 
 function snapshot() {
@@ -114,14 +132,14 @@ function snapshot() {
   const subtitles = { embedded_text: false, sidecar_text: true, ass_styling: false, embedded_bitmap: false, sidecar_bitmap: false, font_attachments: false };
   const delivery = (containers: string[]) => ({ enabled: true, supported_on_device: true, containers, video_codecs: video, audio_decode_codecs: audio, audio_passthrough_codecs: [], max_channels: 8, subtitles, features: [], auth_header_refresh: false, validated_claims: [], transformations: [] });
   const unavailable = { ...delivery([]), enabled: false, supported_on_device: false, failure_reason: "webos_html_video_requires_hls_execution" };
-  // LG's native HTML player may report a codec as playable while still rejecting
-  // its original MKV/WebM container. Do not advertise original-file execution;
-  // let Silo remux/transcode to an execution route the TV can reliably open.
+  const direct = directPlayAllowed
+    ? { ...delivery(DIRECT_PLAY_CONTAINERS), video_codecs: video.filter(codec => DIRECT_PLAY_VIDEO.includes(codec)), audio_decode_codecs: audio.filter(codec => DIRECT_PLAY_AUDIO.includes(codec)) }
+    : unavailable;
   const hdrOutput = localHdrEnabled() && displaySupportsHdr();
   const dolbyProfiles = advertisableDolbyVisionProfiles(localDolbyVisionEnabled());
   const hdr_details = { hdr10: hdrOutput, hdr10_plus: false, hlg: hdrOutput, dolby_vision_profiles: dolbyProfiles.map(entry => entry.profile), ...(dolbyProfiles.length ? { dolby_vision_profile_levels: dolbyProfiles } : {}) };
   const client_capabilities = { video_evidence: "declared", audio_evidence: "declared", codecs_video: video, codecs_video_hardware: [], codecs_audio: audio, containers: ["hls", "mpegts", "fmp4", "mp4", "mov", "m4v"], max_resolution: "2160p", hdr: hdrOutput, video_decode: [] };
-  const client_playback_context = { protocol_version: 3, form_factor: "tv", app_version: clientIdentity.version, device: { platform: "webos", manufacturer: "LG", platform_details: { user_agent: navigator.userAgent.slice(0, 128) } }, output: { display: { hdr_evidence: displayHdrEvidence(), hdr_types: hdr_details }, hdr_details }, deliveries: { original_http: unavailable, progressive: unavailable, hls: delivery(["hls", "mpegts", "fmp4", "mp4"]) } };
+  const client_playback_context = { protocol_version: 3, form_factor: "tv", app_version: clientIdentity.version, device: { platform: "webos", manufacturer: "LG", platform_details: { user_agent: navigator.userAgent.slice(0, 128) } }, output: { display: { hdr_evidence: displayHdrEvidence(), hdr_types: hdr_details }, hdr_details }, deliveries: { original_http: direct, progressive: unavailable, hls: delivery(["hls", "mpegts", "fmp4", "mp4"]) } };
   return { client_capabilities, client_playback_context };
 }
 

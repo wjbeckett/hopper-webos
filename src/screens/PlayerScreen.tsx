@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { connectionStatus, holdConnectionDialog, NetworkError, onceReachable, reportNetworkFailure, subscribeConnection } from "../api/connection";
 import type Hls from "hls.js";
 import { pinFocusedRailItem } from "../navigation/spatial";
-import { allowDolbyAudio, setBufferingQualityMode, bestVersionForDevice, getMarkers, isDolbyAudio, getTrickplay, getWatchDetail, playbackUrl, replanPlaybackV3, reportProgress, saveAudioPreference, saveSubtitlePreference, startPlaybackV3, stopPlayback, stopPlaybackKeepalive, type AudioTrack, type FileMarkers, type MarkerSegment, type PlaybackChoices, type PlaybackPlan, type Quality, type SubtitleInventory, type Trickplay, type WatchDetail } from "../api/playback";
+import { allowDirectPlay, isDirectPlay, allowDolbyAudio, setBufferingQualityMode, bestVersionForDevice, getMarkers, isDolbyAudio, getTrickplay, getWatchDetail, playbackUrl, replanPlaybackV3, reportProgress, saveAudioPreference, saveSubtitlePreference, startPlaybackV3, stopPlayback, stopPlaybackKeepalive, type AudioTrack, type FileMarkers, type MarkerSegment, type PlaybackChoices, type PlaybackPlan, type Quality, type SubtitleInventory, type Trickplay, type WatchDetail } from "../api/playback";
 import type { HomeRail, Session, SiloItem } from "../types";
 import { getEffectiveSettings, putScopedSetting } from "../api/settings";
 import { artUrl, getHomeRails, getShuffle, skipShuffle } from "../api/silo";
@@ -40,6 +40,13 @@ const PLAY_THROUGH_SEEK_SECONDS = 3;
 const MAX_OUTAGE_RESTARTS = 3;
 /** Stream failures closer together than this count as the same problem (see recoverStream). */
 const STREAM_FAILURE_WINDOW_MS = 60000;
+
+/** `url` with one query parameter added (or replaced). */
+function withQueryParam(url: string, name: string, value: string) {
+  const parsed = new URL(url, window.location.href);
+  parsed.searchParams.set(name, value);
+  return parsed.toString();
+}
 /** After this long in the background the stream is started again on return: the server may have closed it. */
 const BACKGROUND_RESTART_MS = 10 * 60 * 1000;
 
@@ -197,6 +204,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const sidecarTrack = useRef<TextTrack | null>(null);
   const closedSessions = useRef(new Set<string>());
   const stateRef = useRef<PlaybackState | undefined>(undefined);
+  /** The source position a plan was asked to start at, until its stream first plays. */
+  const startingAt = useRef<number | null>(null);
   const qualityRef = useRef("auto");
   // Buffering quality: lowers Auto (or offers to) when playback keeps buffering. See
   // playerBufferingQuality. The sender is set once installPlan exists, below.
@@ -416,6 +425,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
 
   const sourcePosition = useCallback(() => {
     if (pendingSeekTarget.current != null) return pendingSeekTarget.current;
+    // Until the stream first plays its clock reads 0: the requested start is the position.
+    if (startingAt.current != null) return startingAt.current;
     const video = videoRef.current;
     const active = stateRef.current?.plan;
     return Math.max(0, (video?.currentTime ?? 0) + (active?.timeline.timeline_offset_seconds ?? 0));
@@ -424,12 +435,20 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const installPlan = useCallback((next: PlaybackState, playThroughSeconds = PLAY_THROUGH_SEEK_SECONDS) => {
     const replacesPlaying = stateRef.current?.playbackAttemptId === next.playbackAttemptId;
     stateRef.current = next;
+    startingAt.current = next.plan.timeline.timeline_offset_seconds + next.plan.timeline.player_start_seconds;
     bufferQuality.adopt(next.plan, next.planAttemptId, qualityRef.current, bufferingInitiated.current, replacesPlaying);
     bufferingInitiated.current = false;
     localStorage.setItem(ACTIVE_PLAYBACK_KEY, JSON.stringify({ sessionId: next.plan.session_id, serverUrl: session.serverUrl, profileId: session.profileId }));
     setPlan(next.plan);
     const video = videoRef.current;
     if (!video) return;
+    // A previous plan's start handler must not run for this one's media.
+    video.onloadedmetadata = null;
+    // Direct play fetches in CORS mode, so the audio-delay graph (platform/audioDelay) may read a
+    // file from another origin instead of playing silence. HLS media is a same-origin blob.
+    if (isDirectPlay(next.plan)) video.crossOrigin = "anonymous";
+    else video.removeAttribute("crossorigin");
+    video.addEventListener("playing", () => { if (stateRef.current === next) startingAt.current = null; }, { once: true });
     const streamUrl = playbackUrl(session, next.plan.stream.url);
     const sidecarHeaders = {
       Authorization: `Bearer ${session.accessToken}`,
@@ -553,7 +572,9 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         hls.attachMedia(video);
       }).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not load HLS playback support."));
     } else {
-      video.src = streamUrl;
+      // Direct play: the TV's player fetches the file itself and cannot send headers, so the
+      // access token goes in the server's `token` parameter (see allowDirectPlay).
+      video.src = isDirectPlay(next.plan) && session.accessToken ? withQueryParam(streamUrl, "token", session.accessToken) : streamUrl;
       video.load();
       video.onloadedmetadata = beginNative;
     }
@@ -842,6 +863,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       setPlayerSettingsLoaded(true);
     });
     allowDolbyAudio(true);
+    allowDirectPlay(true);
     getWatchDetail(session, item).then(async (watch) => {
       if (!alive) return;
       const selectedVersion = watch.versions.find(entry => entry.file_id === choices?.fileId)
@@ -1494,6 +1516,14 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     if (!active || !detail || !version || outageWait.current) return false;
     // Already starting again: the same fault reported twice, not a second failure.
     if (restartId.current) return true;
+    // A file the TV would not play as it is: play it again over HLS, before any other recovery.
+    if (isDirectPlay(active.plan)) {
+      clientDiagnostic("direct play failed; starting again over HLS", { reason });
+      allowDirectPlay(false);
+      setError("");
+      void resumeAfterOutage(sourcePosition());
+      return true;
+    }
     const failures = streamFailures.current;
     const now = performance.now();
     if (now - failures.at > STREAM_FAILURE_WINDOW_MS) failures.count = 0;
@@ -1528,7 +1558,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       protocol: stateRef.current?.plan.stream.protocol,
       container: stateRef.current?.plan.stream.container,
       mimeType: stateRef.current?.plan.stream.mime_type,
-      streamUrl: video?.currentSrc || video?.src
+      streamUrl: (video?.currentSrc || video?.src || "").replace(/([?&]token=)[^&]*/, "$1…")
     };
     clientDiagnostic("LG media playback failed", diagnostics);
     setError(`LG playback error: ${reason} · ${diagnostics.delivery ?? "unknown route"} · ${diagnostics.container ?? diagnostics.mimeType ?? "unknown format"}`);
