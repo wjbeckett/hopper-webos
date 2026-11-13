@@ -30,6 +30,14 @@ export function probeDisplayHdr() {
   } catch { /* no config service: keep the media query */ }
 }
 
+/**
+ * "exact" once the TV has answered, as Android sends for a successful display probe. Silo
+ * refuses HDR output on "unknown", so without it the answer above would change nothing.
+ */
+export function displayHdrEvidence(): "exact" | "unknown" {
+  return configSaysHdr != null ? "exact" : "unknown";
+}
+
 export function displaySupportsHdr(): boolean {
   if (configSaysHdr != null) return configSaysHdr;
   try { return typeof matchMedia === "function" && matchMedia("(dynamic-range: high)").matches; } catch { return false; }
