@@ -213,6 +213,9 @@ export function LibraryBrowsePanels({
 
   function clearFacet(facet: Facet) {
     setDraft(current => ({ ...current, [facet.id]: [] }));
+    // The Clear row goes away with the selection; put focus on the row above it.
+    // Not preventScroll: in a list scrolled down, the row must come back into view.
+    document.querySelector<HTMLElement>(".browse-panel [data-browse-panel-initial-focus]")?.focus();
   }
 
   function facetSummary(facet: Facet) {

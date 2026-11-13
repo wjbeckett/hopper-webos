@@ -1,7 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { imageUrl, searchItems } from "../api/silo";
 import { MediaCard } from "../components/MediaCard";
+import { homeRailsKey } from "../core/homeRailsCache";
 import type { Session, SiloItem } from "../types";
+
+/**
+ * The search a result was opened from. The screen unmounts while the result's page or the
+ * player is open; Back shows the same query and results again, with focus on that result.
+ * Choosing Search from the top bar starts empty.
+ */
+let openedFrom: { owner: string; query: string; items: SiloItem[]; index: number } | null = null;
 
 export function SearchScreen({
   session,
@@ -10,12 +18,35 @@ export function SearchScreen({
   session: Session;
   onOpen: (item: SiloItem) => void;
 }) {
-  const [query, setQuery] = useState("");
-  const [items, setItems] = useState<SiloItem[]>([]);
+  const [returned] = useState(() => {
+    const from = openedFrom?.owner === homeRailsKey(session) ? openedFrom : null;
+    openedFrom = null;
+    return from;
+  });
+  const [query, setQuery] = useState(returned?.query ?? "");
+  const [items, setItems] = useState<SiloItem[]>(returned?.items ?? []);
+  // The query the shown results came from. The field can be ahead of it while a search is
+  // pending, and Back must return the results with the query that found them.
+  const resultsQuery = useRef(returned?.query ?? "");
+  // The results shown on return are the ones already fetched; only a changed query searches again.
+  const skipSearch = useRef(returned !== null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (!returned) return;
+    const frame = requestAnimationFrame(() => {
+      const cards = document.querySelectorAll<HTMLElement>(".search-screen .library-grid .media-card");
+      const card = cards[returned.index] ?? cards[0];
+      if (!card) return;
+      card.scrollIntoView({ block: "center" });
+      card.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [returned]);
+
+  useEffect(() => {
+    if (skipSearch.current) { skipSearch.current = false; return; }
     let alive = true;
     const trimmed = query.trim();
     if (!trimmed) {
@@ -30,7 +61,7 @@ export function SearchScreen({
       setError("");
       try {
         const results = await searchItems(session, trimmed);
-        if (alive) setItems(results);
+        if (alive) { resultsQuery.current = trimmed; setItems(results); }
       } catch (cause) {
         if (alive) setError(cause instanceof Error ? cause.message : "Search failed.");
       } finally {
@@ -57,7 +88,7 @@ export function SearchScreen({
           type="search"
           className="search-input"
           data-tv-focusable="true"
-          autoFocus
+          autoFocus={!returned}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search your Silo library"
@@ -80,13 +111,13 @@ export function SearchScreen({
         </div>
       ) : null}
       {items.length ? <div className="library-grid">
-        {items.map((item) => (
+        {items.map((item, index) => (
           <MediaCard
             key={item.Id}
             session={session}
             item={item}
             image={imageUrl(session, item)}
-            onOpen={() => onOpen(item)}
+            onOpen={() => { openedFrom = { owner: homeRailsKey(session), query: resultsQuery.current, items, index }; onOpen(item); }}
           />
         ))}
       </div> : null}

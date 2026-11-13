@@ -810,8 +810,9 @@ export function installSpatialNavigation() {
     if (!allFocusables.length) return;
     const current = document.activeElement instanceof HTMLElement && allFocusables.includes(document.activeElement)
       ? document.activeElement
-      : focusables(".content-screen .media-card")[0]
-        ?? focusables(".tv-nav [data-nav-primary][aria-current='page']")[0]
+      // With the sort or filter panel open, lost focus comes back into the panel, never to the grid behind it.
+      : (browsePanelOpen ? undefined : focusables(".content-screen .media-card")[0]
+        ?? focusables(".tv-nav [data-nav-primary][aria-current='page']")[0])
         ?? allFocusables[0];
     if (document.activeElement !== current) {
       focusElement(current);
@@ -827,6 +828,15 @@ export function installSpatialNavigation() {
         .map(candidate => ({ candidate, score: candidateScore(from, candidate.getBoundingClientRect(), direction) }))
         .sort((a, b) => a.score - b.score)[0];
       if (target && Number.isFinite(target.score)) focusElement(target.candidate);
+      event.preventDefault();
+      return;
+    }
+
+    // The profile picker's buttons (Manage, Change server, Sign out) are one row: Left and Right
+    // stop at its ends instead of jumping up to a profile.
+    const pickerActions = current.closest<HTMLElement>(".profile-selection-actions");
+    if (pickerActions && (direction === "left" || direction === "right")) {
+      focusAdjacent(current, allFocusables.filter(item => pickerActions.contains(item)), direction);
       event.preventDefault();
       return;
     }

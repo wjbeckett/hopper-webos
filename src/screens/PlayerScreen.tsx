@@ -979,7 +979,10 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     setSkipFeedback({ delta: Math.round(deltaSeconds), target, nonce: nonceRef.current });
     if (feedbackTimer.current) window.clearTimeout(feedbackTimer.current);
     feedbackTimer.current = window.setTimeout(() => setSkipFeedback(null), SKIP_FEEDBACK_HIDE_MS);
-    if (reveal) revealHud();
+    // Controls that were hidden come up with focus on the timeline, where the next Left or Right
+    // skips again (Android TV: TvIdleOverlayFocusTarget.Scrubber). Without it the next press
+    // moved along the buttons instead.
+    if (reveal) revealHud(ui.current.hud ? undefined : "scrubber");
   }, [revealHud, seekToPosition]);
 
   // The intro pill's countdown creeps only while playback runs; a pause holds
@@ -1070,7 +1073,9 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const sheetImages = useRef(new Map<number, HTMLImageElement>());
   const sheetLoads = useRef(new Map<number, "loading" | "ready" | "failed">());
   const previewSeconds = scrubPreview ?? tapPreview;
-  const wantedTile = trickplay && previewSeconds != null ? trickplayTileAt(trickplay, previewSeconds) : null;
+  // A hold-seek with the controls hidden previews its own position.
+  const tileSeconds = cleanSeek?.preview ?? previewSeconds;
+  const wantedTile = trickplay && tileSeconds != null ? trickplayTileAt(trickplay, tileSeconds) : null;
   if (wantedTile) {
     for (const index of [wantedTile.sheet, wantedTile.sheet + 1]) {
       if (index >= trickplay!.sheets.length || sheetLoads.current.has(index)) continue;
@@ -1669,10 +1674,13 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       if (event.key === "ArrowDown") {
         event.preventDefault(); event.stopPropagation();
         if (event.repeat) return;
-        if (onScrubber) focusTransport();
-        else if (onPill) revealHud("transport");
-        else if (onTransportButton) { /* bottom row: stay */ }
+        // Focus stays on the timeline or a button after the controls hide, so the hidden state
+        // is checked before where focus is; otherwise Down did nothing once they had been shown.
+        // A hold-seek running or about to start must not carry on under the controls.
+        if (onPill) { stopCleanSeek(); revealHud("transport"); }
         else if (snapshot.cleanSeek) stopCleanSeek();
+        else if (snapshot.hud && onScrubber) focusTransport();
+        else if (snapshot.hud && onTransportButton) { /* bottom row: stay */ }
         else if (!snapshot.hud) {
           const tab: HudTab = snapshot.audioAvailable ? "Audio" : snapshot.subtitlesAvailable ? "Subtitles" : "Video";
           setPanel(tab === "Audio" ? "audio" : tab === "Subtitles" ? "subtitles" : "quality");
@@ -1685,9 +1693,9 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       if (event.key === "ArrowUp") {
         event.preventDefault(); event.stopPropagation();
         if (event.repeat) return;
-        if (onTransportButton) scrubberRef.current?.focus();
+        if (!snapshot.hud && !onPill && !snapshot.cleanSeek) revealHud("transport");
+        else if (onTransportButton) scrubberRef.current?.focus();
         else if (onScrubber && snapshot.pill) pillRef.current?.focus();
-        else if (!snapshot.hud && !onPill && !snapshot.cleanSeek) revealHud("transport");
         return;
       }
 
@@ -1855,7 +1863,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     ? [detail?.series_title ?? item.SeriesName, episodeCode].filter(Boolean).join(" · ")
     : "Movie";
   const audioTracks = version?.audio_tracks ?? [];
-  const plannedAudioIndex = Number(plan?.selected_tracks.audio?.id.match(/audio:(\\d+)$/)?.[1]);
+  const plannedAudioIndex = Number(plan?.selected_tracks.audio?.id.match(/audio:(\d+)$/)?.[1]);
   const effectiveAudioIndex = Number.isFinite(plannedAudioIndex) ? plannedAudioIndex : version?.effective_audio_track_index;
   const selectedAudioTrack = audioTracks.find(track => track.index === effectiveAudioIndex) ?? audioTracks.find(track => track.default) ?? audioTracks[0];
   const audioTrackDescription = (track: AudioTrack | undefined, index = 0) => track ? [track.title || track.language || `Track ${index + 1}`, track.codec?.toUpperCase(), track.channels ? `${track.channels} ch` : ""].filter(Boolean).join(" · ") : "Default";
