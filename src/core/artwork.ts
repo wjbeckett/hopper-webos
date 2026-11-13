@@ -27,7 +27,7 @@ const thumbhashCache = new Map<string, string | null>();
 const MAX_CACHE_ENTRIES = 256;
 
 /**
- * Decode a base64 ThumbHash into a small PNG data URL suitable for
+ * Decode a base64 ThumbHash into a small BMP data URL suitable for
  * `object-fit: cover` fill. Returns null for missing/malformed hashes.
  * Results are cached process-wide (Android keeps a 256-entry LRU cache).
  */
@@ -138,12 +138,12 @@ export function thumbHashToRGBA(hash: Uint8Array, maxEdge = 32): { width: number
   return { width, height, rgba };
 }
 
+const BYTE_CHARS = Array.from({ length: 256 }, (_, byte) => String.fromCharCode(byte));
+
 /**
  * The decoded picture as a BMP data URL. Writing the few kilobytes of a BMP by hand is several
  * times cheaper on a TV than drawing to a canvas and encoding a PNG.
  */
-const BYTE_CHARS = Array.from({ length: 256 }, (_, byte) => String.fromCharCode(byte));
-
 function bmpDataUrl({ width, height, rgba }: { width: number; height: number; rgba: Uint8ClampedArray }): string {
   const headerSize = 14 + 108;
   const bytes = new Uint8Array(headerSize + width * height * 4);
