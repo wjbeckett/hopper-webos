@@ -87,6 +87,7 @@ export type SiloCalendarItem = {
   airTime?: string;
   localAirDate: string;
   posterUrl?: string;
+  posterThumbhash?: string;
   watched: boolean;
   badges: string[];
 };

@@ -215,6 +215,9 @@ type NativeItem = Record<string, unknown> & {
   rating_tmdb?: number;
   logo_url?: string;
   still_url?: string;
+  /** Episode lists (seasons/{n}/episodes) send the still's thumbhash and flag under these names. */
+  still_thumbhash?: string;
+  still_is_episode_still?: boolean;
   progress_percent?: number;
   position_seconds?: number;
   user_data?: {
@@ -386,9 +389,9 @@ function toItem(item: NativeItem): SiloItem {
     RunTimeTicks: typeof runtimeSeconds === "number" ? runtimeSeconds * 10_000_000 : undefined,
     PosterUrl: item.poster_url ?? item.still_url,
     BackdropUrl: item.backdrop_url,
-    PosterThumbhash: item.poster_thumbhash,
+    PosterThumbhash: item.poster_thumbhash ?? (item.poster_url ? undefined : item.still_thumbhash),
     BackdropThumbhash: item.backdrop_thumbhash,
-    PosterIsEpisodeStill: item.poster_is_episode_still,
+    PosterIsEpisodeStill: item.poster_is_episode_still ?? (item.poster_url ? undefined : item.still_is_episode_still),
     BackdropIsEpisodeStill: item.backdrop_is_episode_still,
     LogoUrl: item.logo_url,
     UserData: hasUserState ? userState : undefined
@@ -813,6 +816,7 @@ export async function getCalendar(
       airTime: typeof raw.air_time === "string" ? raw.air_time : undefined,
       localAirDate: String(raw.local_air_date ?? day.date),
       posterUrl: typeof raw.poster_url === "string" ? raw.poster_url : undefined,
+      posterThumbhash: typeof raw.poster_thumbhash === "string" ? raw.poster_thumbhash : undefined,
       watched: raw.watched === true,
       badges: Array.isArray(raw.badges) ? raw.badges.filter((badge): badge is string => typeof badge === "string") : []
     })).filter(item => item.contentId)
