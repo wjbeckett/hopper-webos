@@ -6,7 +6,7 @@ import { MediaCard } from "../components/MediaCard";
 import { browsePrefsKey, readBrowsePrefs, readPreserve, writeBrowsePrefs, writePreserve } from "../core/browsePrefs";
 import { LibraryBrowsePanels } from "./LibraryBrowsePanels";
 import type { BrowseSortKey, BrowseSortOption } from "./LibraryBrowsePanels";
-import { attemptFirstContentFocus, focusFirstContentCard, focusNavigationTarget } from "../navigation/spatial";
+import { attemptFirstContentFocus, focusFirstContentCard, focusNavigationTarget, resetLibraryResults } from "../navigation/spatial";
 import type { Session, SiloItem, SiloLibrary } from "../types";
 import { LoadingState } from "../components/LoadingState";
 import { isTvDevice } from "../core/artwork";
@@ -160,6 +160,16 @@ function sortedSafePrefix(
   accepts: (item: SiloItem) => boolean,
   previousItems: SiloItem[] = []
 ) {
+  // One library: the server's order is final, so nothing needs merging or sorting (a full sort
+  // of a few hundred items cost about 200 ms on a TV each time a page landed).
+  const keys = Object.keys(streams);
+  if (keys.length === 1) {
+    const seen = new Set<string>();
+    const items = (streams[keys[0]] ?? []).filter(item => accepts(item) && !seen.has(item.Id) && Boolean(seen.add(item.Id)));
+    const previousIds = new Set(previousItems.map(item => item.Id));
+    const stablePrefix = previousItems.filter(item => seen.has(item.Id));
+    return [...stablePrefix, ...items.filter(item => !previousIds.has(item.Id))];
+  }
   const activeStreams = Object.entries(cursors)
     .filter(([, cursor]) => Boolean(cursor))
     .map(([key]) => streams[key] ?? []);
@@ -378,7 +388,7 @@ export function LibraryScreen({
     setLoadingMore(false);
     setError("");
     pendingDownFocusRef.current = null;
-    resultsRef.current?.scrollTo?.(0, 0);
+    resetLibraryResults(resultsRef.current);
     browseItemsRef.current = [];
     browseCursorsRef.current = {};
     browseStreamsRef.current = {};
@@ -633,6 +643,8 @@ export function LibraryScreen({
     <main className={`content-screen library-screen ${showAlphaRail ? "has-alpha-rail" : ""}`}>
       <div className="library-main">
         <div ref={resultsRef} className="library-results" data-has-more={hasMoreBrowseItems}>
+          {/* On a TV this moves by transform, not scrolling (navigation/spatial transformInner, #83). */}
+          <div className="library-results-inner">
           <div className="library-controls">
             {header}
             {hideControls ? null : <div className="browse-toolbar">
@@ -750,6 +762,7 @@ export function LibraryScreen({
               ) : null}
             </>
           )}
+          </div>
         </div>
       </div>
       {showAlphaRail ? (
