@@ -1490,7 +1490,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       protocol: stateRef.current?.plan.stream.protocol,
       container: stateRef.current?.plan.stream.container,
       mimeType: stateRef.current?.plan.stream.mime_type,
-      streamUrl: video?.currentSrc || video?.src
+      streamUrl: (video?.currentSrc || video?.src || "").replace(/([?&]token=)[^&]*/, "$1…")
     };
     clientDiagnostic("LG media playback failed", diagnostics);
     setError(`LG playback error: ${reason} · ${diagnostics.delivery ?? "unknown route"} · ${diagnostics.container ?? diagnostics.mimeType ?? "unknown format"}`);

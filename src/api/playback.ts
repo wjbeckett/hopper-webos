@@ -102,7 +102,7 @@ export function allowDirectPlay(allowed: boolean) { directPlayAllowed = allowed;
 export const isDirectPlay = (plan: PlaybackPlan | undefined) => plan?.delivery === "original_http";
 export const isDolbyAudio = (codec?: string) => /^(e?-?ac-?3|ec-3)$/i.test(codec ?? "");
 
-function snapshot(_session?: Session) {
+function snapshot() {
   const detected = probePlaybackCapabilities();
   const video = Object.entries(detected.codecs).filter(([name, ok]) => ok && ["h264", "hevc", "vp9", "av1"].includes(name)).map(([name]) => name);
   const audio = Object.entries(detected.codecs).filter(([name, ok]) => ok && ["aac", "ac3", "eac3", "opus"].includes(name) && (dolbyAudioAllowed || !isDolbyAudio(name))).map(([name]) => name);
@@ -220,14 +220,14 @@ export async function startPlaybackV3(session: Session, detail: WatchDetail, ver
   const subtitle = subtitleIndex != null && subtitleIndex >= 0
     ? { subtitle_track_id: `file:${version.file_id}:subtitle:${subtitleIndex}`, subtitle_track_index: subtitleIndex }
     : {};
-  const body = { installation_id: await playbackInstallationId(session), protocol_version: 3, client_features: features, file_id: version.file_id, profile_id: session.profileId, playback_attempt_id: playbackAttemptId, quality_preference: quality, subtitle_fidelity_preference: "compatible", progress_persistence: "server", start_position: startPosition ?? detail.user_data?.position_seconds ?? 0, ...(audioIndex == null ? {} : { audio_track_id: `file:${version.file_id}:audio:${audioIndex}`, audio_track_index: audioIndex }), ...subtitle, metered: false, ...snapshot(session) };
+  const body = { installation_id: await playbackInstallationId(session), protocol_version: 3, client_features: features, file_id: version.file_id, profile_id: session.profileId, playback_attempt_id: playbackAttemptId, quality_preference: quality, subtitle_fidelity_preference: "compatible", progress_persistence: "server", start_position: startPosition ?? detail.user_data?.position_seconds ?? 0, ...(audioIndex == null ? {} : { audio_track_id: `file:${version.file_id}:audio:${audioIndex}`, audio_track_index: audioIndex }), ...subtitle, metered: false, ...snapshot() };
   const decision = await requestV2<Decision>(session, "/playback/start", { method: "POST", body: JSON.stringify(body) });
   return { plan: requirePlan(decision), playbackAttemptId, planAttemptId: uuid("plan") };
 }
 
 export async function replanPlaybackV3(session: Session, state: { plan: PlaybackPlan; playbackAttemptId: string; planAttemptId: string; attemptedKeys: string[] }, operation: "track_change" | "quality_change" | "seek_reanchor", position: number, quality: string, selected: { audio?: TrackIdentity; subtitle?: TrackIdentity }) {
   const attemptedKeys = [state.plan.plan_attempt_key];
-  const body = { installation_id: await playbackInstallationId(session), protocol_version: 3, client_features: features, operation, playback_attempt_id: state.playbackAttemptId, replan_request_id: uuid("replan"), failed_plan_id: state.plan.plan_id, plan_attempt_id: state.planAttemptId, plan_attempt_key: state.plan.plan_attempt_key, attempted_plan_keys: attemptedKeys, attempt_count: attemptedKeys.length, quality_preference: quality, position_seconds: position, metered: false, selected_tracks: selected, local_mutations: [], ...snapshot(session) };
+  const body = { installation_id: await playbackInstallationId(session), protocol_version: 3, client_features: features, operation, playback_attempt_id: state.playbackAttemptId, replan_request_id: uuid("replan"), failed_plan_id: state.plan.plan_id, plan_attempt_id: state.planAttemptId, plan_attempt_key: state.plan.plan_attempt_key, attempted_plan_keys: attemptedKeys, attempt_count: attemptedKeys.length, quality_preference: quality, position_seconds: position, metered: false, selected_tracks: selected, local_mutations: [], ...snapshot() };
   const decision = await requestV2<Decision>(session, `/playback/${encodeURIComponent(state.plan.session_id)}/replan`, { method: "POST", body: JSON.stringify(body) });
   return { plan: requirePlan(decision), playbackAttemptId: state.playbackAttemptId, planAttemptId: uuid("plan"), attemptedKeys: [] };
 }
