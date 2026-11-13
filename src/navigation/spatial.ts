@@ -933,6 +933,14 @@ export function installSpatialNavigation() {
       }
     }
 
+    // Left and Right stay on the season buttons and stop at the ends of the row.
+    if (current.matches(".season-tab") && (direction === "left" || direction === "right")) {
+      const row = current.closest<HTMLElement>(".season-tabs");
+      focusAdjacent(current, focusables(".season-tab").filter(tab => row?.contains(tab)), direction);
+      event.preventDefault();
+      return;
+    }
+
     if (current.matches(".season-tab") && direction === "up") {
       const play = document.querySelector<HTMLElement>(".series-screen .details-actions .tv-button.series-play");
       if (play) {
