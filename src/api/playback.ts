@@ -6,6 +6,7 @@ import { clientIdentity } from "../platform/device";
 import type { Session, SiloItem } from "../types";
 import { getDeviceId } from "../platform/device";
 import { requestV2 } from "./silo";
+import { freshProbeKbps, notePlaybackStarted } from "../core/bandwidthProbe";
 import { BUFFERING_QUALITY_V1_FEATURE, LEARNED_LIMIT_IGNORE, withKeptStepDownEstimate, type BufferingQualityMode, type BufferingQualityReplan, type KeptStepDownEstimate } from "../core/bufferingQuality";
 
 export type AudioTrack = { index?: number; codec?: string; channels?: number; layout?: string; language?: string; title?: string; embedded_title?: string; default?: boolean };
@@ -41,16 +42,33 @@ type Decision = { outcome: string; session_id?: string; playback_plan?: Playback
 const features = ["playback_plan_v3", "neutral_playback_v3_contract_v1", "playback_route_diagnostics", "seek_reanchor_v1", "direct_stream_resume_v1", "plan_source_duration_v1"];
 const installations = new Map<string, string>();
 
+/** The server's speed-test settings (with connection_speed_v1), from /playback/capabilities. */
+export type BandwidthProbeSettings = { automatic: boolean; maxAgeSeconds: number | null; targetKbps: number | null };
+const probeSettings = new Map<string, BandwidthProbeSettings>();
+
 async function playbackInstallationId(session: Session): Promise<string> {
   const key = `${session.serverUrl}|${session.profileId ?? ""}`;
   const cached = installations.get(key);
   if (cached) return cached;
-  const capabilities = await requestV2<{ installation_id?: string }>(session, "/playback/capabilities", {
+  const capabilities = await requestV2<{ installation_id?: string; features?: string[]; bandwidth_probe_automatic?: boolean; bandwidth_probe_max_age_seconds?: number; bandwidth_probe_target_kbps?: number }>(session, "/playback/capabilities", {
     headers: { "X-Silo-Device-Id": getDeviceId() }
   });
   if (!capabilities.installation_id) throw new Error("Silo did not return a playback installation id.");
   installations.set(key, capabilities.installation_id);
+  // The first start after a launch already knows what the server supports.
+  if (Array.isArray(capabilities.features)) serverFeatures = capabilities.features;
+  probeSettings.set(key, {
+    automatic: capabilities.bandwidth_probe_automatic !== false,
+    maxAgeSeconds: capabilities.bandwidth_probe_max_age_seconds ?? null,
+    targetKbps: capabilities.bandwidth_probe_target_kbps ?? null
+  });
   return capabilities.installation_id;
+}
+
+/** The server's speed-test settings for this sign-in, reading the capabilities once. */
+export async function bandwidthProbeSettings(session: Session): Promise<BandwidthProbeSettings> {
+  await playbackInstallationId(session);
+  return probeSettings.get(`${session.serverUrl}|${session.profileId ?? ""}`) ?? { automatic: true, maxAgeSeconds: null, targetKbps: null };
 }
 
 function cachedInstallationId(session: Session): string {
@@ -232,11 +250,17 @@ export async function startPlaybackV3(session: Session, detail: WatchDetail, ver
     : {};
   // A new attempt never inherits a kept estimate.
   keptEstimate = null;
+  // Without an estimate of the caller's own, the current automatic speed-test reading.
+  if (bandwidthEstimateKbps == null) bandwidthEstimateKbps = freshProbeKbps(session);
+  notePlaybackStarted();
+  // First: it also tells this function what the server supports, which the fields below depend on.
+  const installationId = await playbackInstallationId(session);
   const buffering = {
-    ...(bandwidthEstimateKbps != null && bandwidthEstimateKbps > 0 ? { bandwidth_estimate_kbps: Math.round(bandwidthEstimateKbps) } : {}),
+    // A current speed-test reading (core/bandwidthProbe), as Android sends it with source "probe".
+    ...(bandwidthEstimateKbps != null && bandwidthEstimateKbps > 0 ? { bandwidth_estimate_kbps: Math.round(bandwidthEstimateKbps), ...(bufferingFeatureOn() ? { bandwidth_estimate_source: "probe" } : {}) } : {}),
     ...(bufferingFeatureOn() && bufferingMode === "never" ? { learned_limit: LEARNED_LIMIT_IGNORE } : {})
   };
-  const body = { installation_id: await playbackInstallationId(session), protocol_version: 3, client_features: clientFeatures(), ...buffering, file_id: version.file_id, profile_id: session.profileId, playback_attempt_id: playbackAttemptId, quality_preference: quality, subtitle_fidelity_preference: "compatible", progress_persistence: "server", start_position: startPosition ?? detail.user_data?.position_seconds ?? 0, ...(audioIndex == null ? {} : { audio_track_id: `file:${version.file_id}:audio:${audioIndex}`, audio_track_index: audioIndex }), ...subtitle, metered: false, ...snapshot() };
+  const body = { installation_id: installationId, protocol_version: 3, client_features: clientFeatures(), ...buffering, file_id: version.file_id, profile_id: session.profileId, playback_attempt_id: playbackAttemptId, quality_preference: quality, subtitle_fidelity_preference: "compatible", progress_persistence: "server", start_position: startPosition ?? detail.user_data?.position_seconds ?? 0, ...(audioIndex == null ? {} : { audio_track_id: `file:${version.file_id}:audio:${audioIndex}`, audio_track_index: audioIndex }), ...subtitle, metered: false, ...snapshot() };
   const decision = await requestV2<Decision>(session, "/playback/start", { method: "POST", body: JSON.stringify(body) });
   noteServerFeatures(decision);
   return { plan: requirePlan(decision), playbackAttemptId, planAttemptId: uuid("plan") };

@@ -106,7 +106,7 @@ Two things the TV does differently from Android's Media3:
 - **webOS does not always report a stall.** At 512 kbps after the first lowering, playback crawled at 0.6× speed with under a second buffered and fired no `waiting` event, so nothing lowered again. The player now also watches the playhead (`src/screens/playerBufferingQuality.ts`).
 - **The first segment is slow to measure.** At 512 kbps a 10 s 1080p segment takes over 30 s, longer than the stall timer, and a lowering before the first picture needs a measured throughput. Bytes are now counted as they arrive, from the segment requests' progress events. That brought the first picture at 512 kbps from 53 s to 27 s.
 
-Not done: a start estimate from a recent speed test, as Android sends, which would start low instead of lowering after 20 s.
+**Starting at the right quality.** As Android does, the app runs a speed test in the background 5 s after launch (not while a title plays, nor within a minute of a start, and not when the server turned automatic tests off), keeps the reading per server for the server's `bandwidth_probe_max_age_seconds` or a week, and sends it with every playback start (`src/core/bandwidthProbe.ts`). On the maintainer's network it measured 65.9 Mbps. With a reading of 500 kbps and the link at 512 kbps, the first picture came at 7.8 s at 480p with no lowering needed, against 27 s with a lowering when there is no reading.
 
 ## Browse grids
 
