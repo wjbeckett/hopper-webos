@@ -78,6 +78,17 @@ Left over:
 - Resumes whose keyframe gap is over 10 s still seek.
 - The first play after launch pays for loading hls.js. It could be loaded while Details is on screen.
 
+## Browse grids
+
+Holding Down for 3 s with key repeats every 80 ms, on webOS 22. "Off screen" counts samples, taken every 250 ms, where the focused card was outside the screen.
+
+| Grid | Before | After (#83) |
+| --- | --- | --- |
+| Continue Watching → Explore all | off screen in 6 of 7 samples; frames median 17 ms, 90th percentile 83 ms, worst 317 ms, 15 of 126 over 50 ms | off screen 0 of 12; median 17, 90th percentile 100, worst 217, 18 of 89 over 50 ms |
+| Library Browse | not measured | off screen 0 of 10; median 67, 90th percentile 117, worst 383, 30 of 53 over 50 ms |
+
+The fix was to stop starting a native smooth scroll on every press: grids now jump while a key is held. The selector stays on screen, but the frames did not get faster. A CPU profile of the held key in Browse showed no long tasks and a mostly idle main thread, so the cost is in painting and rasterising the newly exposed rows, not in script. Translating the grid instead of scrolling it, as Home does with its rows, is the next thing to try.
+
 ## Rules that came out of this
 
 - Keep the number of mounted cards small. Do not render what is far off screen.

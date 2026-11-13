@@ -4143,9 +4143,6 @@ body {
 
 .series-overview {
   display: -webkit-box;
-  min-height: 4.4em;
-  max-width: 820px;
-  margin: 8px 0 0;
   overflow: hidden;
   color: rgba(244,244,242,.94);
   font-size: 1.5rem;
@@ -5170,6 +5167,24 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
   will-change: transform;
   transition: transform 110ms ease-out;
 }
+/* The same for rows that are not MediaRails: episodes, cast, trailers, the player's On Deck.
+   Their strip takes the row's flex layout. */
+.episode-rail[data-slide],
+.detail-cast-track[data-slide],
+.detail-trailer-track[data-slide],
+.player-on-deck-row[data-slide] { overflow: hidden; }
+.episode-rail[data-slide] > .rail-strip,
+.detail-cast-track[data-slide] > .rail-strip,
+.detail-trailer-track[data-slide] > .rail-strip,
+.player-on-deck-row[data-slide] > .rail-strip {
+  position: relative;
+  display: flex;
+  gap: inherit;
+  width: max-content;
+  isolation: isolate;
+  will-change: transform;
+  transition: transform 110ms ease-out;
+}
 .home-rails { overflow: hidden; }
 .home-rails-inner {
   position: relative;
@@ -5205,3 +5220,71 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 .webos .library-grid > *:focus-within,
 .webos .library-grid > .media-card:focus { contain: layout style; }
 .webos .library-grid > .grid-far { visibility: hidden; }
+/* Grids are moved from script (navigation/spatial keepInViewVertically): a native smooth scroll
+   per key press stacked up under a held key. */
+.webos,
+.webos body,
+.webos #root,
+.webos .library-results { scroll-behavior: auto; }
+
+/* The overview on Details and Series: three lines, a focus stop above the buttons, and OK
+   opens the whole text (components/ExpandableOverview.tsx; Android TV's TvExpandableSynopsis). */
+.overview-button {
+  display: block;
+  max-width: 984px;
+  margin: 10px -12px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.overview-button:focus {
+  outline: none;
+  background: rgba(38,40,44,.72);
+  box-shadow: 0 0 0 2px rgba(255,255,255,.88);
+}
+.details-overview:not(.audiobook-detail-overview) {
+  display: -webkit-box;
+  max-width: none;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+.overview-dialog {
+  box-sizing: border-box;
+  width: 62vw;
+  max-height: 72vh;
+  padding: 52px 64px;
+  overflow-y: auto;
+  border-radius: 20px;
+  background: var(--surface, #101113);
+  outline: none;
+}
+.overview-dialog::-webkit-scrollbar { display: none; }
+.overview-dialog h2 { margin: 0 0 20px; font-size: 2rem; line-height: 1.2; }
+.overview-dialog p {
+  margin: 0;
+  color: rgba(244,244,242,.92);
+  font-size: 1.5rem;
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
+/* Series: every part of the hero keeps its height whichever episode has focus, so the season
+   tabs and the episode row stay where they are. */
+.series-copy { width: min(1184px, 76vw); }
+.series-screen .details-facts {
+  flex-wrap: nowrap;
+  min-height: 1.5em;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.series-screen .details-facts > * { flex: 0 0 auto; }
+.series-overview-slot {
+  /* Three lines of the overview plus the button's padding and margin. */
+  height: calc(1.5rem * 1.45 * 3 + 32px);
+}
+.series-credit { min-height: 1.5em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }

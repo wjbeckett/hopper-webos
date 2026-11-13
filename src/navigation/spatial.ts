@@ -93,17 +93,45 @@ function pinRailItem(rail: HTMLElement, element: HTMLElement) {
  */
 function slideRailItem(rail: HTMLElement, element: HTMLElement) {
   const strip = rail.firstElementChild as HTMLElement | null;
-  const wrap = element.closest<HTMLElement>(".media-card-wrap") ?? element;
+  // The strip's child that holds the focused control: a card's wrapper, or the control itself.
+  let wrap: HTMLElement = element;
+  while (wrap.parentElement && wrap.parentElement !== strip && wrap.parentElement !== rail) wrap = wrap.parentElement;
   if (!strip || wrap.parentElement !== strip) return;
+  // The row never scrolls; something like scrollIntoView may still have moved it.
+  if (rail.scrollLeft) rail.scrollLeft = 0;
   const style = getComputedStyle(rail);
   const view = rail.clientWidth - (Number.parseFloat(style.paddingLeft) || 0) - (Number.parseFloat(style.paddingRight) || 0);
-  const maxOffset = Math.max(0, strip.offsetWidth - view);
+  // scrollWidth too: Chrome 87 can size a flex strip narrower than its fixed-basis cards.
+  const maxOffset = Math.max(0, Math.max(strip.offsetWidth, strip.scrollWidth) - view);
   const centre = wrap.offsetLeft + wrap.offsetWidth / 2;
   const offset = Math.round(Math.max(0, Math.min(maxOffset, centre - view / 2)));
   if (strip.dataset.offset === String(offset)) return;
   strip.dataset.offset = String(offset);
   strip.style.transform = offset ? `translate3d(${-offset}px, 0, 0)` : "";
   railStepUntil = performance.now() + RAIL_PIN_MS;
+}
+
+/** Puts a sliding row back at its start, without animating (a new season's episodes, say). */
+export function resetSlidingRail(rail: HTMLElement | null) {
+  const strip = rail?.firstElementChild as HTMLElement | null | undefined;
+  if (!rail || !strip) return;
+  rail.scrollLeft = 0;
+  delete strip.dataset.offset;
+  strip.style.transition = "none";
+  strip.style.transform = "";
+  void strip.offsetWidth;
+  strip.style.transition = "";
+}
+
+/** Brings a card into its sliding row at once, without animating (on entry, or when focus is restored). */
+export function placeRailItem(element: HTMLElement) {
+  const rail = element.closest<HTMLElement>(RAIL_SELECTOR);
+  const strip = rail?.firstElementChild as HTMLElement | null | undefined;
+  if (rail?.dataset.slide !== "true" || !strip) { pinFocusedRailItem(element); return; }
+  strip.style.transition = "none";
+  slideRailItem(rail, element);
+  void strip.offsetWidth;
+  strip.style.transition = "";
 }
 
 export function pinFocusedRailItem(element: HTMLElement) {
@@ -118,6 +146,8 @@ export function pinFocusedRailItem(element: HTMLElement) {
  * the selector and stutter until the key is released.
  */
 const VERTICAL_SLIDE_MS = 140;
+/** True while the key being handled is a held key's repeat: moves then jump instead of easing. */
+let keyHeld = false;
 const verticalSlides = new WeakMap<HTMLElement, { frame: number; goal: number }>();
 
 function slideScrollTop(container: HTMLElement, delta: number) {
@@ -134,7 +164,7 @@ function slideScrollTop(container: HTMLElement, delta: number) {
     return;
   }
   container.style.scrollBehavior = "auto";
-  if (running) {
+  if (running || keyHeld) {
     // A press arrived mid-slide (key held or rapid presses): jump straight to the goal so the
     // selector never trails off screen. Single presses still get the eased slide.
     container.scrollTop = goal;
@@ -151,8 +181,54 @@ function slideScrollTop(container: HTMLElement, delta: number) {
   verticalSlides.set(container, { frame: requestAnimationFrame(tick), goal });
 }
 
+/**
+ * Keeps a focused card in view by scrolling whatever holds it (a grid's container, a Details
+ * page), through the same
+ * slide as library Browse: eased for one press, a jump while a key is held. A native smooth
+ * scroll per press stacked up under a held key and left the selector off screen (#83).
+ */
+function keepInViewVertically(element: HTMLElement, anchorTop = false) {
+  let container: HTMLElement | null = element.parentElement;
+  while (container && container !== document.body) {
+    const overflow = getComputedStyle(container).overflowY;
+    if ((overflow === "auto" || overflow === "scroll") && container.scrollHeight > container.clientHeight + 1) break;
+    container = container.parentElement;
+  }
+  const page = !container || container === document.body;
+  const scroller = page ? (document.scrollingElement as HTMLElement | null) : container;
+  if (!scroller) return;
+  const top = page ? 0 : scroller.getBoundingClientRect().top;
+  const height = page ? window.innerHeight : scroller.clientHeight;
+  const rect = element.getBoundingClientRect();
+  // A row that is fully on screen with the page at its top keeps the page there, so the
+  // buttons above it and the row hold still while focus moves between them.
+  if (anchorTop && scroller.scrollTop + rect.bottom - top <= height - 24) {
+    if (scroller.scrollTop) slideScrollTop(scroller, -scroller.scrollTop);
+    return;
+  }
+  const visibleStart = top + height * 0.12;
+  const visibleEnd = top + height * 0.78;
+  const delta = rect.top < visibleStart ? rect.top - visibleStart : rect.bottom > visibleEnd ? rect.bottom - visibleEnd : 0;
+  if (delta) slideScrollTop(scroller, delta);
+}
+
+/**
+ * The card last focused in each row. Up or Down into a row lands on it, as Android TV does,
+ * and on the row's first card when the row has not been visited.
+ */
+const lastInRow = new WeakMap<HTMLElement, HTMLElement>();
+
+/** Where focus should land when it moves into `row` from above or below. */
+function rowEntry(row: HTMLElement): HTMLElement | undefined {
+  const remembered = lastInRow.get(row);
+  if (remembered?.isConnected && row.contains(remembered) && !remembered.matches(":disabled")) return remembered;
+  return focusables("[data-tv-focusable='true']").find(item => row.contains(item) && item.offsetParent !== null);
+}
+
 function focusElement(element: HTMLElement) {
   element.focus({ preventScroll: true });
+  const row = element.closest<HTMLElement>(RAIL_SELECTOR);
+  if (row && !row.closest(".home-rails")) lastInRow.set(row, element);
   const libraryResults = element.closest<HTMLElement>(".library-results");
   if (libraryResults) {
     const elementRect = element.getBoundingClientRect();
@@ -204,14 +280,26 @@ function focusElement(element: HTMLElement) {
     }
     return;
   }
-  if (element.closest(".details-actions")) {
-    element.closest<HTMLElement>(".details-shell, .series-screen, .person-screen")?.scrollTo({ top: 0, behavior: "smooth" });
+  if (element.closest(".details-actions, .overview-button, .season-tabs")) {
+    const page = element.closest<HTMLElement>(".details-shell, .series-screen, .person-screen");
+    // A slide down that is still running would carry on after this scroll up and leave the
+    // buttons off screen.
+    for (const scroller of [page, document.scrollingElement as HTMLElement | null]) {
+      const running = scroller ? verticalSlides.get(scroller) : undefined;
+      if (scroller && running) {
+        cancelAnimationFrame(running.frame);
+        verticalSlides.delete(scroller);
+      }
+    }
+    page?.scrollTo({ top: 0, behavior: "smooth" });
     window.scrollTo({ top: 0, behavior: "smooth" });
     return;
   }
   const rail = element.closest<HTMLElement>(RAIL_SELECTOR);
   if (rail?.dataset.slide === "true") {
     slideRailItem(rail, element);
+    // Home moves its band itself. Elsewhere (Details, Series) the page scrolls to the row.
+    if (!element.closest(".home-rails")) keepInViewVertically(element, true);
     return;
   }
   if (rail && rail.scrollWidth > rail.clientWidth + 1) {
@@ -226,6 +314,10 @@ function focusElement(element: HTMLElement) {
     return;
   }
   if (element.closest(".library-screen, .home-rails")) return;
+  if (element.closest(".library-grid")) {
+    keepInViewVertically(element);
+    return;
+  }
   element.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
 }
 
@@ -595,6 +687,7 @@ export function installSpatialNavigation() {
     // player's); spatial navigation would double-drive its scrubber and
     // transport focus.
     if (document.querySelector(".player-shell")) return;
+    keyHeld = event.repeat;
     if (event.repeat && (event.key === "ArrowLeft" || event.key === "ArrowRight") && performance.now() < railStepUntil) {
       event.preventDefault();
       return;
@@ -797,6 +890,24 @@ export function installSpatialNavigation() {
       return;
     }
 
+    // The overview is a focus stop above the buttons (Android TV: Up from the action row).
+    if (current.matches(".overview-button")) {
+      const play = direction === "down"
+        ? current.closest<HTMLElement>(".details-shell, .series-screen")?.querySelector<HTMLElement>(".details-actions .tv-button:not([disabled])")
+        : null;
+      if (play) focusElement(play);
+      event.preventDefault();
+      return;
+    }
+    const overview = current.closest(".details-actions") && direction === "up"
+      ? current.closest<HTMLElement>(".details-shell, .series-screen")?.querySelector<HTMLElement>(".overview-button")
+      : null;
+    if (overview) {
+      focusElement(overview);
+      event.preventDefault();
+      return;
+    }
+
     if (current.closest(".details-actions") && direction === "down") {
       const screen = current.closest<HTMLElement>(".series-screen");
       const rail = screen?.querySelector<HTMLElement>(".episode-rail");
@@ -830,7 +941,22 @@ export function installSpatialNavigation() {
       }
     }
 
+    // Up from the first row under the buttons goes back to Play (Android returnToHero, which
+    // only the first body rail has). From a lower row it goes to the row above, below.
     const castRow = current.closest<HTMLElement>(".detail-cast-track, .detail-trailer-track, .rail-track");
+    const detailScreen = current.closest<HTMLElement>(".details-shell, .series-screen");
+    const bodyRows = detailScreen
+      ? Array.from(detailScreen.querySelectorAll<HTMLElement>(".episode-rail, .detail-cast-track, .detail-trailer-track, .rail-track"))
+        .filter(row => row.offsetParent !== null && row.querySelector("[data-tv-focusable='true']"))
+      : [];
+    if (castRow && direction === "up" && !current.closest(".series-body") && bodyRows.indexOf(castRow) > 0) {
+      const target = rowEntry(bodyRows[bodyRows.indexOf(castRow) - 1]);
+      if (target) {
+        focusElement(target);
+        event.preventDefault();
+        return;
+      }
+    }
     if (castRow && direction === "up" && !current.closest(".series-body")) {
       const play = document.querySelector<HTMLElement>(".details-shell .details-actions .tv-button")
         ?? current.closest<HTMLElement>(".details-shell, .series-screen")?.querySelector<HTMLElement>(".details-actions .tv-button");
@@ -896,7 +1022,7 @@ export function installSpatialNavigation() {
     if (target && Number.isFinite(target.score)) {
       const targetRow = target.candidate.closest<HTMLElement>(".episode-rail, .detail-cast-track, .detail-trailer-track, .rail-track");
       if (targetRow && !targetRow.contains(current) && (direction === "up" || direction === "down")) {
-        const firstInRow = focusables("[data-tv-focusable='true']").find(item => targetRow.contains(item) && item.offsetParent !== null);
+        const firstInRow = targetRow.closest(".home-rails") ? focusables("[data-tv-focusable='true']").find(item => targetRow.contains(item) && item.offsetParent !== null) : rowEntry(targetRow);
         if (firstInRow) {
           focusElement(firstInRow);
           event.preventDefault();

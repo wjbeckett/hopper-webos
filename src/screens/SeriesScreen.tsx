@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { placeRailItem, resetSlidingRail } from "../navigation/spatial";
 import { backdropUrl, getCatalogItem, getEpisodes, getSeasons, getShuffleCapability, getSimilarItems, imageUrl, isFavorite, isInWatchlist, mediaLogoUrl, setFavorite, setWatched, setWatchlist } from "../api/silo";
 import { CastSection, FactsSection, TrailersSection, factsFor, useDetailExtras } from "../components/DetailSections";
 import { PlaybackOptionsDialog, PlaybackSummary, useWatchDetail } from "../components/PlaybackOptions";
 import { GearIcon, MoreIcon, PlayIcon, RestartIcon, WatchlistIcon } from "../components/icons";
 import { MediaRail } from "../components/MediaRail";
+import { ExpandableOverview } from "../components/ExpandableOverview";
 import { ArtworkImage } from "../components/ArtworkImage";
 import type { PlaybackChoices, WatchDetail } from "../api/playback";
 import type { DetailPerson, DetailTrailer } from "../api/silo";
@@ -158,13 +161,8 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
       setMode(String(target.ParentIndexNumber));
       setFocusedEpisodeId(target.Id);
       requestAnimationFrame(() => requestAnimationFrame(() => {
-        const rail = railRef.current;
-        const card = rail?.querySelector<HTMLElement>(`[data-episode-id="${CSS.escape(target.Id)}"]`);
-        if (rail && card) {
-          const railRect = rail.getBoundingClientRect();
-          const cardRect = card.getBoundingClientRect();
-          rail.scrollLeft = Math.max(0, rail.scrollLeft + cardRect.left - railRect.left - (rail.clientWidth - cardRect.width) / 2);
-        }
+        const card = railRef.current?.querySelector<HTMLElement>(`[data-episode-id="${CSS.escape(target.Id)}"]`);
+        if (card) placeRailItem(card);
         if (card) setRememberedEpisodeId(target.Id);
         (card ?? playRef.current)?.focus({ preventScroll: true });
       }));
@@ -218,6 +216,7 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
   const synopsis = focusedEpisode
     ? hidesEpisodeOverview(focusedEpisode, spoilerPreferences) ? "" : [focusedEpisode.Name, focusedEpisode.Overview ?? ""].filter(Boolean).join(" · ")
     : show.Overview ?? "";
+  const overviewText = (focusedEpisode ? focusedEpisode.Overview : show.Overview) || synopsis;
   const metaTokens = [
     focusedEpisode
       ? [focusedEpisode.ParentIndexNumber === 0 ? "Specials" : `Season ${focusedEpisode.ParentIndexNumber}`, `Episode ${focusedEpisode.IndexNumber ?? ""}`].filter(Boolean).join(" · ")
@@ -232,7 +231,7 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
     setMode(next);
     setFocusedEpisodeId(undefined);
     requestAnimationFrame(() => {
-      if (railRef.current) railRef.current.scrollLeft = 0;
+      resetSlidingRail(railRef.current);
     });
   }
 
@@ -300,8 +299,11 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
             {rating ? <span>{`★ ${rating.toFixed(1)}`}</span> : null}
             {target && resume > 0 ? <ResumeProgress position={resume} duration={(target.RunTimeTicks ?? 0) / 10_000_000} /> : null}
           </div>
-          <p className="series-overview">{synopsis}</p>
-          {extras?.cast.length ? <div className="details-credit">{`Starring ${extras.cast.slice(0, 3).map(member => member.name).join(", ")}`}</div> : null}
+          {/* The slot keeps its height with no overview, so the buttons and the episode row never move. */}
+          <div className="series-overview-slot">
+            {synopsis ? <ExpandableOverview className="series-overview" preview={synopsis} text={overviewText} title={focusedEpisode?.Name ?? show.Name} /> : null}
+          </div>
+          <div className="details-credit series-credit">{extras?.cast.length ? `Starring ${extras.cast.slice(0, 3).map(member => member.name).join(", ")}` : ""}</div>
           <PlaybackSummary detail={watchDetail} choices={choices} />
           <div className="details-actions">
             <button ref={playRef} type="button" data-tv-focusable="true" className={`tv-button series-play ${activeButton === null || activeButton === "play" ? "pin-open" : ""}`} disabled={!target}
@@ -355,7 +357,8 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
             );
           })}
         </div>
-        <div className="episode-rail" ref={railRef}>
+        {/* Slides like Home's rows (navigation/spatial slideRailItem): the strip moves, the row never scrolls. */}
+        <div className="episode-rail" ref={railRef} data-slide="true"><div className="rail-strip">
           {loading ? <LoadingState label="Loading episodes" /> : railEpisodes.length ? railEpisodes.map(episode => (
             <EpisodeCard key={episode.Id} session={session} episode={episode} current={highlightedId === episode.Id}
               onFocus={() => { setActiveButton(null); setMode(String(episode.ParentIndexNumber ?? 0)); setFocusedEpisodeId(episode.Id); setRememberedEpisodeId(episode.Id); }}
@@ -363,11 +366,11 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
               onSetWatched={(changed, next) => void markWatched(changed.Id, next)}
               hideImage={hidesEpisodeImage(episode, spoilerPreferences, episode.PosterIsEpisodeStill)} />
           )) : <div className="screen-state">No episodes available</div>}
-        </div>
+        </div></div>
         <div className="series-related">
           {extras ? <CastSection cast={extras.cast} restoreIndex={restoreCastIndex} onOpen={onOpenPerson} /> : null}
           {extras ? <TrailersSection trailers={extras.trailers} onPlayLocal={onPlayExtra} /> : null}
-          {similar.length ? <MediaRail rail={{ id: "similar", title: "Recommended Series", items: similar }} session={session} onOpen={onOpen} /> : null}
+          {similar.length ? <MediaRail rail={{ id: "similar", title: "Recommended Series", items: similar }} session={session} onOpen={onOpen} slide /> : null}
           <FactsSection facts={factsFor(extras)} />
         </div>
       </section>
@@ -488,7 +491,9 @@ function EpisodeCard({ session, episode, current, onFocus, onOpen, onSetWatched,
       <strong>{captionTitle(episode)}</strong>
       <small>{meta || " "}</small>
     </button>
-    {menuOpen ? (
+    {/* In document.body, like MediaCard's menu: the episode row is a transformed, clipping
+        strip, so a fixed overlay inside it is placed against the strip, not the screen. */}
+    {menuOpen ? createPortal(
       <div className="details-more-scrim" data-modal="true" onClick={() => { setMenuOpen(false); requestAnimationFrame(() => cardRef.current?.focus({ preventScroll: true })); }}>
         <div className="details-more card-menu" role="dialog" aria-label={`${episode.Name} Actions`} onClick={event => event.stopPropagation()}>
           <button ref={menuFirstRef} type="button" data-tv-focusable="true" className="browse-panel-row" onClick={onOpen}>
@@ -507,7 +512,8 @@ function EpisodeCard({ session, episode, current, onFocus, onOpen, onSetWatched,
             <span>{menuFavorite ? "Remove from Favorites" : "Add to Favorites"}</span>
           </button>
         </div>
-      </div>
+      </div>,
+      document.body
     ) : null}
     </div>
   );
