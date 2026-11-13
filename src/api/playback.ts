@@ -32,7 +32,8 @@ export type PlaybackPlan = {
   available_qualities: Quality[];
   claims?: { video?: { dolby_vision?: boolean }; audio?: { codec?: string } };
   source?: { dolby_vision_profile?: number; bitrate_kbps?: number };
-  effective_recipe?: { bitrate_kbps?: number; height?: number };
+  /** What the server delivers. `audio_codec` differs from the source when the server converts the audio. */
+  effective_recipe?: { bitrate_kbps?: number; height?: number; audio_codec?: string };
   degradation_warnings?: string[];
   /** The available_qualities label the plan delivers, from a server with plan_active_quality_v1. */
   active_quality?: string;
