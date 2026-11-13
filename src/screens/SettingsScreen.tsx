@@ -369,7 +369,10 @@ export function SettingsScreen({
   const railRef = useRef<HTMLDivElement | null>(null);
   const activeServer = serverRegistry.active();
 
-  const allKeys = useMemo(() => [...Object.values(keysByCategory).flat().flatMap(group => group.keys), "ui.card_presentation", "ui.title_art", "ui.theme_music_enabled", "ui.theme_music_loop", "playback.subtitle_appearance", "playback.preferred_quality", "playback.max_bitrate_kbps", "playback.audio_language", "playback.buffering_quality_mode", "playback.next_up_prompt_seconds", "playback.intro_skip_mode", "playback.auto_play_next", "playback.auto_skip_credits", "playback.auto_skip_recap", "player.dolby_vision_enabled", "player.dv_profile7_hdr10_fallback", "player.match_frame_rate", "player.resume_rewind_seconds", "player.passout_threshold", "player.video_skip_back_seconds", "player.video_skip_forward_seconds", "player.audiobook_skip_back_seconds", "player.audiobook_skip_forward_seconds"], []);
+  const allKeys = useMemo(() => [...Object.values(keysByCategory).flat().flatMap(group => group.keys), "ui.card_presentation", "ui.title_art", "ui.theme_music_enabled", "ui.theme_music_loop", "playback.subtitle_appearance", "playback.preferred_quality", "playback.max_bitrate_kbps", "playback.audio_language", "playback.buffering_quality_mode", "playback.next_up_prompt_seconds", "playback.intro_skip_mode", "playback.auto_play_next", "playback.auto_skip_credits", "playback.auto_skip_recap", "player.dolby_vision_enabled", "player.dv_profile7_hdr10_fallback", "player.match_frame_rate", "player.resume_rewind_seconds", "player.passout_threshold", "player.video_skip_back_seconds", "player.video_skip_forward_seconds", "player.audiobook_skip_back_seconds", "player.audiobook_skip_forward_seconds",
+    // Shown under Playback by hand (not from a contract group), so they must be loaded here too,
+    // or both rows start as Off and a press can only ever turn them on.
+    "catalog.hide_unwatched_episode_images", "catalog.hide_unwatched_episode_overviews"], []);
 
   useEffect(() => {
     if (!showPrivacyPolicy) return;
