@@ -128,6 +128,11 @@ function buildFilterGroups(selection: FilterSelection): CatalogQueryGroup[] {
   return groups;
 }
 
+/** One browse screen: what focus and a chosen genre are remembered under while an item is open. */
+function browseSurfaceKey(session: Session, libraryKey: string, typeKey: string, collectionId: string | undefined, presetKey: string | undefined) {
+  return `${session.serverUrl}|${session.profileId ?? ""}|${libraryKey}|${typeKey}|${collectionId ?? ""}|${presetKey ?? ""}`;
+}
+
 function sortItems(items: SiloItem[], sort: BrowseSort, order: SortOrder) {
   if (sort === "collection") return [...items];
   return [...items].sort((a, b) => compareItems(a, b, sort, order));
@@ -182,6 +187,8 @@ function sortedSafePrefix(
 }
 
 const browseReturnTargets = new Map<string, string>();
+/** The genre chosen on a Genres screen, kept while an item opened from it is showing. */
+const genreSelections = new Map<string, string>();
 
 export function LibraryScreen({
   session,
@@ -194,7 +201,8 @@ export function LibraryScreen({
   presetGroups,
   presetKey,
   header,
-  hideControls = false
+  hideControls = false,
+  genreRow = false
 }: {
   session: Session;
   libraries: SiloLibrary[];
@@ -207,6 +215,8 @@ export function LibraryScreen({
   presetKey?: string;
   header?: ReactNode;
   hideControls?: boolean;
+  /** Android TV's music Genres tab: a row of genre chips above the grid, which filters it to one genre. */
+  genreRow?: boolean;
 }) {
   const catalogScope = useMemo<CatalogScope | undefined>(
     () => collection ? { source: collection.source, collectionId: collection.id } : undefined,
@@ -225,7 +235,13 @@ export function LibraryScreen({
   ) : null);
   const [sort, setSort] = useState<BrowseSort>((initialPrefs?.sort as BrowseSort | undefined) ?? defaultSort);
   const [order, setOrder] = useState<SortOrder>(initialPrefs?.order ?? "asc");
-  const [filters, setFilters] = useState<FilterSelection>(initialPrefs?.filters ?? {});
+  const [filters, setFilters] = useState<FilterSelection>(() => {
+    const genre = genreRow
+      ? genreSelections.get(browseSurfaceKey(session, libraries.map(library => library.id).join(","), itemTypes?.length === 1 ? itemTypes[0] : "", collection?.id, presetKey))
+      : undefined;
+    return genre ? { genre: [genre] } : initialPrefs?.filters ?? {};
+  });
+  const [filterOptionsLoaded, setFilterOptionsLoaded] = useState(false);
   const [matchAll, setMatchAll] = useState(initialPrefs?.matchAll ?? true);
   const [filterOptions, setFilterOptions] = useState<CatalogFilterOptions>({
     genres: [], studios: [], networks: [], countries: [], originalLanguages: [],
@@ -292,7 +308,7 @@ export function LibraryScreen({
 
   const returnTargetRef = useRef<string | undefined>(undefined);
   const returnLoadsRef = useRef(0);
-  const surfaceKey = `${session.serverUrl}|${session.profileId ?? ""}|${browseLibraryKey}|${browseTypeKey}|${collection?.id ?? ""}|${presetKey ?? ""}`;
+  const surfaceKey = browseSurfaceKey(session, browseLibraryKey, browseTypeKey, collection?.id, presetKey);
   if (mountedRef.current !== surfaceKey) {
     mountedRef.current = surfaceKey;
     initialLoadCompleteRef.current = false;
@@ -301,6 +317,7 @@ export function LibraryScreen({
   if (!initialLoadCompleteRef.current && returnTargetRef.current === undefined) {
     returnTargetRef.current = browseReturnTargets.get(surfaceKey) ?? "";
     browseReturnTargets.delete(surfaceKey);
+    if (genreRow) genreSelections.delete(surfaceKey);
   }
 
   useEffect(() => {
@@ -346,9 +363,11 @@ export function LibraryScreen({
       });
       return () => { alive = false; };
     }
+    setFilterOptionsLoaded(false);
     Promise.all(libraryIds.map(id => getCatalogFilterOptions(session, id, catalogScope)))
       .then(results => {
         if (!alive) return;
+        setFilterOptionsLoaded(true);
         const merge = (key: keyof CatalogFilterOptions) => [...new Set(results.flatMap(result => result[key]))];
         setFilterOptions({
           genres: merge("genres"),
@@ -366,6 +385,7 @@ export function LibraryScreen({
         });
       })
       .catch(cause => {
+        if (alive) setFilterOptionsLoaded(true);
         if (alive) setFilterOptionsError(cause instanceof Error ? cause.message : "Could not load catalog filter options.");
       });
     return () => { alive = false; };
@@ -627,7 +647,15 @@ export function LibraryScreen({
     });
   }, [openPanel]);
 
-  const showAlphaRail = sort === "title" && !collection;
+  const showAlphaRail = sort === "title" && !collection && !genreRow;
+  const selectedGenre = filters.genre?.[0] ?? null;
+  // Server genre lists can repeat a name; Android sorts and de-duplicates them the same way.
+  const genres = useMemo(() => [...new Set(filterOptions.genres)].sort((a, b) => a.localeCompare(b)), [filterOptions.genres]);
+  const chooseGenre = (genre: string | null) => {
+    if (genre === selectedGenre) return;
+    setFilters(genre ? { genre: [genre] } : {});
+    setNamePrefix(null);
+  };
 
   return (
     <main className={`content-screen library-screen ${showAlphaRail ? "has-alpha-rail" : ""}`}>
@@ -699,6 +727,26 @@ export function LibraryScreen({
             </div>}
             {filterOptionsError ? <div className="error">{filterOptionsError}</div> : null}
             {shuffleError ? <div className="error">{shuffleError}</div> : null}
+            {genreRow ? (
+              <div className="library-genres">
+                <h2 className="library-genres-title">{filterOptionsLoaded ? "Genres" : "Loading genres"}</h2>
+                {/* Slides like the other rows (navigation/spatial slideRailItem): a long list of genres never scrolls. */}
+                <div className="library-filter-row library-genre-row" data-slide="true"><div className="rail-strip">
+                  {[null, ...genres].map(genre => (
+                    <button
+                      key={genre ?? ""}
+                      type="button"
+                      data-tv-focusable="true"
+                      aria-pressed={genre === selectedGenre}
+                      className={`library-view-tab ${genre === selectedGenre ? "active" : ""}`}
+                      onClick={() => chooseGenre(genre)}
+                    >
+                      {genre ?? "All"}
+                    </button>
+                  ))}
+                </div></div>
+              </div>
+            ) : null}
             {selectableLibraries ? (
               <div className="library-filter-row">
                 <button
@@ -741,7 +789,7 @@ export function LibraryScreen({
               {visibleItems.length ? (
                 <div className="library-grid">
                   {visibleItems.map((item) => (
-                    <MediaCard key={item.Id} session={session} item={item} image={imageUrl(session, item)} onOpen={() => { browseReturnTargets.set(surfaceKey, item.Id); onOpen(item); }} variant="browse" />
+                    <MediaCard key={item.Id} session={session} item={item} image={imageUrl(session, item)} onOpen={() => { browseReturnTargets.set(surfaceKey, item.Id); if (genreRow && selectedGenre) genreSelections.set(surfaceKey, selectedGenre); onOpen(item); }} variant="browse" />
                   ))}
                 </div>
               ) : <div className="screen-state">{hasMoreBrowseItems ? "Loading library items…" : libraryEmpty === false || (libraryEmpty === null && (catalogGroups.length || namePrefix)) ? "No titles match the current filters." : "This library is empty."}</div>}

@@ -1,5 +1,5 @@
 export type AppSection = "home" | "forYou" | "calendar" | "requests" | "library" | "collections" | "movies" | "series" | "music" | "audiobooks" | "search" | "favorites" | "watchlist" | "history" | "profiles" | "settings";
-export type LibraryLanding = "recommended" | "browse" | "collections" | "authors" | "series" | "alphabet";
+export type LibraryLanding = "recommended" | "browse" | "collections" | "authors" | "series" | "alphabet" | "genres";
 
 import { HopperLockup } from "./HopperMark";
 
@@ -181,6 +181,7 @@ export function TopNav({
                   <div data-nav-callout-group>
                     <CalloutButton icon="sparkles" onClick={() => selectSection("music", undefined, "recommended")}>Recommended</CalloutButton>
                     <CalloutButton icon="grid" onClick={() => selectSection("music", undefined, "browse")}>Browse</CalloutButton>
+                    <CalloutButton icon="sparkles" onClick={() => selectSection("music", undefined, "genres")}>Genres</CalloutButton>
                   </div>
                 </div>
               ) : null}
