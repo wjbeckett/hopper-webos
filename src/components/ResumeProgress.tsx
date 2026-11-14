@@ -31,7 +31,8 @@ export function ResumeProgress({ position, duration }: { position: number; durat
           strokeDashoffset={circumference * (1 - fraction)}
         />
       </svg>
-      {remainingLabel(duration - position)}
+      {/* An element, not a bare text node, so the flex-gap stand-in (platform/flexGap) can space it. */}
+      <span>{remainingLabel(duration - position)}</span>
     </span>
   );
 }

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { flexGapFallback } from "./flexGapFallback";
+import { HAND_WRITTEN, flexGapFallback as generate } from "./flexGapFallback";
+
+/** The generated rules alone, without the hand-written ones every output ends with. */
+const flexGapFallback = (css: string) => generate(css).replace(HAND_WRITTEN, "");
 
 const squash = (css: string) => css.replace(/\s+/g, " ").trim();
 
@@ -15,6 +18,7 @@ describe("flexGapFallback", () => {
 
   it("leaves grid gaps alone", () => {
     expect(flexGapFallback(".a { display: grid; gap: 12px; }").trim()).toBe("");
+    expect(flexGapFallback(".a, .b { display: flex; gap: 12px; } .a { display: grid; gap: 14px; }").trim()).toBe(".b > * + * {\n    margin-left: 12px\n}");
   });
 
   it("finds the display and direction in another rule for the same selector", () => {
@@ -38,6 +42,19 @@ describe("flexGapFallback", () => {
   it("spaces an in-flow ::after or ::before, which `> *` cannot select", () => {
     const css = ".a { display: flex; gap: 24px; } .a:not(.b)::after { content: \"\"; } .a::before { content: \"\"; position: absolute; }";
     expect(squash(flexGapFallback(css))).toBe(".a:not(.b)::after { margin-left: 24px } .a > * + * { margin-left: 24px }");
+  });
+
+  it("resolves gap: inherit from the parent's gap", () => {
+    const css = ".row { display: flex; gap: 20px; } .row[data-slide] > .strip { display: flex; gap: inherit; }";
+    expect(squash(flexGapFallback(css))).toBe(".row > * + * { margin-left: 20px } .row[data-slide] > .strip > * + * { margin-left: 20px }");
+  });
+
+  it("skips an inherited gap it cannot resolve", () => {
+    expect(flexGapFallback(".x > .strip { display: flex; gap: inherit; }").trim()).toBe("");
+  });
+
+  it("ends with the hand-written rules", () => {
+    expect(generate("").trim()).toBe(HAND_WRITTEN.trim());
   });
 
   it("skips a zero gap", () => {
