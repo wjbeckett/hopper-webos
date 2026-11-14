@@ -77,7 +77,7 @@ Hopper is an independent, community-built client. It is not affiliated with or e
 ## Known limitations
 
 - **Audiobooks** play in the video player. Multi-part books don't have one continuous timeline yet, and bookmarks are missing.
-- **TV models:** playback has been tested on one LG TV (webOS 22). Other webOS versions and codecs haven't been fully tested.
+- **TV models:** Hopper needs webOS 6 (2021 TVs) or later. Playback has been tested on one LG TV (webOS 22). Other webOS versions and codecs haven't been fully tested, and webOS 6 hasn't been tried on a TV yet.
 - **Connection errors:** the connection-lost and signed-out screens have been tested in a desktop browser only, not yet on a TV.
 - **Audio delay** can only delay audio by 0 to 1000 ms. It can't move audio earlier.
 - **Not implemented yet:** "Translate description" on details pages.

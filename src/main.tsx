@@ -6,10 +6,13 @@ import { afterBootSplashStarts, releaseBootSplashWhenDone } from "./core/bootSpl
 import { migratePlainSessions, serverRegistry } from "./core/serverRegistry";
 import { loadSecrets } from "./core/secureStore";
 import { probeDisplayHdr } from "./platform/displayHdr";
+import { loadFlexGapFallback } from "./platform/flexGap";
 
 // webOS TVs run an old Chromium (87 on webOS 22) on a weak GPU. This class
 // switches on the lighter paint rules in styles.css.
 if (/Web0S|webOS/i.test(navigator.userAgent)) document.documentElement.classList.add("webos");
+// webOS 6 (Chrome 79) has no flex gap; it gets a stand-in stylesheet (platform/flexGap).
+loadFlexGapFallback();
 // Asked now so the answer is in before the first playback request (platform/displayHdr).
 probeDisplayHdr();
 
