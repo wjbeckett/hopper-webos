@@ -5251,6 +5251,40 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
   background: rgba(38,40,44,.72);
   box-shadow: 0 0 0 2px rgba(255,255,255,.88);
 }
+/* Description translation (metadata AI) under the overview: Android TV's TvDescriptionTranslationSection. */
+.details-machine-translated {
+  margin: -4px 0 8px;
+  color: var(--muted-foreground);
+  font-size: 1.25rem;
+}
+.details-translate {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 8px 18px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255,255,255,.12);
+  color: inherit;
+  font: inherit;
+  font-size: 1.25rem;
+  font-weight: calc(600 + var(--font-weight-boost));
+}
+.details-translate:focus {
+  outline: none;
+  background: rgba(38,40,44,.72);
+  box-shadow: 0 0 0 2px rgba(255,255,255,.88);
+}
+.details-translate[aria-disabled="true"] { color: rgba(255,255,255,.75); }
+.details-translate-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255,255,255,.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: player-loading-spin .9s linear infinite;
+}
 .details-overview:not(.audiobook-detail-overview) {
   display: -webkit-box;
   max-width: none;

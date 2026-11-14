@@ -47,7 +47,7 @@ Hopper is an independent, community-built client. It is not affiliated with or e
 - Home and per-library rows set by the server. Each row has a large hero backdrop and an "Explore all" page.
 - Continue Watching with a time-left ring. It updates live when you watch on another device.
 - Movies, TV, music and audiobook libraries, with sorting, filters, an A–Z jump bar, collections and shuffle.
-- Details pages with cast and crew, trailers and extras, facts, related titles and theme music.
+- Details pages with cast and crew, trailers and extras, facts, related titles and theme music. When the server has AI translation set up, a description in another language can be translated.
 - Series pages with season tabs, episode rails and spoiler protection for unwatched episodes.
 - Search, calendar, watchlist, favorites, history and media requests.
 - Hold OK on a card for quick actions: mark watched, favorite and watchlist.

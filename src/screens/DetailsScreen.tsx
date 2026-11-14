@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { backdropUrl, getCatalogItem, getSimilarItems, imageUrl, isFavorite, isInWatchlist, mediaLogoUrl, setFavorite, setWatched, setWatchlist } from "../api/silo";
+import { backdropUrl, getCatalogItem, getMetadataAiOnView, getSimilarItems, requestDescriptionTranslation, imageUrl, isFavorite, isInWatchlist, mediaLogoUrl, setFavorite, setWatched, setWatchlist } from "../api/silo";
 import { CastSection, FactsSection, TrailersSection, factsFor, useDetailExtras } from "../components/DetailSections";
 import { PlaybackOptionsDialog, PlaybackSummary, useWatchDetail } from "../components/PlaybackOptions";
 import { GearIcon, MoreIcon, PlayIcon, RestartIcon, WatchlistIcon } from "../components/icons";
 import { MediaRail } from "../components/MediaRail";
 import { ExpandableOverview } from "../components/ExpandableOverview";
+import type { MetadataAiOnView } from "../api/silo";
+import { claimAutoTranslation, hasMachineTranslatedOverview, runDescriptionTranslation } from "../core/descriptionTranslation";
 import { ResumeProgress } from "../components/ResumeProgress";
 import type { PlaybackChoices } from "../api/playback";
 import type { DetailPerson, DetailTrailer } from "../api/silo";
@@ -51,6 +53,25 @@ function typeLabel(type?: string) {
   return type ?? "";
 }
 
+/** The metadata-AI capability per server and profile, read once per app run. */
+const metadataAiOnView = new Map<string, Promise<MetadataAiOnView>>();
+
+function useMetadataAiOnView(session: Session) {
+  const key = `${session.serverUrl}|${session.profileId ?? ""}`;
+  const [onView, setOnView] = useState<MetadataAiOnView>("off");
+  useEffect(() => {
+    let alive = true;
+    let pending = metadataAiOnView.get(key);
+    if (!pending) {
+      pending = getMetadataAiOnView(session).catch(() => "off" as const);
+      metadataAiOnView.set(key, pending);
+    }
+    void pending.then(value => { if (alive) setOnView(value); });
+    return () => { alive = false; };
+  }, [key]);
+  return onView;
+}
+
 export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex, onOpenPerson, onPlayExtra }: Props) {
   const [detail, setDetail] = useState(item);
   const [favorite, updateFavorite] = useState(false);
@@ -69,6 +90,48 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
   const optionsRef = useRef<HTMLButtonElement>(null);
   useEffect(() => setChoices({}), [item.Id]);
   const playRef = useRef<HTMLButtonElement>(null);
+  const onView = useMetadataAiOnView(session);
+  const [translation, setTranslation] = useState<"idle" | "translating" | "failed">("idle");
+  const translationFor = useRef("");
+  const translateRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => { translationFor.current = ""; setTranslation("idle"); }, [item.Id]);
+
+  /** Android TV's translateDescription: request it, then read the item until the pending language clears. */
+  async function translateDescription() {
+    const language = detail.PendingTranslationLanguage;
+    if (!language || translation === "translating") return;
+    const runKey = `${session.serverUrl}|${detail.Id}|${language}`;
+    translationFor.current = runKey;
+    setTranslation("translating");
+    let latest: SiloItem | undefined;
+    const result = await runDescriptionTranslation({
+      request: () => requestDescriptionTranslation(session, detail.Id, language),
+      refetchPending: async () => {
+        latest = await getCatalogItem(session, detail.Id);
+        return latest.PendingTranslationLanguage;
+      },
+      isCurrent: () => translationFor.current === runKey
+    });
+    if (result === "abandoned") return;
+    translationFor.current = "";
+    if (result === "failed") { setTranslation("failed"); return; }
+    // The button goes with the pending language; focus moves to the new overview.
+    const hadFocus = document.activeElement === translateRef.current;
+    setTranslation("idle");
+    setDetail(current => current.Id !== detail.Id ? current : {
+      ...current,
+      Overview: latest?.Overview ?? current.Overview,
+      MachineTranslatedFields: latest?.MachineTranslatedFields,
+      PendingTranslationLanguage: undefined
+    });
+    if (hadFocus) requestAnimationFrame(() => (document.querySelector<HTMLElement>(".details-content .overview-button") ?? playRef.current)?.focus({ preventScroll: true }));
+  }
+
+  useEffect(() => {
+    const language = detail.PendingTranslationLanguage;
+    if (onView === "auto" && language && claimAutoTranslation(detail.Id, language)) void translateDescription();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onView, detail.Id, detail.PendingTranslationLanguage]);
   const moreRef = useRef<HTMLButtonElement>(null);
   const moreFirstRef = useRef<HTMLButtonElement>(null);
 
@@ -205,6 +268,23 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
         {audiobook ? <div className="audiobook-detail-metadata">{[detail.AudiobookAuthorNames ?? detail.Author, (detail.AudiobookNarratorNames ?? detail.Narrator) ? `Narrated by ${detail.AudiobookNarratorNames ?? detail.Narrator}` : "", audiobookDuration(detail)].filter(Boolean).join("  ")}</div> : null}
         {audiobook && detail.Publisher ? <div className="audiobook-detail-publisher">{detail.Publisher}</div> : null}
         {detail.Overview && !hideEpisodeOverview ? <ExpandableOverview className={`details-overview${audiobook ? " audiobook-detail-overview" : ""}`} text={detail.Overview} title={detail.Name} /> : null}
+        {detail.Overview && !hideEpisodeOverview && translation !== "translating" && hasMachineTranslatedOverview(detail.MachineTranslatedFields) ? (
+          <div className="details-machine-translated">Translated by AI</div>
+        ) : null}
+        {detail.PendingTranslationLanguage && (onView === "button" || translation !== "idle") ? (
+          // Stays a button while translating (not disabled), so focus is not thrown out of the hero.
+          <button
+            ref={translateRef}
+            type="button"
+            data-tv-focusable="true"
+            className="details-translate"
+            aria-disabled={translation === "translating"}
+            onClick={() => void translateDescription()}
+          >
+            {translation === "translating" ? <><span className="details-translate-spinner" aria-hidden="true" />Translating description…</>
+              : translation === "failed" ? "Translation failed — retry" : "Translate description"}
+          </button>
+        ) : null}
         {!audiobook && (detail.Author || detail.Narrator) ? (
           <div className="details-credit">{[detail.Author, detail.Narrator ? `Narrated by ${detail.Narrator}` : ""].filter(Boolean).join(" · ")}</div>
         ) : null}

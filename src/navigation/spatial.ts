@@ -280,7 +280,7 @@ function focusElement(element: HTMLElement) {
     }
     return;
   }
-  if (element.closest(".details-actions, .overview-button, .season-tabs")) {
+  if (element.closest(".details-actions, .overview-button, .details-translate, .season-tabs")) {
     // The season buttons are a sliding row of their own; the page still goes back to the top.
     const seasons = element.closest<HTMLElement>(".season-tabs");
     if (seasons?.dataset.slide === "true") slideRailItem(seasons, element);
@@ -903,20 +903,23 @@ export function installSpatialNavigation() {
       return;
     }
 
-    // The overview is a focus stop above the buttons (Android TV: Up from the action row).
-    if (current.matches(".overview-button")) {
-      const play = direction === "down"
-        ? current.closest<HTMLElement>(".details-shell, .series-screen")?.querySelector<HTMLElement>(".details-actions .tv-button:not([disabled])")
-        : null;
-      if (play) focusElement(play);
+    // The overview is a focus stop above the buttons (Android TV: Up from the action row), with
+    // "Translate description" between them when the server offers it.
+    const hero = current.closest<HTMLElement>(".details-shell, .series-screen");
+    const translate = hero?.querySelector<HTMLElement>(".details-translate") ?? null;
+    if (current.matches(".overview-button, .details-translate")) {
+      const target = direction === "down"
+        ? (current.matches(".overview-button") ? translate : null) ?? hero?.querySelector<HTMLElement>(".details-actions .tv-button:not([disabled])")
+        : direction === "up" && current.matches(".details-translate") ? hero?.querySelector<HTMLElement>(".overview-button") : null;
+      if (target) focusElement(target);
       event.preventDefault();
       return;
     }
-    const overview = current.closest(".details-actions") && direction === "up"
-      ? current.closest<HTMLElement>(".details-shell, .series-screen")?.querySelector<HTMLElement>(".overview-button")
+    const above = current.closest(".details-actions") && direction === "up"
+      ? translate ?? hero?.querySelector<HTMLElement>(".overview-button")
       : null;
-    if (overview) {
-      focusElement(overview);
+    if (above) {
+      focusElement(above);
       event.preventDefault();
       return;
     }
