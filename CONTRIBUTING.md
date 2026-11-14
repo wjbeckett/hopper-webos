@@ -79,7 +79,10 @@ WEBOS_DEVICE=livingroom npm run webos:inspect  # open LG Web Inspector for the a
   - LG/webOS-specific code goes in `src/platform`.
   - Focus and remote handling go in `src/navigation`.
   - The phone-pairing service in `services/pairing` runs on the TV's Node 12. Write it in ES5-style JavaScript: no optional chaining and no `??`.
-- **Older TVs:** webOS 22 runs Chrome 87. CSS `:has()` doesn't exist there, and SVG transforms need `transform-box: fill-box`.
+- **Older TVs:** the oldest supported TV is webOS 6, which runs Chrome 79; webOS 22 runs Chrome 87. The build targets Chrome 79, so esbuild lowers newer JavaScript syntax and simple CSS such as `inset: 0`. It doesn't add polyfills, so check that a newer browser API exists in Chrome 79 or guard it.
+  - Write `top`/`right`/`bottom`/`left` instead of a multi-value `inset`, and `padding-left`/`padding-right` instead of `padding-inline`.
+  - Flex `gap` (Chrome 84) works through a generated stand-in: the build writes `flex-gap.css` (`src/platform/flexGapFallback.ts`), and the app loads it only where flex gap is missing. It gives a container's children margins, so a gap set on one selector and a child's margin set under another can still clash there.
+  - CSS `:has()` and `aspect-ratio` don't exist even on webOS 22, and SVG transforms need `transform-box: fill-box`.
 - **Diagnostics stay on the device.** Don't add code that uploads logs or reports.
 
 ## Pull requests

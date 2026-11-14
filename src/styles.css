@@ -2085,7 +2085,10 @@ textarea:hover:not(:focus) {
 
 .home-backdrop-image {
   z-index: 2;
-  inset: 0 0 auto auto;
+  top: 0;
+  right: 0;
+  bottom: auto;
+  left: auto;
   width: 64%;
   height: min(58vh, 640px);
   object-fit: cover;
@@ -2180,7 +2183,10 @@ textarea:hover:not(:focus) {
 .home-featured {
   position: absolute;
   z-index: 4;
-  inset: 0 0 calc(var(--home-band, 60%) + 24px);
+  top: 0;
+  right: 0;
+  bottom: calc(var(--home-band, 60%) + 24px);
+  left: 0;
   overflow: hidden;
   padding: 22px clamp(44px, 4.2vw, 82px) 24px;
   pointer-events: none;
@@ -2188,7 +2194,10 @@ textarea:hover:not(:focus) {
 
 .home-featured-copy {
   position: absolute;
-  inset: auto auto 24px clamp(44px, 4.2vw, 82px);
+  top: auto;
+  right: auto;
+  bottom: 24px;
+  left: clamp(44px, 4.2vw, 82px);
   width: min(46vw, 880px);
   display: flex;
   flex-direction: column;
@@ -2248,7 +2257,10 @@ textarea:hover:not(:focus) {
 
 .home-featured-logo {
   position: absolute;
-  inset: 0 auto 0 0;
+  top: 0;
+  right: auto;
+  bottom: 0;
+  left: 0;
   display: block;
   width: min(46vw, 880px);
   height: 100%;
@@ -2328,7 +2340,10 @@ textarea:hover:not(:focus) {
 .home-rails {
   position: absolute;
   z-index: 4;
-  inset: auto 0 0;
+  top: auto;
+  right: 0;
+  bottom: 0;
+  left: 0;
   height: var(--home-band, 60%);
   isolation: isolate;
   overflow-x: hidden;
@@ -2488,7 +2503,8 @@ textarea:hover:not(:focus) {
 
 .nav-entry-search .nav-item {
   min-width: 48px;
-  padding-inline: 14px;
+  padding-left: 14px;
+  padding-right: 14px;
   font-size: 1.7rem;
   line-height: 1;
 }
@@ -3897,13 +3913,15 @@ body {
   }
 
   .nav-item {
-    padding-inline: 14px;
+    padding-left: 14px;
+    padding-right: 14px;
   }
 }
 
 @media (max-width: 1050px) {
   .tv-nav {
-    padding-inline: 28px;
+    padding-left: 28px;
+    padding-right: 28px;
     gap: 14px;
   }
 
@@ -3913,7 +3931,8 @@ body {
   }
 
   .content-screen {
-    padding-inline: 34px;
+    padding-left: 34px;
+    padding-right: 34px;
   }
 
   .content-screen.home-screen {
@@ -3921,7 +3940,8 @@ body {
   }
 
   .library-screen {
-    padding-inline: 26px;
+    padding-left: 26px;
+    padding-right: 26px;
     grid-template-columns: minmax(0, 1fr) 36px;
     gap: 10px;
   }

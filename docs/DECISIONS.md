@@ -31,4 +31,5 @@ Deliberate differences from the Android TV app. Do not "fix" these to match Andr
 
 - Ebook reading and phone-style downloads management are not exposed on TV unless product direction changes. Android TV hides ebook-like content too.
 - Global Browse (`TvBrowseScreen`): Android registers `TvMainRoute.Browse`, but its only opener is Home's `onSeeAll`, which `TvHomeContent` never wires to a control, so no Android TV entry point reaches it. webOS ships no screen for it; `getBrowseCatalogPage`/`getBrowseFilterOptions` in `src/api/silo.ts` are ready if Android adds an entry point.
+- TVs older than webOS 6 (2021) are not supported (#75). webOS 4.x runs Chrome 53, which has no CSS grid or ES modules, and webOS 5 runs Chrome 68, which lacks most of the layout CSS Hopper uses. webOS 6 (Chrome 79) is supported through a lower build target and a stand-in for flex `gap`.
 - Android TV has no navigation route to `TvInboxScreen`, so there is no Android TV inbox destination to reproduce.

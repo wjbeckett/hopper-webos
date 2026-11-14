@@ -147,6 +147,7 @@ Keep each concern in its own layer:
 - **Android as the starting point:** grid focus restoration and pagination follow Android TV's behaviour, implemented natively in React for webOS.
 
 ## webOS runtime gotchas (verified on Chrome 87 TVs)
+- **The oldest supported TV is webOS 6 (Chrome 79).** The build target is `chrome79`, so esbuild lowers syntax (`?.`, `??`) and `inset: 0`, but adds no polyfills: a browser API newer than Chrome 79 needs a guard. Write multi-value `inset` and `padding-inline` as longhands. Flex `gap` (Chrome 84) is covered by `flex-gap.css`, which the build generates (`src/platform/flexGapFallback.ts`) and `src/platform/flexGap.ts` loads, ahead of the main stylesheet, only where flex gap is missing. webOS 4 and 5 are not supported (`docs/DECISIONS.md`).
 - No CSS `:has()`.
 - CSS transforms on SVG elements need `transform-box: fill-box`.
 - Video renders on a hardware layer, so inspector screenshots show a blank player.

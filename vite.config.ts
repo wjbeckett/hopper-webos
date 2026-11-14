@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { flexGapFallback } from "./src/platform/flexGapFallback";
 
 /**
  * Every build gets its own version, so a TV can always say which build it is running.
@@ -45,6 +46,17 @@ export default defineConfig({
       }
     },
     {
+      // The stand-in for flex gap on Chrome 79 (webOS 6), loaded only there (platform/flexGap.ts).
+      name: "hopper-flex-gap-fallback",
+      apply: "build",
+      generateBundle(_options, bundle) {
+        const css = Object.values(bundle).filter(file => file.type === "asset" && file.fileName.endsWith(".css"));
+        if (css.length !== 1) this.error(`expected one stylesheet in the bundle, found ${css.length}`);
+        const source = (css[0] as { source: string | Uint8Array }).source;
+        this.emitFile({ type: "asset", fileName: "flex-gap.css", source: flexGapFallback(typeof source === "string" ? source : new TextDecoder().decode(source)) });
+      }
+    },
+    {
       name: "hopper-client-log",
       configureServer(server) {
         server.middlewares.use("/__client-log", (request, response) => {
@@ -82,7 +94,9 @@ export default defineConfig({
     }
   },
   build: {
-    target: "es2020",
+    // webOS 6 (Chrome 79) is the oldest supported TV. esbuild lowers newer syntax (optional
+    // chaining, ??) and simple CSS such as `inset: 0` for it; see docs/DECISIONS.md.
+    target: "chrome79",
     outDir: "dist",
     emptyOutDir: true
   }
