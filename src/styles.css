@@ -1177,6 +1177,8 @@ textarea:hover:not(:focus) {
 .browse-load-more { display: flex; justify-content: center; padding: 18px 0 42px; }
 
 .library-filter-row { display: flex; gap: 10px; overflow-x: auto; overflow-y: hidden; margin: 0 -6px; padding: 10px 6px 18px; }
+/* Music Genres: a heading over one sliding row of genre chips (Android's GenreChipCloud). */
+.library-genres-title { margin: 4px 0 0; color: var(--muted-foreground); font-size: 1.25rem; font-weight: calc(600 + var(--font-weight-boost)); }
 
 .library-view-tab {
   padding: 11px 21px;
@@ -5176,12 +5178,14 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 .episode-rail[data-slide],
 .detail-cast-track[data-slide],
 .detail-trailer-track[data-slide],
-.player-on-deck-row[data-slide] { overflow: hidden; }
+.player-on-deck-row[data-slide],
+.library-filter-row[data-slide] { overflow: hidden; }
 .season-tabs[data-slide] > .rail-strip,
 .episode-rail[data-slide] > .rail-strip,
 .detail-cast-track[data-slide] > .rail-strip,
 .detail-trailer-track[data-slide] > .rail-strip,
-.player-on-deck-row[data-slide] > .rail-strip {
+.player-on-deck-row[data-slide] > .rail-strip,
+.library-filter-row[data-slide] > .rail-strip {
   position: relative;
   display: flex;
   gap: inherit;
