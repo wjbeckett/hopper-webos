@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { connectionStatus, holdConnectionDialog, NetworkError, onceReachable, reportNetworkFailure, subscribeConnection } from "../api/connection";
 import type Hls from "hls.js";
 import { pinFocusedRailItem } from "../navigation/spatial";
-import { allowDirectPlay, isDirectPlay, allowDolbyAudio, setBufferingQualityMode, bestVersionForDevice, getMarkers, isDolbyAudio, getTrickplay, getWatchDetail, playbackUrl, replanPlaybackV3, reportProgress, saveAudioPreference, saveSubtitlePreference, startPlaybackV3, stopPlayback, stopPlaybackKeepalive, type AudioTrack, type FileMarkers, type MarkerSegment, type PlaybackChoices, type PlaybackPlan, type Quality, type SubtitleInventory, type Trickplay, type WatchDetail } from "../api/playback";
+import { allowDirectPlay, isDirectPlay, allowDolbyAudio, setBufferingQualityMode, bestVersionForDevice, getMarkers, isDolbyAudio, getTrickplay, getWatchDetail, playbackUrl, replanPlaybackV3, reportProgress, saveAudioPreference, saveSubtitlePreference, startPlaybackV3, stopPlayback, stopPlaybackKeepalive, type AudioTrack, type FileMarkers, type MarkerSegment, type PlaybackChoices, type PlaybackFailure, type PlaybackPlan, type Quality, type SubtitleInventory, type Trickplay, type WatchDetail } from "../api/playback";
+import { classifyPlaybackFailure } from "./playbackFailure";
 import type { HomeRail, Session, SiloItem } from "../types";
 import { getEffectiveSettings, putScopedSetting } from "../api/settings";
 import { artUrl, getHomeRails, getShuffle, skipShuffle } from "../api/silo";
@@ -247,7 +248,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   // error) used to stay stopped on an error. It is started again at the same position: once
   // as it was, then once with Dolby audio converted to AAC by the server.
   const streamFailures = useRef({ count: 0, at: 0 });
-  const recoverStream = useRef<(reason: string) => boolean>(() => false);
+  const recoverStream = useRef<(failure: PlaybackFailure) => boolean>(() => false);
   // The restart in progress (see resumeAfterOutage), 0 when none. hls.js and the video element
   // can both report the same fault, so a failure reported while a restart is under way belongs
   // to it. Only the newest restart may install its plan.
@@ -557,7 +558,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
           if (noAnswer) reportNetworkFailure(session.serverUrl);
           if (!data.fatal) return;
           if (noAnswer && beginOutage.current()) return;
-          if (!noAnswer && recoverStream.current(data.details)) return;
+          if (!noAnswer && recoverStream.current(classifyPlaybackFailure({ hlsDetails: data.details, httpStatus: code }))) return;
           setError(`HLS playback error: ${data.details}`);
         });
         hls.on(HlsPlayer.Events.MANIFEST_PARSED, () => {
@@ -1511,7 +1512,28 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
 
   // Returns false when the stream has already been started again without success: the caller
   // shows the error.
-  recoverStream.current = (reason: string) => {
+  // Asks Silo for a plan that avoids the one that failed (Android's failure_recovery replan). If
+  // Silo has none to offer, or cannot be asked, the stream is started again as before.
+  async function replanAfterFailure(active: PlaybackState, failure: PlaybackFailure) {
+    const at = sourcePosition();
+    const id = ++restartIdCounter.current;
+    restartId.current = id;
+    try {
+      const next = await replanPlaybackV3(session, active, "failure_recovery", at, qualityRef.current, active.plan.selected_tracks, null, failure);
+      if (unmounted.current || restartId.current !== id || stateRef.current !== active) return;
+      restartId.current = 0;
+      clientDiagnostic("failure recovery replan", { classification: failure.classification, delivery: next.plan.delivery, planId: next.plan.plan_id });
+      installPlan(next);
+    } catch (reason) {
+      if (unmounted.current || restartId.current !== id) return;
+      restartId.current = 0;
+      clientDiagnostic("failure recovery replan failed; starting again", { reason: reason instanceof Error ? reason.message : String(reason) });
+      void resumeAfterOutage(at);
+    }
+  }
+
+  recoverStream.current = (failure: PlaybackFailure) => {
+    const reason = failure.message ?? failure.classification;
     const active = stateRef.current;
     if (!active || !detail || !version || outageWait.current) return false;
     // Already starting again: the same fault reported twice, not a second failure.
@@ -1532,10 +1554,14 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     const dolby = isDolbyAudio(active.plan.claims?.audio?.codec);
     if (failures.count > (dolby ? 2 : 1)) return false;
     const withoutDolby = dolby && failures.count === 2;
-    clientDiagnostic("restarting the stream after a playback failure", { reason, attempt: failures.count, withoutDolby });
-    if (withoutDolby) allowDolbyAudio(false);
+    clientDiagnostic("recovering the stream after a playback failure", { reason, classification: failure.classification, attempt: failures.count, withoutDolby });
     setError("");
-    void resumeAfterOutage(sourcePosition());
+    if (withoutDolby) {
+      allowDolbyAudio(false);
+      void resumeAfterOutage(sourcePosition());
+    } else {
+      void replanAfterFailure(active, failure);
+    }
     return true;
   };
 
@@ -1545,7 +1571,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     // A stream the TV loads itself (not through hls.js) reports network loss here.
     if (mediaError?.code === 2 && beginOutage.current()) return;
     // The TV could not decode or open the stream: start it again before giving up.
-    if (mediaError && (mediaError.code === 3 || mediaError.code === 4) && recoverStream.current(`media error ${mediaError.code}`)) return;
+    if (mediaError && (mediaError.code === 3 || mediaError.code === 4) && recoverStream.current(classifyPlaybackFailure({ mediaErrorCode: mediaError.code }))) return;
     const labels: Record<number, string> = { 1: "aborted", 2: "network", 3: "decode", 4: "unsupported source" };
     const reason = mediaError ? labels[mediaError.code] ?? `code ${mediaError.code}` : "unknown error";
     const diagnostics = {

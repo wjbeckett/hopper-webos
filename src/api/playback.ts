@@ -14,6 +14,11 @@ export type SubtitleTrack = { index?: number; codec?: string; language?: string;
 export type Chapter = { index: number; title?: string; start_seconds: number; end_seconds?: number; source?: string; thumbnail_url?: string; thumbnail_thumbhash?: string };
 export type FileVersion = { file_id: number; resolution?: string; codec_video?: string; codec_audio?: string; container?: string; edition_raw?: string; edition_key?: string; bitrate?: number; duration?: number; duration_seconds?: number; audio_tracks?: AudioTrack[]; subtitle_tracks?: SubtitleTrack[]; chapters?: Chapter[]; effective_audio_track_index?: number };
 export type WatchDetail = { content_id: string; title: string; overview?: string; series_id?: string; series_title?: string; season_number?: number; episode_number?: number; versions: FileVersion[]; user_data?: { position_seconds?: number; last_file_id?: number } };
+/**
+ * Why a plan failed, for a `failure_recovery` replan (FailureV3). Classifications follow Android
+ * TV's: decoder_failure, http_failure, source_unavailable, transport_stall, player_failure.
+ */
+export type PlaybackFailure = { classification: string; message?: string; decoder_name?: string };
 export type PlaybackChoices = { fileId?: number; audioIndex?: number; subtitleIndex?: number; subtitleOff?: boolean };
 export type Quality = { label: string; height?: number; bitrate_kbps?: number; preserves_source: boolean };
 export type SubtitleInventory = { track_id: string; combined_index: number; source: string; codec?: string; language?: string; label?: string; forced: boolean; default: boolean; hearing_impaired: boolean; delivery: string; url?: string; sync_key?: string };
@@ -289,8 +294,9 @@ export async function startPlaybackV3(session: Session, detail: WatchDetail, ver
  * null for one the player sends for its own reasons. Either way the kept-estimate rule applies, so
  * a track change or seek after a lowering stays at the lowered quality.
  */
-export async function replanPlaybackV3(session: Session, state: { plan: PlaybackPlan; playbackAttemptId: string; planAttemptId: string; attemptedKeys: string[] }, operation: "track_change" | "quality_change" | "seek_reanchor", position: number, quality: string, selected: { audio?: TrackIdentity; subtitle?: TrackIdentity }, bufferingQuality: BufferingQualityReplan | null = null) {
-  const attemptedKeys = [state.plan.plan_attempt_key];
+export async function replanPlaybackV3(session: Session, state: { plan: PlaybackPlan; playbackAttemptId: string; planAttemptId: string; attemptedKeys: string[] }, operation: "track_change" | "quality_change" | "seek_reanchor" | "failure_recovery", position: number, quality: string, selected: { audio?: TrackIdentity; subtitle?: TrackIdentity }, bufferingQuality: BufferingQualityReplan | null = null, failure?: PlaybackFailure) {
+  // A failure recovery names every plan this attempt already tried, so Silo routes around all of them.
+  const attemptedKeys = operation === "failure_recovery" ? [...new Set([...state.attemptedKeys, state.plan.plan_attempt_key])] : [state.plan.plan_attempt_key];
   const fields = withKeptStepDownEstimate({
     operation,
     playbackAttemptId: state.playbackAttemptId,
@@ -306,10 +312,10 @@ export async function replanPlaybackV3(session: Session, state: { plan: Playback
     ...(gated && fields.request.bandwidthEstimateKbps != null && fields.request.bandwidthEstimateSource ? { bandwidth_estimate_source: fields.request.bandwidthEstimateSource } : {}),
     ...(gated && fields.request.learnedLimit ? { learned_limit: fields.request.learnedLimit } : {})
   };
-  const body = { installation_id: await playbackInstallationId(session), protocol_version: 3, client_features: clientFeatures(), ...buffering, operation, playback_attempt_id: state.playbackAttemptId, replan_request_id: uuid("replan"), failed_plan_id: state.plan.plan_id, plan_attempt_id: state.planAttemptId, plan_attempt_key: state.plan.plan_attempt_key, attempted_plan_keys: attemptedKeys, attempt_count: attemptedKeys.length, quality_preference: quality, position_seconds: position, metered: false, selected_tracks: selected, local_mutations: [], ...snapshot() };
+  const body = { installation_id: await playbackInstallationId(session), protocol_version: 3, client_features: clientFeatures(), ...buffering, operation, playback_attempt_id: state.playbackAttemptId, replan_request_id: uuid("replan"), failed_plan_id: state.plan.plan_id, plan_attempt_id: state.planAttemptId, plan_attempt_key: state.plan.plan_attempt_key, attempted_plan_keys: attemptedKeys, attempt_count: attemptedKeys.length, quality_preference: quality, position_seconds: position, metered: false, selected_tracks: selected, local_mutations: [], ...(failure ? { failure } : {}), ...snapshot() };
   const decision = await requestV2<Decision>(session, `/playback/${encodeURIComponent(state.plan.session_id)}/replan`, { method: "POST", body: JSON.stringify(body) });
   noteServerFeatures(decision);
-  return { plan: requirePlan(decision), playbackAttemptId: state.playbackAttemptId, planAttemptId: uuid("plan"), attemptedKeys: [] };
+  return { plan: requirePlan(decision), playbackAttemptId: state.playbackAttemptId, planAttemptId: uuid("plan"), attemptedKeys: operation === "failure_recovery" ? attemptedKeys : [] };
 }
 
 const progressSequences = new Map<string, number>();
