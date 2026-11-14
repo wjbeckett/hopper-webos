@@ -38,6 +38,19 @@ const RAIL_PIN_MS = 100;
 const railAnimations = new WeakMap<HTMLElement, number>();
 const railInlineStyles = new WeakMap<HTMLElement, { snap: string; behavior: string }>();
 let railStepUntil = 0;
+/**
+ * True from a grid move until the frame after it has been drawn. A held key's repeats that
+ * arrive meanwhile are dropped: on a TV a grid step costs about as long as the repeat interval,
+ * so without this the repeats queue up and the grid keeps moving after the key is let go.
+ */
+let gridFramePending = false;
+
+function gridMoved() {
+  if (gridFramePending) return;
+  gridFramePending = true;
+  // The animation frame runs before the paint; the task after it runs once the frame is out.
+  requestAnimationFrame(() => window.setTimeout(() => { gridFramePending = false; }, 0));
+}
 
 function easeOut(t: number) {
   return 1 - (1 - t) * (1 - t);
@@ -318,6 +331,7 @@ function focusElement(element: HTMLElement) {
   }
   if (element.closest(".library-screen, .home-rails")) return;
   if (element.closest(".library-grid")) {
+    gridMoved();
     keepInViewVertically(element);
     return;
   }
@@ -692,6 +706,10 @@ export function installSpatialNavigation() {
     if (document.querySelector(".player-shell")) return;
     keyHeld = event.repeat;
     if (event.repeat && (event.key === "ArrowLeft" || event.key === "ArrowRight") && performance.now() < railStepUntil) {
+      event.preventDefault();
+      return;
+    }
+    if (event.repeat && gridFramePending && directionKeys[event.key]) {
       event.preventDefault();
       return;
     }
