@@ -171,6 +171,8 @@ type NativeItem = Record<string, unknown> & {
   backdrop_is_episode_still?: boolean;
   overview?: string;
   description?: string;
+  pending_translation_language?: string | null;
+  machine_translated_fields?: string[];
   year?: number;
   release_year?: number;
   release_date?: string;
@@ -381,6 +383,8 @@ function toItem(item: NativeItem): SiloItem {
     AudiobookAuthorNames: item.audiobook?.authors?.map(person => person.name).filter((name): name is string => Boolean(name?.trim())).join(", ") || item.sort_metrics?.author || item.author,
     AudiobookNarratorNames: item.audiobook?.narrators?.map(person => person.name).filter((name): name is string => Boolean(name?.trim())).join(", ") || item.sort_metrics?.narrator || item.narrator,
     Overview: item.overview ?? item.description,
+    PendingTranslationLanguage: item.pending_translation_language || undefined,
+    MachineTranslatedFields: item.machine_translated_fields,
     Genres: item.genres,
     ContentRating: item.content_rating,
     ImdbRating: item.rating_imdb,
@@ -1407,6 +1411,27 @@ export async function searchItems(session: Session, query: string): Promise<Silo
 export async function getCatalogItem(session: Session, contentId: string): Promise<SiloItem> {
   const data = await requestV2<NativeItem>(session, `/catalog/items/${encodeURIComponent(contentId)}`);
   return toItem(data);
+}
+
+/**
+ * How description translation shows on detail pages (`/capabilities/metadata-ai`): "button"
+ * offers it, "auto" starts it on view, "off" hides it. Anything but an available capability is off.
+ */
+export type MetadataAiOnView = "off" | "button" | "auto";
+
+export async function getMetadataAiOnView(session: Session): Promise<MetadataAiOnView> {
+  const data = await requestV2<{ state?: string; on_view?: string }>(session, "/capabilities/metadata-ai");
+  if (data.state !== "available") return "off";
+  return data.on_view === "button" || data.on_view === "auto" ? data.on_view : "off";
+}
+
+/** Asks Silo to translate an item's description (202). Returns the job's status; there is no job-status endpoint. */
+export async function requestDescriptionTranslation(session: Session, contentId: string, targetLanguage: string): Promise<string> {
+  const job = await requestV2<{ status?: string }>(session, `/catalog/items/${encodeURIComponent(contentId)}/translate-description`, {
+    method: "POST",
+    body: JSON.stringify({ target_language: targetLanguage })
+  });
+  return job.status ?? "";
 }
 
 export async function setWatched(session: Session, contentId: string, watched: boolean) {
