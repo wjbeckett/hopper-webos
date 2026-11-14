@@ -1520,8 +1520,9 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     restartId.current = id;
     try {
       const next = await replanPlaybackV3(session, active, "failure_recovery", at, qualityRef.current, active.plan.selected_tracks, null, failure);
-      if (unmounted.current || restartId.current !== id || stateRef.current !== active) return;
+      if (unmounted.current || restartId.current !== id) return;
       restartId.current = 0;
+      if (stateRef.current !== active) return;
       clientDiagnostic("failure recovery replan", { classification: failure.classification, delivery: next.plan.delivery, planId: next.plan.plan_id });
       installPlan(next);
     } catch (reason) {
