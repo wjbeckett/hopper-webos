@@ -1747,8 +1747,15 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       if (mediaKey === "play" || mediaKey === "pause" || mediaKey === "playpause") {
         event.preventDefault(); event.stopPropagation();
         if (!event.repeat) {
-          if (snapshot.cleanSeek) commitCleanSeek();
-          else togglePlayPause();
+          // A remote's dedicated keys do what they say (LG's checklist; a difference from Android
+          // TV, which toggles on all three, see docs/DECISIONS.md): Play only plays, Pause only
+          // pauses, and only a combined Play/Pause key toggles, as the on-screen button does.
+          const paused = videoRef.current?.paused ?? !snapshot.playing;
+          if (snapshot.cleanSeek) {
+            if (mediaKey === "pause") stopCleanSeek();
+            else commitCleanSeek();
+          }
+          else if (mediaKey === "playpause" || (mediaKey === "play") === paused) togglePlayPause();
         }
         return;
       }
