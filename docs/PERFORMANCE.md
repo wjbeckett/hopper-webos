@@ -108,6 +108,17 @@ Two things the TV does differently from Android's Media3:
 
 **Starting at the right quality.** As Android does, the app runs a speed test in the background 5 s after launch (not while a title plays, nor within a minute of a start, and not when the server turned automatic tests off), keeps the reading per server for the server's `bandwidth_probe_max_age_seconds` or a week, and sends it with every playback start (`src/core/bandwidthProbe.ts`). On the maintainer's network it measured 65.9 Mbps. With a reading of 500 kbps and the link at 512 kbps, the first picture came at 7.8 s at 480p with no lowering needed, against 27 s with a lowering when there is no reading.
 
+**Retest on current `main`, LG's procedure (15 November 2026).** Each run cleared the stored speed reading, relaunched the app with the inspector's throttling already on (40 ms latency), let the launch speed test run, then played *100% Wolf* (1080p H.264, AC-3 5.1, 5.5 Mbps MKV, so it streams over HLS) for 75 s. Two runs per speed, as LG does.
+
+| Speed | Speed test read | Silo's plan | First picture | Stalls in 75 s |
+| --- | --- | --- | --- | --- |
+| 512 kbps | 413, 414 kbps | transcode to 852×460 HEVC, 235 kbps | 6.6 s, 7.2 s | 0, 0 |
+| 1 Mbps | 994, 995 kbps | transcode to 852×460 HEVC, 567 kbps | 7.0 s, 7.4 s | 0, 0 |
+| 7 Mbps | 6622, 6942 kbps | run 1: transcode to 1080p HEVC, 3.3 Mbps. Run 2: the 5.5 Mbps original, which stalled twice (3.1 s in all); the player lowered it at 27 s (`observed_rebuffer`, 3821 kbps) to 1278×690 HEVC, 2.5 Mbps, with "Quality lowered to stop buffering · Restore quality" | 6.3 s, 10.7 s | 0, 2 |
+| 17.5 Mbps | 17195 kbps (plus one run on a cached 65.9 Mbps reading) | the 5.5 Mbps original (remux) | 11.5 s, 9.7 s | 0, 0 |
+
+Not covered: direct-play files (the TV's own player fetches them, outside the inspector's throttling), a limit set at the router, and IPv6.
+
 ## Browse grids
 
 Holding Down for 3 s with key repeats every 80 ms, on webOS 22. "Off screen" counts samples, taken every 250 ms, where the focused card was outside the screen.

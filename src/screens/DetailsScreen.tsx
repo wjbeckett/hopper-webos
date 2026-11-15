@@ -6,6 +6,7 @@ import { GearIcon, MoreIcon, PlayIcon, RestartIcon, WatchlistIcon } from "../com
 import { MediaRail } from "../components/MediaRail";
 import { ExpandableOverview } from "../components/ExpandableOverview";
 import { useMetadataAiOnView } from "./useMetadataAiOnView";
+import { DefaultArtwork } from "../components/ArtworkImage";
 import { claimAutoTranslation, hasMachineTranslatedOverview, runDescriptionTranslation } from "../core/descriptionTranslation";
 import { ResumeProgress } from "../components/ResumeProgress";
 import type { PlaybackChoices } from "../api/playback";
@@ -55,6 +56,8 @@ function typeLabel(type?: string) {
 
 export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex, onOpenPerson, onPlayExtra }: Props) {
   const [detail, setDetail] = useState(item);
+  const [posterFailed, setPosterFailed] = useState(false);
+  useEffect(() => setPosterFailed(false), [item.Id]);
   const [favorite, updateFavorite] = useState(false);
   const [watchlist, updateWatchlist] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -229,11 +232,16 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
     <main className={`details-shell${audiobook ? " audiobook-detail-shell" : ""}`}>
       <div
         className={`details-backdrop${hideEpisodeBackdrop ? " spoiler-hidden-image" : ""}`}
-        style={{ backgroundImage: `url("${audiobook ? imageUrl(session, detail) : backdropUrl(session, detail)}")` }}
+        style={{ backgroundImage: (audiobook ? imageUrl(session, detail) : backdropUrl(session, detail)) ? `url("${audiobook ? imageUrl(session, detail) : backdropUrl(session, detail)}")` : undefined }}
       />
       <div className="details-scrim" />
       <div className={`details-content${audiobook ? " audiobook-detail-content" : ""}`}>
-        {audiobook ? <img className="audiobook-detail-poster" src={imageUrl(session, detail) || ""} alt="" /> : null}
+        {audiobook ? (
+          // No cover, or one that won't load: the cards' fallback artwork, not an empty box (#133).
+          imageUrl(session, detail) && !posterFailed
+            ? <img className="audiobook-detail-poster" src={imageUrl(session, detail)} alt="" onError={() => setPosterFailed(true)} />
+            : <div className="audiobook-detail-poster audiobook-detail-poster-fallback"><DefaultArtwork kind="Audiobook" /></div>
+        ) : null}
         <div className={audiobook ? "audiobook-detail-copy" : undefined}>
         {audiobook ? <div className="audiobook-eyebrow">AUDIOBOOK</div> : null}
         {audiobook ? <h1>{detail.Name}</h1> : logo && !logoFailed ? (
@@ -246,7 +254,7 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
           {canResume ? <ResumeProgress position={position} duration={duration} /> : null}
         </div> : null}
         {!audiobook && extras?.tagline ? <div className="details-tokens">{extras.tagline}</div> : null}
-        {audiobook ? <div className="audiobook-detail-metadata">{[detail.AudiobookAuthorNames ?? detail.Author, (detail.AudiobookNarratorNames ?? detail.Narrator) ? `Narrated by ${detail.AudiobookNarratorNames ?? detail.Narrator}` : "", audiobookDuration(detail)].filter(Boolean).join("  ")}</div> : null}
+        {audiobook ? <div className="audiobook-detail-metadata">{[detail.AudiobookAuthorNames ?? detail.Author, (detail.AudiobookNarratorNames ?? detail.Narrator) ? `Narrated by ${detail.AudiobookNarratorNames ?? detail.Narrator}` : "", audiobookDuration(detail)].filter(Boolean).join(" · ")}</div> : null}
         {audiobook && detail.Publisher ? <div className="audiobook-detail-publisher">{detail.Publisher}</div> : null}
         {detail.Overview && !hideEpisodeOverview ? <ExpandableOverview className={`details-overview${audiobook ? " audiobook-detail-overview" : ""}`} text={detail.Overview} title={detail.Name} /> : null}
         {detail.Overview && !hideEpisodeOverview && translation !== "translating" && hasMachineTranslatedOverview(detail.MachineTranslatedFields) ? (
