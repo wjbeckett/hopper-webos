@@ -39,6 +39,9 @@ stay online during review.
 | Hero / preview 1920×1080 | `brand/out/store/hopper-store-banner-1920x1080.png` |
 | Screenshots 1920×1080 | `brand/store/screenshots/01–05` |
 
+## Permissions
+`appinfo.json` asks for the `settings` group (LG's "Read and modify system preferences and settings"). Hopper only reads the TV's caption style, for Settings → Subtitles → Use Device Settings. A developer-installed build is refused it, so whether it works can only be checked on the store-signed build (#106). If LG questions it, that is the reason; if they refuse it, the app keeps its own subtitle style.
+
 ## Before you submit
 The steps left before submission are the open issues in the [Store submission milestone](https://github.com/wjbeckett/hopper-webos/milestone/2).
 

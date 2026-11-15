@@ -13,7 +13,12 @@
   "iconColor": "#0E1030",
   "splashColor": "#0E1030",
   "appDescription": "A TV client for your Silo media server",
-  "requiredACG": [],
+  "requiredACG": [
+    "settings"
+  ],
   "resolution": "1920x1080",
-  "disableBackHistoryAPI": true
+  "disableBackHistoryAPI": true,
+  "requiredPermissions": [
+    "settings"
+  ]
 }

@@ -6,6 +6,9 @@ const COLORS: Record<string, string> = { white: "#ffffff", black: "#000000", red
 const OPACITY: Record<string, number> = { solid: 100, translucent: 60, transparent: 0, flash: 100 };
 const SIZES: Record<string, SubtitleAppearance["fontSize"]> = { small: "small", standard: "large", large: "xlarge" };
 
+// The style keys need the `settings` permission (requested in appinfo.json). The TV refuses them to a
+// developer-installed build ("Access denied"; only captionEnable is readable), so on such a build this
+// falls back to Hopper's own style. Whether a store-signed build is allowed is still to check (#106).
 async function readDeviceCaptions(): Promise<Record<string, string> | null> {
   const reply = await lunaCall("luna://com.webos.settingsservice/getSystemSettings", { category: "caption", keys: KEYS });
   if (!reply || reply.returnValue === false) return null;
