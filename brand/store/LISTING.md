@@ -3,6 +3,7 @@
 **App name:** Hopper
 **Category:** Entertainment
 **App ID:** com.hopperapp.hopper · **Version:** 0.3.0
+**Privacy policy:** https://wjbeckett.github.io/hopper-webos/privacy/ (source: `docs/privacy.md`, published with GitHub Pages from `/docs` on `main`)
 
 ## Short description
 Watch your own Silo media server on your LG TV.

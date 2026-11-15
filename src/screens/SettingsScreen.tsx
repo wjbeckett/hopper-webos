@@ -25,6 +25,9 @@ import { TvButton } from "../components/TvButton";
 import type { Session } from "../types";
 import { LOCAL_SETTINGS_STORAGE } from "../core/playerSettings";
 
+/** Hopper's own policy (docs/privacy.md, published with GitHub Pages). It links to Silo's for the server. */
+const PRIVACY_POLICY_URL = "https://wjbeckett.github.io/hopper-webos/privacy/";
+
 type Category = "general" | "playback" | "subtitles" | "diagnostics" | "server";
 type Choice = { label: string; value: unknown; detail?: string };
 type PickerRequest = { title: string; choices: Choice[]; current: unknown; returnKey: string; onPick: (value: unknown) => void };
@@ -377,7 +380,7 @@ export function SettingsScreen({
   useEffect(() => {
     if (!showPrivacyPolicy) return;
     let alive = true;
-    QRCode.toDataURL("https://siloserver.org/privacy", { width: 320, margin: 2, errorCorrectionLevel: "M" })
+    QRCode.toDataURL(PRIVACY_POLICY_URL, { width: 320, margin: 2, errorCorrectionLevel: "M" })
       .then(value => { if (alive) setPrivacyQr(value); })
       .catch(() => { if (alive) setPrivacyQr(""); });
     return () => { alive = false; };
@@ -1167,8 +1170,8 @@ export function SettingsScreen({
           <div className="details-more settings-privacy-dialog" role="dialog" aria-label="Privacy Policy" onClick={event => event.stopPropagation()}>
             <h2>Privacy Policy</h2>
             <p>Scan this code with your phone, or type the address below, to read the full policy.</p>
-            {privacyQr ? <img className="settings-privacy-qr" src={privacyQr} alt="QR code for the Silo privacy policy" /> : <LoadingState />}
-            <strong>https://siloserver.org/privacy</strong>
+            {privacyQr ? <img className="settings-privacy-qr" src={privacyQr} alt="QR code for the Hopper privacy policy" /> : <LoadingState />}
+            <strong>{PRIVACY_POLICY_URL}</strong>
             <TvButton autoFocus onClick={() => { setShowPrivacyPolicy(false); refocus("privacy-policy"); }}>Done</TvButton>
           </div>
         </div>
