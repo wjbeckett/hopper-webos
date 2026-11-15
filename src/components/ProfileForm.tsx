@@ -207,7 +207,13 @@ export function ProfileForm({ state, callbacks }: { state: ProfileFormState; cal
             <div className="profile-form-section-head">
               <h2>PIN (optional)</h2>
               {state.pinEnabled ? (
-                <button type="button" data-tv-focusable="true" className="tv-button secondary compact" onClick={() => callbacks.onPinToggled(false)}>
+                <button type="button" data-tv-focusable="true" className="tv-button secondary compact" onClick={() => {
+                  callbacks.onPinToggled(false);
+                  // The button goes away, so focus moves on rather than falling to the page (#135): to the
+                  // Child Profile switch below the PIN field, not the field itself, because focusing a text
+                  // field opens the TV's keyboard. Up reaches the PIN field.
+                  requestAnimationFrame(() => document.querySelector<HTMLElement>(".profile-form .profile-form-switch")?.focus());
+                }}>
                   × Remove
                 </button>
               ) : null}
