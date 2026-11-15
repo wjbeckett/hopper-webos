@@ -83,7 +83,11 @@ export function SearchScreen({
         <p>Find a movie, series, episode, or person in your library.</p>
       </div>
       <div className="search-field">
-        <span className="search-field-icon" aria-hidden="true">⌕</span>
+        {/* An SVG, not the ⌕ character: the TV's fonts have no glyph for it and drew a square. */}
+        <svg className="search-field-icon" aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+          <circle cx="10.8" cy="10.8" r="6.3" />
+          <path d="m15.4 15.4 4.2 4.2" />
+        </svg>
         <input
           type="search"
           className="search-input"
