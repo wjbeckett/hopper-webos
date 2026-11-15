@@ -1,17 +1,13 @@
-type WebOSBridge = {
-  service?: { request: (uri: string, options: { method: string; parameters: Record<string, unknown>; onFailure?: () => void }) => void };
-};
+import { lunaAvailable, lunaCall } from "./luna";
 
 export function openYoutube(videoKey: string) {
   const target = `https://www.youtube.com/watch?v=${encodeURIComponent(videoKey)}`;
-  const bridge = (window as unknown as { webOS?: WebOSBridge }).webOS;
-  if (bridge?.service) {
-    bridge.service.request("luna://com.webos.applicationManager", {
-      method: "launch",
-      parameters: { id: "youtube.leanback.v4", params: { contentTarget: target } },
-      onFailure: () => { window.open(target, "_blank"); }
-    });
+  if (!lunaAvailable()) {
+    window.open(target, "_blank");
     return;
   }
-  window.open(target, "_blank");
+  // Opens the browser only when the TV refuses the launch (no YouTube app). A slow answer is
+  // left alone, so a launch that is still starting doesn't also open the browser.
+  void lunaCall("luna://com.webos.applicationManager/launch", { id: "youtube.leanback.v4", params: { contentTarget: target } }, 10000)
+    .then(reply => { if (reply?.returnValue === false) window.open(target, "_blank"); });
 }

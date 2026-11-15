@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { connectionStatus, holdConnectionDialog, NetworkError, onceReachable, reportNetworkFailure, subscribeConnection } from "../api/connection";
 import type Hls from "hls.js";
 import { pinFocusedRailItem } from "../navigation/spatial";
-import { allowDirectPlay, isDirectPlay, allowDolbyAudio, setBufferingQualityMode, bestVersionForDevice, getMarkers, isDolbyAudio, getTrickplay, getWatchDetail, playbackUrl, replanPlaybackV3, reportProgress, saveAudioPreference, saveSubtitlePreference, startPlaybackV3, stopPlayback, stopPlaybackKeepalive, type AudioTrack, type FileMarkers, type MarkerSegment, type PlaybackChoices, type PlaybackPlan, type Quality, type SubtitleInventory, type Trickplay, type WatchDetail } from "../api/playback";
+import { allowDirectPlay, isDirectPlay, allowDolbyAudio, setBufferingQualityMode, bestVersionForDevice, getMarkers, isDolbyAudio, getTrickplay, getWatchDetail, playbackUrl, replanPlaybackV3, reportProgress, saveAudioPreference, saveSubtitlePreference, startPlaybackV3, stopPlayback, stopPlaybackKeepalive, type AudioTrack, type FileMarkers, type MarkerSegment, type PlaybackChoices, type PlaybackFailure, type PlaybackPlan, type Quality, type SubtitleInventory, type Trickplay, type WatchDetail } from "../api/playback";
+import { classifyPlaybackFailure } from "./playbackFailure";
 import type { HomeRail, Session, SiloItem } from "../types";
 import { getEffectiveSettings, putScopedSetting } from "../api/settings";
 import { artUrl, getHomeRails, getShuffle, skipShuffle } from "../api/silo";
@@ -247,7 +248,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   // error) used to stay stopped on an error. It is started again at the same position: once
   // as it was, then once with Dolby audio converted to AAC by the server.
   const streamFailures = useRef({ count: 0, at: 0 });
-  const recoverStream = useRef<(reason: string) => boolean>(() => false);
+  const recoverStream = useRef<(failure: PlaybackFailure) => boolean>(() => false);
   // The restart in progress (see resumeAfterOutage), 0 when none. hls.js and the video element
   // can both report the same fault, so a failure reported while a restart is under way belongs
   // to it. Only the newest restart may install its plan.
@@ -557,7 +558,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
           if (noAnswer) reportNetworkFailure(session.serverUrl);
           if (!data.fatal) return;
           if (noAnswer && beginOutage.current()) return;
-          if (!noAnswer && recoverStream.current(data.details)) return;
+          if (!noAnswer && recoverStream.current(classifyPlaybackFailure({ hlsDetails: data.details, httpStatus: code }))) return;
           setError(`HLS playback error: ${data.details}`);
         });
         hls.on(HlsPlayer.Events.MANIFEST_PARSED, () => {
@@ -1204,7 +1205,11 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       if (pick) bufferQuality.controller.onViewerQualityChange();
       installPlan(next);
       if (panel) {
-        requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-hud-row="${hudTab === "Audio" ? "audio-track" : hudTab === "Subtitles" ? "subtitle-track" : "quality"}"]`)?.focus());
+        // A subtitle row is found by its own track, not by the "current" marker: React may not have
+        // moved that marker to the new track by the next frame, which put focus back on the
+        // previous choice, often "Off", where a second OK undid the pick (#100).
+        const target = hudTab === "Subtitles" ? `[data-subtitle-row="${CSS.escape(subtitle?.id ?? "off")}"]` : `[data-hud-row="${hudTab === "Audio" ? "audio-track" : "quality"}"]`;
+        requestAnimationFrame(() => document.querySelector<HTMLElement>(target)?.focus());
       } else {
         setPanel(null);
         revealHud();
@@ -1511,7 +1516,29 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
 
   // Returns false when the stream has already been started again without success: the caller
   // shows the error.
-  recoverStream.current = (reason: string) => {
+  // Asks Silo for a plan that avoids the one that failed (Android's failure_recovery replan). If
+  // Silo has none to offer, or cannot be asked, the stream is started again as before.
+  async function replanAfterFailure(active: PlaybackState, failure: PlaybackFailure) {
+    const at = sourcePosition();
+    const id = ++restartIdCounter.current;
+    restartId.current = id;
+    try {
+      const next = await replanPlaybackV3(session, active, "failure_recovery", at, qualityRef.current, active.plan.selected_tracks, null, failure);
+      if (unmounted.current || restartId.current !== id) return;
+      restartId.current = 0;
+      if (stateRef.current !== active) return;
+      clientDiagnostic("failure recovery replan", { classification: failure.classification, delivery: next.plan.delivery, planId: next.plan.plan_id });
+      installPlan(next);
+    } catch (reason) {
+      if (unmounted.current || restartId.current !== id) return;
+      restartId.current = 0;
+      clientDiagnostic("failure recovery replan failed; starting again", { reason: reason instanceof Error ? reason.message : String(reason) });
+      void resumeAfterOutage(at);
+    }
+  }
+
+  recoverStream.current = (failure: PlaybackFailure) => {
+    const reason = failure.message ?? failure.classification;
     const active = stateRef.current;
     if (!active || !detail || !version || outageWait.current) return false;
     // Already starting again: the same fault reported twice, not a second failure.
@@ -1532,10 +1559,14 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     const dolby = isDolbyAudio(active.plan.claims?.audio?.codec);
     if (failures.count > (dolby ? 2 : 1)) return false;
     const withoutDolby = dolby && failures.count === 2;
-    clientDiagnostic("restarting the stream after a playback failure", { reason, attempt: failures.count, withoutDolby });
-    if (withoutDolby) allowDolbyAudio(false);
+    clientDiagnostic("recovering the stream after a playback failure", { reason, classification: failure.classification, attempt: failures.count, withoutDolby });
     setError("");
-    void resumeAfterOutage(sourcePosition());
+    if (withoutDolby) {
+      allowDolbyAudio(false);
+      void resumeAfterOutage(sourcePosition());
+    } else {
+      void replanAfterFailure(active, failure);
+    }
     return true;
   };
 
@@ -1545,7 +1576,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     // A stream the TV loads itself (not through hls.js) reports network loss here.
     if (mediaError?.code === 2 && beginOutage.current()) return;
     // The TV could not decode or open the stream: start it again before giving up.
-    if (mediaError && (mediaError.code === 3 || mediaError.code === 4) && recoverStream.current(`media error ${mediaError.code}`)) return;
+    if (mediaError && (mediaError.code === 3 || mediaError.code === 4) && recoverStream.current(classifyPlaybackFailure({ mediaErrorCode: mediaError.code }))) return;
     const labels: Record<number, string> = { 1: "aborted", 2: "network", 3: "decode", 4: "unsupported source" };
     const reason = mediaError ? labels[mediaError.code] ?? `code ${mediaError.code}` : "unknown error";
     const diagnostics = {
@@ -1747,8 +1778,15 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       if (mediaKey === "play" || mediaKey === "pause" || mediaKey === "playpause") {
         event.preventDefault(); event.stopPropagation();
         if (!event.repeat) {
-          if (snapshot.cleanSeek) commitCleanSeek();
-          else togglePlayPause();
+          // A remote's dedicated keys do what they say (LG's checklist; a difference from Android
+          // TV, which toggles on all three, see docs/DECISIONS.md): Play only plays, Pause only
+          // pauses, and only a combined Play/Pause key toggles, as the on-screen button does.
+          const paused = videoRef.current?.paused ?? !snapshot.playing;
+          if (snapshot.cleanSeek) {
+            if (mediaKey === "pause") stopCleanSeek();
+            else commitCleanSeek();
+          }
+          else if (mediaKey === "playpause" || (mediaKey === "play") === paused) togglePlayPause();
         }
         return;
       }
@@ -1980,6 +2018,10 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const plannedAudioIndex = Number(plan?.selected_tracks.audio?.id.match(/audio:(\d+)$/)?.[1]);
   const effectiveAudioIndex = Number.isFinite(plannedAudioIndex) ? plannedAudioIndex : version?.effective_audio_track_index;
   const selectedAudioTrack = audioTracks.find(track => track.index === effectiveAudioIndex) ?? audioTracks.find(track => track.default) ?? audioTracks[0];
+  // The Output column shows what reaches the TV, as Android's HUD does: the plan's delivered codec
+  // (effective_recipe, else the audio claim). The source codec is only right for direct play; when
+  // the server converts the audio (server_transcode_hls) it showed DTS or TrueHD the TV never got (#100).
+  const deliveredAudioCodec = (plan?.effective_recipe?.audio_codec || plan?.claims?.audio?.codec || (isDirectPlay(plan) ? selectedAudioTrack?.codec || version?.codec_audio : undefined))?.toUpperCase();
   const audioTrackDescription = (track: AudioTrack | undefined, index = 0) => track ? [track.title || track.language || `Track ${index + 1}`, track.codec?.toUpperCase(), track.channels ? `${track.channels} ch` : ""].filter(Boolean).join(" · ") : "Default";
   const subtitles = plan?.subtitle.inventory ?? [];
   const qualities = plan?.available_qualities ?? [];
@@ -2231,13 +2273,13 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
             <p className="player-hud-note">Track changes are negotiated by Silo for this playback session.</p>
           </div>
           <div><div className="player-hud-eyebrow">Output</div>
-            <div className="player-hud-readonly"><span>Codec</span><strong>{selectedAudioTrack?.codec?.toUpperCase() || version?.codec_audio?.toUpperCase() || "—"}</strong></div>
+            <div className="player-hud-readonly"><span>Codec</span><strong>{deliveredAudioCodec || "—"}</strong></div>
             <div className="player-hud-readonly"><span>Mode</span><strong>Browser managed</strong></div>
             <div className="player-hud-readonly"><span>Delivery</span><strong>{plan?.stream.protocol?.toUpperCase() || "—"}</strong></div>
             <div className="player-hud-readonly"><span>Container</span><strong>{plan?.stream.container?.toUpperCase() || version?.container?.toUpperCase() || "—"}</strong></div>
           </div>
         </div> : null}
-        {hudTab === "Subtitles" ? <div className="player-hud-list"><div className="player-hud-eyebrow">Subtitles</div>{!styleView ? <><button data-tv-focusable="true" data-hud-row={!activeSubtitle ? "subtitle-track" : undefined} className="option-row" onClick={() => selectSubtitle()}><span>Off</span>{!activeSubtitle ? <small>Current</small> : null}</button>{subtitles.map(track => <button data-tv-focusable="true" data-hud-row={activeSubtitle?.track_id === track.track_id ? "subtitle-track" : undefined} className="option-row" key={track.track_id} onClick={() => selectSubtitle(track)}><span>{subtitleName(track)}</span><small>{activeSubtitle?.track_id === track.track_id ? "Current" : subtitleDetail(track)}</small></button>)}{appearance ? <button data-tv-focusable="true" data-style-entry className="option-row" onClick={() => setStyleView("list")}><span>Appearance</span><small>{subtitleChoiceLabel("fontSize", appearance.fontSize)} · {subtitleChoiceLabel("position", appearance.position)}</small></button> : null}<button data-tv-focusable="true" data-timing-entry className="option-row" disabled={!hasSidecarSubtitle && !timingActions} onClick={() => { setStyleView("timing"); requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-timing-first]")?.focus()); }}><span>Timing</span><small>{timingActions && (timingActions.busy || timingActions.inProgress) ? "Working..." : hasSidecarSubtitle ? delaySecondsLabel(subtitleDelayMs) : timingActions ? timingValue(timingActions) : "Unavailable"}</small></button>{version?.file_id != null ? <><div className="player-hud-eyebrow">Find more</div><button data-tv-focusable="true" data-hud-row="subtitle-search" className="option-row" onClick={() => void openSubtitleSearch()}><span>Search online</span></button>{aiStatus && (aiStatus.enabled || aiStatus.transcribe_enabled) ? <button data-tv-focusable="true" data-hud-row="subtitle-ai" className="option-row" onClick={() => void openAiTranslate()}><span>Translate with AI</span></button> : null}</> : null}</> : styleView === "timing" ? <><div className="player-hud-eyebrow">Timing</div><button data-tv-focusable="true" data-timing-first={hasSidecarSubtitle ? "" : undefined} data-hud-row="subtitle-delay" className="option-row" disabled={!hasSidecarSubtitle} onClick={() => presentHudPicker("Subtitle delay", delayChoices(-2000, 2000, 100), String(subtitleDelayMs), "subtitle-delay", value => changeSubtitleDelay(Number(value)))}><span>Delay</span><small>{hasSidecarSubtitle ? delayLabel(subtitleDelayMs) : "Unavailable for burned-in subtitles"}</small></button>{timingActions ? <>
+        {hudTab === "Subtitles" ? <div className="player-hud-list"><div className="player-hud-eyebrow">Subtitles</div>{!styleView ? <><button data-tv-focusable="true" data-hud-row={!activeSubtitle ? "subtitle-track" : undefined} data-subtitle-row="off" className="option-row" onClick={() => selectSubtitle()}><span>Off</span>{!activeSubtitle ? <small>Current</small> : null}</button>{subtitles.map(track => <button data-tv-focusable="true" data-hud-row={activeSubtitle?.track_id === track.track_id ? "subtitle-track" : undefined} data-subtitle-row={track.track_id} className="option-row" key={track.track_id} onClick={() => selectSubtitle(track)}><span>{subtitleName(track)}</span><small>{activeSubtitle?.track_id === track.track_id ? "Current" : subtitleDetail(track)}</small></button>)}{appearance ? <button data-tv-focusable="true" data-style-entry className="option-row" onClick={() => setStyleView("list")}><span>Appearance</span><small>{subtitleChoiceLabel("fontSize", appearance.fontSize)} · {subtitleChoiceLabel("position", appearance.position)}</small></button> : null}<button data-tv-focusable="true" data-timing-entry className="option-row" disabled={!hasSidecarSubtitle && !timingActions} onClick={() => { setStyleView("timing"); requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-timing-first]")?.focus()); }}><span>Timing</span><small>{timingActions && (timingActions.busy || timingActions.inProgress) ? "Working..." : hasSidecarSubtitle ? delaySecondsLabel(subtitleDelayMs) : timingActions ? timingValue(timingActions) : "Unavailable"}</small></button>{version?.file_id != null ? <><div className="player-hud-eyebrow">Find more</div><button data-tv-focusable="true" data-hud-row="subtitle-search" className="option-row" onClick={() => void openSubtitleSearch()}><span>Search online</span></button>{aiStatus && (aiStatus.enabled || aiStatus.transcribe_enabled) ? <button data-tv-focusable="true" data-hud-row="subtitle-ai" className="option-row" onClick={() => void openAiTranslate()}><span>Translate with AI</span></button> : null}</> : null}</> : styleView === "timing" ? <><div className="player-hud-eyebrow">Timing</div><button data-tv-focusable="true" data-timing-first={hasSidecarSubtitle ? "" : undefined} data-hud-row="subtitle-delay" className="option-row" disabled={!hasSidecarSubtitle} onClick={() => presentHudPicker("Subtitle delay", delayChoices(-2000, 2000, 100), String(subtitleDelayMs), "subtitle-delay", value => changeSubtitleDelay(Number(value)))}><span>Delay</span><small>{hasSidecarSubtitle ? delayLabel(subtitleDelayMs) : "Unavailable for burned-in subtitles"}</small></button>{timingActions ? <>
           <button data-tv-focusable="true" data-timing-first={hasSidecarSubtitle ? undefined : ""} data-hud-row="subtitle-sync" className="option-row" onClick={() => { if (!timingActions.forbidden && !timingActions.busy && !timingActions.inProgress && timingActions.canSync) void syncStore.current?.requestSync(timingActions.key); }}><span>Sync to audio</span><small>{timingValue(timingActions)}</small></button>
           {timingActions.canReset ? <button data-tv-focusable="true" data-hud-row="subtitle-reset" className="option-row" onClick={() => { if (!timingActions.forbidden && !timingActions.busy && !timingActions.inProgress) void syncStore.current?.resetTiming(timingActions.key); }}><span>Reset timing</span></button> : null}
           {timingActions.inProgress && timingActions.percent != null ? <div className="player-hud-sync"><div className="ai-translate-bar"><div style={{ width: `${timingActions.percent}%` }} /></div>{timingActions.phaseLabel ? <p className="player-hud-note">{timingActions.phaseLabel}</p> : null}</div> : null}

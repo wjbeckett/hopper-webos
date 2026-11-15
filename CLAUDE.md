@@ -117,7 +117,8 @@ Keep each concern in its own layer:
   - `audioDelay.ts` stays at 0..1000 ms (Android allows -1000..1000) unless a webOS-safe way to advance audio is demonstrated, because a WebAudio `DelayNode` can't advance audio.
   - `keyboard.ts` tracks whether the TV's on-screen keyboard is showing (`keyboardStateChange`), so Back can leave it to the keyboard.
   - `displayHdr.ts` asks the TV's config service (`tv.model.supportHDR`) whether the screen shows HDR, because Chrome 87 has no `dynamic-range` media query. Without it Silo converts every HDR title to SDR.
-  - The other modules are `captions`, `dolbyVision`, `device` and `youtube`.
+  - `luna.ts` makes a one-off Luna call through `PalmServiceBridge`. Use it for new Luna calls: LG's `webOSTV.js` (`window.webOS`) is not loaded, so `window.webOS.service.request` is undefined on the TV.
+  - The other modules are `captions` (the TV's caption settings), `dolbyVision`, `device` and `youtube`.
 - **`services/pairing/`** is a Node 12 webOS JS service (`com.hopperapp.hopper.service`). It advertises `_silopair-roku._tcp` over mDNS and relays phone pairing frames. `scripts/package-webos.sh` packages it into the same IPK. Write it in ES5-ish style: no optional chaining and no `??`. Browser mDNS doesn't exist, so keep manual and saved-server management in place.
 
 ### State, screens and styling
@@ -147,6 +148,7 @@ Keep each concern in its own layer:
 - **Android as the starting point:** grid focus restoration and pagination follow Android TV's behaviour, implemented natively in React for webOS.
 
 ## webOS runtime gotchas (verified on Chrome 87 TVs)
+- **The oldest supported TV is webOS 6 (Chrome 79).** The build target is `chrome79`, so esbuild lowers syntax (`?.`, `??`) and `inset: 0`, but adds no polyfills: a browser API newer than Chrome 79 needs a guard. Write multi-value `inset` and `padding-inline` as longhands. Flex `gap` (Chrome 84) is covered by `flex-gap.css`, which the build generates (`src/platform/flexGapFallback.ts`) and `src/platform/flexGap.ts` loads, ahead of the main stylesheet, only where flex gap is missing. webOS 4 and 5 are not supported (`docs/DECISIONS.md`).
 - No CSS `:has()`.
 - CSS transforms on SVG elements need `transform-box: fill-box`.
 - Video renders on a hardware layer, so inspector screenshots show a blank player.

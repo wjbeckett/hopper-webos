@@ -385,6 +385,9 @@ export default function App() {
         return;
       }
       if (document.querySelector(".player-shell")) return;
+      // The LG keyboard's Delete key arrives as Backspace on the text field. It edits the text and
+      // must not leave the screen (Search, profile name, PIN).
+      if (editingText) return;
       // The full-screen profile picker (and the profile loading screen) is the entry page
       // when a profile has to be chosen. Its own dialogs take Back first.
       if (profileError || !session.profileId) {
@@ -932,15 +935,16 @@ export default function App() {
           itemTypes={section === "movies" ? ["Movie"] : section === "series" ? ["Series"] : undefined}
           onOpen={openItem}
           onShuffle={startShuffle}
-          presetKey={libraryLanding === "alphabet" ? "alphabet" : undefined}
-          hideControls={libraryLanding === "alphabet"}
+          presetKey={libraryLanding === "alphabet" || libraryLanding === "genres" ? libraryLanding : undefined}
+          hideControls={libraryLanding === "alphabet" || libraryLanding === "genres"}
+          genreRow={libraryLanding === "genres"}
         />
       );
     }
   }
 
   return (
-    <div className={`app-shell ${section === "library" || (["movies", "series", "music", "audiobooks"].includes(section) && (libraryLanding === "browse" || libraryLanding === "alphabet" || browseDetail !== null)) ? "app-shell-library" : ""} ${section === "home" && route.name === "main" && !sectionBrowse ? "app-shell-home" : ""}`}>
+    <div className={`app-shell ${section === "library" || (["movies", "series", "music", "audiobooks"].includes(section) && (libraryLanding === "browse" || libraryLanding === "alphabet" || libraryLanding === "genres" || browseDetail !== null)) ? "app-shell-library" : ""} ${section === "home" && route.name === "main" && !sectionBrowse ? "app-shell-home" : ""}`}>
       {section !== "settings" && section !== "profiles" && <TopNav
         active={section}
         libraries={libraries}

@@ -9,6 +9,7 @@ Hopper is its own client. The Android TV app (`silo-android/androidTvApp/`) is t
 Deliberate differences from the Android TV app. Do not "fix" these to match Android without the maintainer's say-so. Add a line here whenever a new difference is decided.
 
 - Diagnostics stay on the device. Hopper never uploads logs or reports to the hosted diagnostics collector, because the Silo maintainer does not accept reports from third-party clients. Logs can be viewed and exported locally.
+- The remote's dedicated media keys act separately: Play only plays, Pause only pauses, and only a combined Play/Pause key toggles. Android TV toggles on all three. LG's self-checklist expects each key to do what it says. The on-screen button stays a single play/pause toggle, as on Android. Decided 2026-11-14 (#101).
 - Hopper has its own name, mark, colours and startup animation. No Silo logo assets ship in the app.
 - Watch Party is not built. Gate inspected on 2026-11-10: Android puts it behind a device-local Settings → Experimental → Watch Party toggle (`WatchPartyExperiment`, preference `silo_experimental`/`watch_party`) that defaults on in debug builds and off in release builds; turning it off hides every entry point. It is an opt-in experiment, not a shipped Android TV destination, so Hopper does not implement it and must not imply it is available. If product scope later requires it, implement the complete room lifecycle, realtime sync and player coordination, not just its hub screen.
 - Sign-in, first-run setup and invite sign-up use Hopper's centred card layout, not Android's marquee layout with the "use your phone" card.
@@ -16,7 +17,7 @@ Deliberate differences from the Android TV app. Do not "fix" these to match Andr
 - Invite sign-up availability is probed when the password sign-in screen opens. Android probes it when the server is chosen.
 - Text entry uses the webOS system keyboard on the focused field. Android's on-screen keyboard dialog is not ported.
 - Details, Series pages and the Home hero show a time-left ring for partly watched titles, in the brand teal. No equivalent was found in the Android TV source.
-- Playback is always negotiated as HLS. Original-file and progressive delivery are switched off in the device profile, because the LG browser can report codec support and still reject the container.
+- Direct play is offered only for MP4, MOV and M4V files with H.264 or HEVC video and AAC audio (`DIRECT_PLAY_*` in `src/api/playback.ts`); everything else is negotiated as HLS. The LG browser can report codec support and still reject the container, and a direct file the TV rejects is played again over HLS. Android direct-plays whatever its player reports it can decode.
 - On a TV, the focus ring and scale on a card and the reveal of its artwork are instant, where Android animates them. Each animation made a compositor layer per card on every focus change, which cost more than it drew (`docs/PERFORMANCE.md`).
 - Dolby audio (AC-3, E-AC-3) reaches the TV through a second MediaSource buffer. webOS 22's browser refuses it in a buffer shared with video, so Hopper splits Silo's combined segments into video and audio itself (`src/platform/splitSourceBuffer.ts`). Android plays the combined stream directly.
 - Opening or resuming a title may start up to 10 s before the saved position, at the previous keyframe, because seeking to the exact position costs several seconds on a TV.
@@ -31,4 +32,5 @@ Deliberate differences from the Android TV app. Do not "fix" these to match Andr
 
 - Ebook reading and phone-style downloads management are not exposed on TV unless product direction changes. Android TV hides ebook-like content too.
 - Global Browse (`TvBrowseScreen`): Android registers `TvMainRoute.Browse`, but its only opener is Home's `onSeeAll`, which `TvHomeContent` never wires to a control, so no Android TV entry point reaches it. webOS ships no screen for it; `getBrowseCatalogPage`/`getBrowseFilterOptions` in `src/api/silo.ts` are ready if Android adds an entry point.
+- TVs older than webOS 6 (2021) are not supported (#75). webOS 4.x runs Chrome 53, which has no CSS grid or ES modules, and webOS 5 runs Chrome 68, which lacks most of the layout CSS Hopper uses. webOS 6 (Chrome 79) is supported through a lower build target and a stand-in for flex `gap`.
 - Android TV has no navigation route to `TvInboxScreen`, so there is no Android TV inbox destination to reproduce.
