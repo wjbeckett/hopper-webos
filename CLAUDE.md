@@ -178,6 +178,7 @@ There is no change log, handoff or backlog file. The history is the merged pull 
 | `README.md` | What users get: Features, Known limitations, Availability | A user-visible feature ships, a limitation is removed or added, or a store submission or release happens |
 | `CONTRIBUTING.md` | Setup, browser development, TV deploy, PR conventions | Commands, tooling, scripts or contribution rules change |
 | `docs/PERFORMANCE.md` | How speed is measured on a TV, the numbers, and the rules that came out of them | A change is measured on a TV, or changes how Home renders or the player starts |
+| `docs/privacy.md` | The privacy policy, published with GitHub Pages and linked from the listing and Settings | The app stores something new, or starts talking to a service it didn't before |
 | `docs/MAINTAINING.md` | What the PR automation does and the maintainer's steps | A workflow in `.github/workflows/`, a label or a repository setting changes |
 | `CLAUDE.md` | Rules, commands, architecture and procedure for agents | Architecture, commands, rules or this table change |
 | `TRADEMARK.md`, `brand/NOTICE` | What brand files are reserved outside the AGPL, and the name and fork policy | Brand files are added, moved or renamed, or the app ID changes |

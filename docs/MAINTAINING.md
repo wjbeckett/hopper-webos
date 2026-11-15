@@ -129,6 +129,16 @@ Recommended now:
 
 - **Settings → General → Pull Requests → Automatically delete head branches:** on. Merged branches are removed for you.
 
+### GitHub Pages (privacy policy)
+
+The privacy policy the store listing and **Settings → Privacy Policy** link to is `docs/privacy.md`, published at `https://wjbeckett.github.io/hopper-webos/privacy/`.
+
+1. **Settings → Pages**.
+2. Under **Build and deployment**, choose **Deploy from a branch**, branch **`main`**, folder **`/docs`**, and save.
+3. After a minute, check the address above opens.
+
+Everything else in `docs/` is published alongside it as plain pages. That's harmless in a public repository.
+
 ### Branch protection for `main`
 
 GitHub only offers this on public repositories, or private ones on a paid plan. Set it up when the repository goes public.
