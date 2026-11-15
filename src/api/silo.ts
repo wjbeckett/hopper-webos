@@ -614,8 +614,9 @@ export async function getSetupStatus(serverUrl: string): Promise<boolean> {
 async function accountErrorMessage(response: Response): Promise<string> {
   const body = await response.text().catch(() => "");
   try {
-    const parsed = JSON.parse(body) as { message?: string; error?: string | { message?: string } };
-    return (parsed.message ?? (typeof parsed.error === "string" ? parsed.error : parsed.error?.message) ?? "").trim();
+    // Silo's v2 errors are problem documents: the reason is in `detail` (e.g. 422 "Invalid invite code").
+    const parsed = JSON.parse(body) as { message?: string; error?: string | { message?: string }; detail?: string; errors?: Array<{ detail?: string }> };
+    return (parsed.message ?? (typeof parsed.error === "string" ? parsed.error : parsed.error?.message) ?? parsed.detail ?? parsed.errors?.[0]?.detail ?? "").trim();
   } catch {
     return body.trim();
   }
