@@ -385,6 +385,9 @@ export default function App() {
         return;
       }
       if (document.querySelector(".player-shell")) return;
+      // The LG keyboard's Delete key arrives as Backspace on the text field. It edits the text and
+      // must not leave the screen (Search, profile name, PIN).
+      if (editingText) return;
       // The full-screen profile picker (and the profile loading screen) is the entry page
       // when a profile has to be chosen. Its own dialogs take Back first.
       if (profileError || !session.profileId) {
