@@ -33,6 +33,10 @@ export type SiloItem = {
   AudiobookAuthorNames?: string;
   AudiobookNarratorNames?: string;
   Overview?: string;
+  /** The viewer's language the overview is still missing; a translation can be asked for (metadata AI). */
+  PendingTranslationLanguage?: string;
+  /** Fields the server machine-translated, such as "overview". */
+  MachineTranslatedFields?: string[];
   Genres?: string[];
   ContentRating?: string;
   ImdbRating?: number;
