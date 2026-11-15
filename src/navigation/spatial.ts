@@ -243,7 +243,9 @@ function focusElement(element: HTMLElement) {
     if (delta) slideScrollTop(libraryResults, delta);
 
     const horizontalContainer = element.closest<HTMLElement>(".library-filter-row");
-    if (horizontalContainer) {
+    // The music Genres row slides like the other rows; the library chooser still scrolls.
+    if (horizontalContainer?.dataset.slide === "true") slideRailItem(horizontalContainer, element);
+    else if (horizontalContainer) {
       const rowRect = horizontalContainer.getBoundingClientRect();
       const leftDelta = elementRect.left < rowRect.left
         ? elementRect.left - rowRect.left - 12
@@ -654,7 +656,7 @@ function navigateLibrary(current: HTMLElement, direction: Direction) {
       }
       if (direction === "up") {
         const controls = filters.length ? filters : toolbarItems;
-        const above = controls[controls.length - 1]
+        const above = filters.find(item => item.classList.contains("active")) ?? controls[controls.length - 1]
           ?? navItems.find(item => item.getAttribute("aria-current") === "page") ?? navItems[0];
         if (above) focusElement(above);
         return true;

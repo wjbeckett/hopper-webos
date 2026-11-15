@@ -932,15 +932,16 @@ export default function App() {
           itemTypes={section === "movies" ? ["Movie"] : section === "series" ? ["Series"] : undefined}
           onOpen={openItem}
           onShuffle={startShuffle}
-          presetKey={libraryLanding === "alphabet" ? "alphabet" : undefined}
-          hideControls={libraryLanding === "alphabet"}
+          presetKey={libraryLanding === "alphabet" || libraryLanding === "genres" ? libraryLanding : undefined}
+          hideControls={libraryLanding === "alphabet" || libraryLanding === "genres"}
+          genreRow={libraryLanding === "genres"}
         />
       );
     }
   }
 
   return (
-    <div className={`app-shell ${section === "library" || (["movies", "series", "music", "audiobooks"].includes(section) && (libraryLanding === "browse" || libraryLanding === "alphabet" || browseDetail !== null)) ? "app-shell-library" : ""} ${section === "home" && route.name === "main" && !sectionBrowse ? "app-shell-home" : ""}`}>
+    <div className={`app-shell ${section === "library" || (["movies", "series", "music", "audiobooks"].includes(section) && (libraryLanding === "browse" || libraryLanding === "alphabet" || libraryLanding === "genres" || browseDetail !== null)) ? "app-shell-library" : ""} ${section === "home" && route.name === "main" && !sectionBrowse ? "app-shell-home" : ""}`}>
       {section !== "settings" && section !== "profiles" && <TopNav
         active={section}
         libraries={libraries}
