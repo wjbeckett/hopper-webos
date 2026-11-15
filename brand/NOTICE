@@ -20,7 +20,7 @@ If you distribute a fork or a modified version, you must remove or replace this
 artwork. You must also not use the Hopper name as its identity. You may not
 publish a Hopper-branded app to any app store without written permission.
 
-The screenshots in store/screenshots/ show third-party content (open movies and
+The screenshots in store/screenshots/ and the screens in store/qa/ux_scenario_document.pptx show third-party content (open movies and
 public-domain titles) and are included only to document the app.
 Sintel and Big Buck Bunny are (c) Blender Foundation, licensed CC BY 3.0
 (durian.blender.org, peach.blender.org).
