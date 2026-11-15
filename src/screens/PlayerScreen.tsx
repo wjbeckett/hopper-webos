@@ -2017,7 +2017,9 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const audioTracks = version?.audio_tracks ?? [];
   const plannedAudioIndex = Number(plan?.selected_tracks.audio?.id.match(/audio:(\d+)$/)?.[1]);
   const effectiveAudioIndex = Number.isFinite(plannedAudioIndex) ? plannedAudioIndex : version?.effective_audio_track_index;
-  const selectedAudioTrack = audioTracks.find(track => track.index === effectiveAudioIndex) ?? audioTracks.find(track => track.default) ?? audioTracks[0];
+  // Silo's audio tracks may have no `index`; then a track's number is its place in the list, as in
+  // the picker and in selectAudio. Matching on `track.index` alone always fell back to the default (#127).
+  const selectedAudioTrack = audioTracks.find((track, i) => (track.index ?? i) === effectiveAudioIndex) ?? audioTracks.find(track => track.default) ?? audioTracks[0];
   // The Output column shows what reaches the TV, as Android's HUD does: the plan's delivered codec
   // (effective_recipe, else the audio claim). The source codec is only right for direct play; when
   // the server converts the audio (server_transcode_hls) it showed DTS or TrueHD the TV never got (#100).
