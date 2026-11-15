@@ -16,7 +16,7 @@ Deliberate differences from the Android TV app. Do not "fix" these to match Andr
 - Invite sign-up availability is probed when the password sign-in screen opens. Android probes it when the server is chosen.
 - Text entry uses the webOS system keyboard on the focused field. Android's on-screen keyboard dialog is not ported.
 - Details, Series pages and the Home hero show a time-left ring for partly watched titles, in the brand teal. No equivalent was found in the Android TV source.
-- Playback is always negotiated as HLS. Original-file and progressive delivery are switched off in the device profile, because the LG browser can report codec support and still reject the container.
+- Direct play is offered only for MP4, MOV and M4V files with H.264 or HEVC video and AAC audio (`DIRECT_PLAY_*` in `src/api/playback.ts`); everything else is negotiated as HLS. The LG browser can report codec support and still reject the container, and a direct file the TV rejects is played again over HLS. Android direct-plays whatever its player reports it can decode.
 - On a TV, the focus ring and scale on a card and the reveal of its artwork are instant, where Android animates them. Each animation made a compositor layer per card on every focus change, which cost more than it drew (`docs/PERFORMANCE.md`).
 - Dolby audio (AC-3, E-AC-3) reaches the TV through a second MediaSource buffer. webOS 22's browser refuses it in a buffer shared with video, so Hopper splits Silo's combined segments into video and audio itself (`src/platform/splitSourceBuffer.ts`). Android plays the combined stream directly.
 - Opening or resuming a title may start up to 10 s before the saved position, at the previous keyframe, because seeking to the exact position costs several seconds on a TV.
