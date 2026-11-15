@@ -117,7 +117,8 @@ Keep each concern in its own layer:
   - `audioDelay.ts` stays at 0..1000 ms (Android allows -1000..1000) unless a webOS-safe way to advance audio is demonstrated, because a WebAudio `DelayNode` can't advance audio.
   - `keyboard.ts` tracks whether the TV's on-screen keyboard is showing (`keyboardStateChange`), so Back can leave it to the keyboard.
   - `displayHdr.ts` asks the TV's config service (`tv.model.supportHDR`) whether the screen shows HDR, because Chrome 87 has no `dynamic-range` media query. Without it Silo converts every HDR title to SDR.
-  - The other modules are `captions`, `dolbyVision`, `device` and `youtube`.
+  - `luna.ts` makes a one-off Luna call through `PalmServiceBridge`. Use it for new Luna calls: LG's `webOSTV.js` (`window.webOS`) is not loaded, so `window.webOS.service.request` is undefined on the TV.
+  - The other modules are `captions` (the TV's caption settings), `dolbyVision`, `device` and `youtube`.
 - **`services/pairing/`** is a Node 12 webOS JS service (`com.hopperapp.hopper.service`). It advertises `_silopair-roku._tcp` over mDNS and relays phone pairing frames. `scripts/package-webos.sh` packages it into the same IPK. Write it in ES5-ish style: no optional chaining and no `??`. Browser mDNS doesn't exist, so keep manual and saved-server management in place.
 
 ### State, screens and styling
