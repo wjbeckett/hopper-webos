@@ -76,6 +76,17 @@ composite of two real parts: the player UI captured on the TV with a transparent
 `object-fit: contain` at 1920×1080 as the TV shows it. The demo copy of Sintel is 564×240, so the
 picture is as soft as it is on the TV.
 
+## LG submission documents (`store/qa/`)
+
+LG won't review the app without these two, filled in for the build being submitted:
+
+| File | What it is |
+|---|---|
+| `self_evaluation_checklist_5.0.xlsx` | LG's self-checklist v5.0, with Pass or N/A and a comment on all 53 test items and the "Other Check Points" sheet. Items still marked TO CONFIRM need a result before submitting. |
+| `ux_scenario_document.pptx` | The UX scenario document, following LG's v4.3 template: basic information, remote keys, login steps with the reviewer account, and each screen with numbered controls. Fill in the cover (submission date, app version, developer) before submitting. |
+
+The screens in the UX document were captured on the TV against the demo server, with the position of each numbered control read from the page. The player slide uses `screenshots/05-player.png`, for the reason given above. When a screen changes, retake it and update the slide.
+
 The draft listing text is in `store/LISTING.md`.
 Check the sizes against the current LG Seller Lounge guide before you submit.
 "Hopper" has not been checked for conflicts with existing trademarks or store listings. `TRADEMARK.md` claims only unregistered (™) rights.
