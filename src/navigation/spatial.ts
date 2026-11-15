@@ -1006,17 +1006,24 @@ export function installSpatialNavigation() {
     if (current instanceof HTMLInputElement && current.closest(".profile-form") && (direction === "left" || direction === "right")) return;
     if (current instanceof HTMLInputElement && current.type !== "button" && !current.closest(".profile-form")) {
       if (direction === "left" || direction === "right") return;
+      // A search-style field: Down goes to the first result and Up to the top bar. On a form
+      // with neither (sign-in, sign-up, server address) the fields are reached by geometry
+      // below; swallowing the key there left the D-pad stuck in the first field.
       if (direction === "down") {
         const firstCard = focusables(".content-screen .media-card, .content-screen .request-card, .content-screen .collection-card")[0];
-        if (firstCard) focusElement(firstCard);
-        event.preventDefault();
-        return;
+        if (firstCard) {
+          focusElement(firstCard);
+          event.preventDefault();
+          return;
+        }
       }
       if (direction === "up") {
         const activeNav = focusables(".tv-nav [data-nav-primary][aria-current='page']")[0];
-        if (activeNav) focusElement(activeNav);
-        event.preventDefault();
-        return;
+        if (activeNav) {
+          focusElement(activeNav);
+          event.preventDefault();
+          return;
+        }
       }
     }
 
