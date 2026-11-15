@@ -25,7 +25,7 @@ The brand files are **© 2026 the Hopper maintainer, all rights reserved**. They
 | `public/icon.png`, `public/largeIcon.png`, `public/splash.png` | The app icons and launch splash |
 | The SVG paths and gradients in `src/components/HopperMark.tsx` | The mark and lockup as drawn in the app |
 
-The React code around that artwork, `brand/render.sh` and the rest of the repository stay under the AGPL. The store screenshots in `brand/store/screenshots/` show third-party content (open movies and public-domain titles). They are included only to document the app.
+The React code around that artwork, `brand/render.sh` and the rest of the repository stay under the AGPL. The store screenshots in `brand/store/screenshots/` show third-party content (open movies and public-domain titles). They are included only to document the app. Sintel and Big Buck Bunny are © Blender Foundation under CC BY 3.0.
 
 ## You don't need permission to
 
