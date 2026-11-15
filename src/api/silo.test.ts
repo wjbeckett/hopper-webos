@@ -129,3 +129,20 @@ describe("sign-in refresh", () => {
     expect(serverRegistry.active()?.session).toBeUndefined();
   });
 });
+
+describe("invite sign-up errors", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const problem = (status: number, body: unknown) => vi.fn(async () => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/problem+json" } }));
+
+  it("shows the server's reason from a problem document", async () => {
+    vi.stubGlobal("fetch", problem(422, { title: "Validation failed", status: 422, detail: "Invalid invite code", errors: [{ location: "body.invite_code", detail: "Invalid invite code" }] }));
+    const { signUp } = await import("./silo");
+    await expect(signUp("https://silo.test", "u", "u@example.com", "pw", "WRONG")).rejects.toThrow("Invalid invite code");
+  });
+
+  it("keeps the fixed message for a taken name", async () => {
+    vi.stubGlobal("fetch", problem(409, { detail: "conflict" }));
+    const { signUp } = await import("./silo");
+    await expect(signUp("https://silo.test", "u", "u@example.com", "pw", "CODE")).rejects.toThrow("Username or email already in use");
+  });
+});
