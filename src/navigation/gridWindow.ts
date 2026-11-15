@@ -11,6 +11,17 @@ const PAINT_WINDOW_ROWS = 6;
 type Window = { start: number; end: number; count: number };
 const windows = new WeakMap<HTMLElement, Window>();
 const columnCache = new WeakMap<HTMLElement, { key: string; columns: number }>();
+const watched = new WeakSet<HTMLElement>();
+
+/**
+ * Forgets a grid's window whenever its cards are added, removed or reordered (a local re-sort
+ * keeps the count but moves cards with their old classes), so the next pass sets every card.
+ */
+function watchChildren(grid: HTMLElement) {
+  if (watched.has(grid) || typeof MutationObserver === "undefined") return;
+  watched.add(grid);
+  new MutationObserver(() => windows.delete(grid)).observe(grid, { childList: true });
+}
 
 /**
  * Columns of a CSS grid. Reading the computed template forces a style pass, which on a TV costs
@@ -46,7 +57,7 @@ export function applyGridPaintWindow(grid: HTMLElement, focused?: Element | null
   const start = Math.max(0, (row - PAINT_WINDOW_ROWS) * columns);
   const end = Math.min(children.length, (row + PAINT_WINDOW_ROWS + 1) * columns);
   if (!last || last.count !== children.length) {
-    // First pass, or cards were added or removed: set every card.
+    // First pass, or cards were added, removed or reordered: set every card.
     setFar(children, 0, start, true);
     setFar(children, start, end, false);
     setFar(children, end, children.length, true);
@@ -58,6 +69,7 @@ export function applyGridPaintWindow(grid: HTMLElement, focused?: Element | null
     setFar(children, Math.max(start, last.end), end, false);
   }
   windows.set(grid, { start, end, count: children.length });
+  watchChildren(grid);
 }
 
 /** Applies the paint window to whichever grid gains focus, on every screen. Returns the remover. */
