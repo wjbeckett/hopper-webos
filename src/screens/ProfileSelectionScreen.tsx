@@ -77,6 +77,14 @@ export function ProfileSelectionScreen({ session, onSelect, onChangeServer, onSi
     return () => window.removeEventListener("keydown", onKey, true);
   }, [editor, selected, manager, deleteCandidate, deleting]);
 
+  // The PIN pad opens with focus on its first key, both for a profile's PIN and for managing
+  // profiles; otherwise focus stayed on the page and the first press went to "‹ Profiles" (#135).
+  useEffect(() => {
+    if (!selected) return;
+    const frame = requestAnimationFrame(() => document.querySelector<HTMLElement>(".profile-pin-pad button")?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [selected?.id, pinForManagement]);
+
   function closePin() {
     setSelected(null);
     setPin("");

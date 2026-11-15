@@ -207,7 +207,11 @@ export function ProfileForm({ state, callbacks }: { state: ProfileFormState; cal
             <div className="profile-form-section-head">
               <h2>PIN (optional)</h2>
               {state.pinEnabled ? (
-                <button type="button" data-tv-focusable="true" className="tv-button secondary compact" onClick={() => callbacks.onPinToggled(false)}>
+                <button type="button" data-tv-focusable="true" className="tv-button secondary compact" onClick={() => {
+                  callbacks.onPinToggled(false);
+                  // The button goes away: focus moves to the PIN field below, not the page (#135).
+                  requestAnimationFrame(() => document.querySelector<HTMLElement>(".profile-form input[type=password]")?.focus());
+                }}>
                   × Remove
                 </button>
               ) : null}
