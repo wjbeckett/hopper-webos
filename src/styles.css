@@ -5287,6 +5287,21 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
   color: var(--muted-foreground);
   font-size: 1.25rem;
 }
+/* Series: both sit at the end of the action row (Android TV's compact series hero). */
+.details-actions .series-translate,
+.series-machine-translated { margin-left: auto; align-self: center; }
+.details-actions .tv-button.series-translate { gap: 10px; }
+.series-machine-translated {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255,255,255,.6);
+  font-size: 1.25rem;
+}
+.series-machine-translated .tv-button-icon { width: 22px; height: 22px; }
+.series-translate[aria-disabled="true"] { color: rgba(255,255,255,.75); }
+.series-translate .details-translate-spinner { margin: 0; }
+
 .details-translate {
   display: inline-flex;
   align-items: center;

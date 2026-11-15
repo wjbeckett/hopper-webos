@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { backdropUrl, getCatalogItem, getMetadataAiOnView, getSimilarItems, requestDescriptionTranslation, imageUrl, isFavorite, isInWatchlist, mediaLogoUrl, setFavorite, setWatched, setWatchlist } from "../api/silo";
+import { backdropUrl, getCatalogItem, getSimilarItems, requestDescriptionTranslation, imageUrl, isFavorite, isInWatchlist, mediaLogoUrl, setFavorite, setWatched, setWatchlist } from "../api/silo";
 import { CastSection, FactsSection, TrailersSection, factsFor, useDetailExtras } from "../components/DetailSections";
 import { PlaybackOptionsDialog, PlaybackSummary, useWatchDetail } from "../components/PlaybackOptions";
 import { GearIcon, MoreIcon, PlayIcon, RestartIcon, WatchlistIcon } from "../components/icons";
 import { MediaRail } from "../components/MediaRail";
 import { ExpandableOverview } from "../components/ExpandableOverview";
+import { useMetadataAiOnView } from "./useMetadataAiOnView";
 import { DefaultArtwork } from "../components/ArtworkImage";
-import type { MetadataAiOnView } from "../api/silo";
-import { claimAutoTranslation, hasMachineTranslatedOverview, runDescriptionTranslation } from "../core/descriptionTranslation";
+import { claimAutoTranslation, hasMachineTranslatedOverview, releaseAutoTranslation, runDescriptionTranslation } from "../core/descriptionTranslation";
 import { ResumeProgress } from "../components/ResumeProgress";
 import type { PlaybackChoices } from "../api/playback";
 import type { DetailPerson, DetailTrailer } from "../api/silo";
@@ -54,25 +54,6 @@ function typeLabel(type?: string) {
   return type ?? "";
 }
 
-/** The metadata-AI capability per server and profile, read once per app run. */
-const metadataAiOnView = new Map<string, Promise<MetadataAiOnView>>();
-
-function useMetadataAiOnView(session: Session) {
-  const key = `${session.serverUrl}|${session.profileId ?? ""}`;
-  const [onView, setOnView] = useState<MetadataAiOnView>("off");
-  useEffect(() => {
-    let alive = true;
-    let pending = metadataAiOnView.get(key);
-    if (!pending) {
-      pending = getMetadataAiOnView(session).catch(() => "off" as const);
-      metadataAiOnView.set(key, pending);
-    }
-    void pending.then(value => { if (alive) setOnView(value); });
-    return () => { alive = false; };
-  }, [key]);
-  return onView;
-}
-
 export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex, onOpenPerson, onPlayExtra }: Props) {
   const [detail, setDetail] = useState(item);
   const [posterFailed, setPosterFailed] = useState(false);
@@ -97,7 +78,12 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
   const [translation, setTranslation] = useState<"idle" | "translating" | "failed">("idle");
   const translationFor = useRef("");
   const translateRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => { translationFor.current = ""; setTranslation("idle"); }, [item.Id]);
+  useEffect(() => {
+    translationFor.current = "";
+    setTranslation("idle");
+    // Leaving the title stops a run in progress (it ends "abandoned" and frees the automatic claim).
+    return () => { translationFor.current = ""; };
+  }, [item.Id]);
 
   /** Android TV's translateDescription: request it, then read the item until the pending language clears. */
   async function translateDescription() {
@@ -115,6 +101,8 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
       },
       isCurrent: () => translationFor.current === runKey
     });
+    // Not translated: let automatic mode try again the next time the title is opened.
+    if (result !== "translated") releaseAutoTranslation(detail.Id, language);
     if (result === "abandoned") return;
     translationFor.current = "";
     if (result === "failed") { setTranslation("failed"); return; }

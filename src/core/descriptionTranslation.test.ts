@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { claimAutoTranslation, hasMachineTranslatedOverview, runDescriptionTranslation, TRANSLATION_POLL_SECONDS } from "./descriptionTranslation";
+import { claimAutoTranslation, hasMachineTranslatedOverview, releaseAutoTranslation, runDescriptionTranslation, TRANSLATION_POLL_SECONDS } from "./descriptionTranslation";
 
 const noWait = async () => undefined;
 
@@ -57,6 +57,15 @@ describe("claimAutoTranslation", () => {
     expect(claimAutoTranslation("m1", "fr")).toBe(true);
     expect(claimAutoTranslation("m1", "fr")).toBe(false);
     expect(claimAutoTranslation("m1", "de")).toBe(true);
+  });
+});
+
+describe("releaseAutoTranslation", () => {
+  it("lets a failed or abandoned run be claimed again on the next visit", () => {
+    expect(claimAutoTranslation("s1", "fr")).toBe(true);
+    expect(claimAutoTranslation("s1", "fr")).toBe(false);
+    releaseAutoTranslation("s1", "fr");
+    expect(claimAutoTranslation("s1", "fr")).toBe(true);
   });
 });
 

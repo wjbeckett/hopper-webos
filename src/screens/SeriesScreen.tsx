@@ -2,12 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { placeRailItem, resetSlidingRail } from "../navigation/spatial";
 import { focusFromPointer } from "../navigation/pointer";
-import { backdropUrl, getCatalogItem, getEpisodes, getSeasons, getShuffleCapability, getSimilarItems, imageUrl, isFavorite, isInWatchlist, mediaLogoUrl, setFavorite, setWatched, setWatchlist } from "../api/silo";
+import { backdropUrl, getCatalogItem, getEpisodes, requestDescriptionTranslation, getSeasons, getShuffleCapability, getSimilarItems, imageUrl, isFavorite, isInWatchlist, mediaLogoUrl, setFavorite, setWatched, setWatchlist } from "../api/silo";
 import { CastSection, FactsSection, TrailersSection, factsFor, useDetailExtras } from "../components/DetailSections";
 import { PlaybackOptionsDialog, PlaybackSummary, useWatchDetail } from "../components/PlaybackOptions";
-import { GearIcon, MoreIcon, PlayIcon, RestartIcon, WatchlistIcon } from "../components/icons";
+import { GearIcon, MoreIcon, PlayIcon, RestartIcon, WatchlistIcon, TranslateIcon } from "../components/icons";
 import { MediaRail } from "../components/MediaRail";
 import { ExpandableOverview } from "../components/ExpandableOverview";
+import { claimAutoTranslation, hasMachineTranslatedOverview, releaseAutoTranslation, runDescriptionTranslation } from "../core/descriptionTranslation";
+import { useMetadataAiOnView } from "./useMetadataAiOnView";
 import { ArtworkImage } from "../components/ArtworkImage";
 import type { PlaybackChoices, WatchDetail } from "../api/playback";
 import type { DetailPerson, DetailTrailer } from "../api/silo";
@@ -103,6 +105,15 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
   const [logoFailed, setLogoFailed] = useState(false);
   const extras = useDetailExtras(session, series.Id);
   const spoilerPreferences = useEpisodeSpoilerPreferences(session);
+  const onView = useMetadataAiOnView(session);
+  const [translation, setTranslation] = useState<"idle" | "translating" | "failed">("idle");
+  const translationFor = useRef("");
+  useEffect(() => {
+    translationFor.current = "";
+    setTranslation("idle");
+    // Leaving the series stops a run in progress (it ends "abandoned" and frees the automatic claim).
+    return () => { translationFor.current = ""; };
+  }, [series.Id]);
   const [choices, setChoices] = useState<PlaybackChoices>({});
   const [optionsOpen, setOptionsOpen] = useState(false);
   const optionsRef = useRef<HTMLButtonElement>(null);
@@ -117,7 +128,13 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
 
   useEffect(() => {
     let alive = true;
-    getCatalogItem(session, series.Id).then(next => { if (alive) setShow({ ...series, ...next }); }).catch(() => undefined);
+    getCatalogItem(session, series.Id).then(next => {
+      if (!alive) return;
+      // A translation that landed first is newer than this read: keep its description.
+      setShow(current => current.Id === series.Id && current.MachineTranslatedFields && !current.PendingTranslationLanguage && next.PendingTranslationLanguage
+        ? { ...series, ...next, Overview: current.Overview, MachineTranslatedFields: current.MachineTranslatedFields, PendingTranslationLanguage: undefined }
+        : { ...series, ...next });
+    }).catch(() => undefined);
     Promise.all([isFavorite(session, series.Id), isInWatchlist(session, series.Id)])
       .then(([nextFavorite, nextWatchlist]) => {
         if (!alive) return;
@@ -224,10 +241,88 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
   const logo = mediaLogoUrl(session, show);
   const rating = show.ImdbRating ?? show.TmdbRating;
   const seasonCount = show.SeasonCount ?? seasons.filter(season => seasonNumber(season) > 0).length;
+  /** The series' own description: Android TV's translateDescription, as on Details. */
+  async function translateSeries() {
+    const language = show.PendingTranslationLanguage;
+    if (!language || translation === "translating") return;
+    const runKey = `${session.serverUrl}|${show.Id}|${language}`;
+    translationFor.current = runKey;
+    setTranslation("translating");
+    let latest: SiloItem | undefined;
+    const result = await runDescriptionTranslation({
+      request: () => requestDescriptionTranslation(session, show.Id, language),
+      refetchPending: async () => {
+        latest = await getCatalogItem(session, show.Id);
+        return latest.PendingTranslationLanguage;
+      },
+      isCurrent: () => translationFor.current === runKey
+    });
+    // Not translated: let automatic mode try again the next time the series is opened.
+    if (result !== "translated") releaseAutoTranslation(show.Id, language);
+    if (result === "abandoned") return;
+    translationFor.current = "";
+    if (result === "failed") { setTranslation("failed"); return; }
+    const hadFocus = document.activeElement?.classList.contains("series-translate") === true;
+    setTranslation("idle");
+    setShow(current => current.Id !== show.Id ? current : {
+      ...current,
+      Overview: latest?.Overview ?? current.Overview,
+      MachineTranslatedFields: latest?.MachineTranslatedFields,
+      PendingTranslationLanguage: undefined
+    });
+    if (hadFocus) requestAnimationFrame(() => playRef.current?.focus({ preventScroll: true }));
+  }
+
+  useEffect(() => {
+    const language = show.PendingTranslationLanguage;
+    if (onView === "auto" && language && claimAutoTranslation(show.Id, language)) void translateSeries();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onView, show.Id, show.PendingTranslationLanguage]);
+
+  // The shown season's episodes: with automatic translation on, ask for the season's job and read the
+  // episodes again until none is pending (Android TV's translateShownSeasonEpisodes). No button, as there.
+  const pendingEpisodeLanguage = railEpisodes.find(episode => episode.PendingTranslationLanguage)?.PendingTranslationLanguage;
+  useEffect(() => {
+    const season = activeSeason;
+    const language = pendingEpisodeLanguage;
+    if (onView !== "auto" || !season || !language || !claimAutoTranslation(season.Id, language)) return;
+    let alive = true;
+    const number = seasonNumber(season);
+    void runDescriptionTranslation({
+      request: () => requestDescriptionTranslation(session, season.Id, language),
+      refetchPending: async () => {
+        const fresh = await getEpisodes(session, series.Id, number);
+        if (alive) {
+          const byId = new Map(fresh.map(episode => [episode.Id, episode]));
+          setEpisodesBySeason(current => ({
+            ...current,
+            [number]: (current[number] ?? []).map(episode => {
+              const row = byId.get(episode.Id);
+              return row ? { ...episode, Overview: row.Overview ?? episode.Overview, MachineTranslatedFields: row.MachineTranslatedFields, PendingTranslationLanguage: row.PendingTranslationLanguage } : episode;
+            })
+          }));
+        }
+        return fresh.find(episode => episode.PendingTranslationLanguage)?.PendingTranslationLanguage;
+      },
+      isCurrent: () => alive
+    }).then(result => {
+      // Failed, or left for another season or screen: returning to the season asks again.
+      // The server hands back the job already running rather than starting a second one.
+      if (result !== "translated") releaseAutoTranslation(season.Id, language);
+    });
+    return () => { alive = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onView, activeSeason?.Id, pendingEpisodeLanguage]);
+
   const synopsis = focusedEpisode
     ? hidesEpisodeOverview(focusedEpisode, spoilerPreferences) ? "" : [focusedEpisode.Name, focusedEpisode.Overview ?? ""].filter(Boolean).join(" · ")
     : show.Overview ?? "";
   const overviewText = (focusedEpisode ? focusedEpisode.Overview : show.Overview) || synopsis;
+  // The description shown is the focused episode's or the series': label it when the server machine-translated it.
+  const machineTranslated = Boolean(synopsis) && (focusedEpisode
+    ? hasMachineTranslatedOverview(focusedEpisode.MachineTranslatedFields)
+    : hasMachineTranslatedOverview(show.MachineTranslatedFields) && translation !== "translating");
+  const showTranslateButton = !focusedEpisode && Boolean(show.PendingTranslationLanguage) && (onView === "button" || translation !== "idle");
   const metaTokens = [
     focusedEpisode
       ? [focusedEpisode.ParentIndexNumber === 0 ? "Specials" : `Season ${focusedEpisode.ParentIndexNumber}`, `Episode ${focusedEpisode.IndexNumber ?? ""}`].filter(Boolean).join(" · ")
@@ -342,6 +437,17 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
               <MoreIcon />
               <span className="tv-button-label">More</span>
             </button>
+            {/* At the end of the row, as on Android TV's series hero: the button for the series' own description, or else the mark. */}
+            {showTranslateButton ? (
+              // Stays a button while translating (aria-disabled, not disabled) so focus is not thrown out.
+              <button type="button" data-tv-focusable="true" className="tv-button secondary series-translate" aria-disabled={translation === "translating"}
+                onFocus={() => setActiveButton("translate")} onClick={() => void translateSeries()}>
+                {translation === "translating" ? <span className="details-translate-spinner" aria-hidden="true" /> : null}
+                <span>{translation === "translating" ? "Translating description…" : translation === "failed" ? "Translation failed — retry" : "Translate description"}</span>
+              </button>
+            ) : machineTranslated ? (
+              <span className="series-machine-translated" aria-label="Translated by AI"><TranslateIcon /><span aria-hidden="true">Translated by AI</span></span>
+            ) : null}
           </div>
           {error ? <div className="error">{error}</div> : null}
         </div>
