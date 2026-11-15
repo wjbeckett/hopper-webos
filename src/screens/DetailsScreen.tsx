@@ -7,7 +7,7 @@ import { MediaRail } from "../components/MediaRail";
 import { ExpandableOverview } from "../components/ExpandableOverview";
 import { useMetadataAiOnView } from "./useMetadataAiOnView";
 import { DefaultArtwork } from "../components/ArtworkImage";
-import { claimAutoTranslation, hasMachineTranslatedOverview, runDescriptionTranslation } from "../core/descriptionTranslation";
+import { claimAutoTranslation, hasMachineTranslatedOverview, releaseAutoTranslation, runDescriptionTranslation } from "../core/descriptionTranslation";
 import { ResumeProgress } from "../components/ResumeProgress";
 import type { PlaybackChoices } from "../api/playback";
 import type { DetailPerson, DetailTrailer } from "../api/silo";
@@ -78,7 +78,12 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
   const [translation, setTranslation] = useState<"idle" | "translating" | "failed">("idle");
   const translationFor = useRef("");
   const translateRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => { translationFor.current = ""; setTranslation("idle"); }, [item.Id]);
+  useEffect(() => {
+    translationFor.current = "";
+    setTranslation("idle");
+    // Leaving the title stops a run in progress (it ends "abandoned" and frees the automatic claim).
+    return () => { translationFor.current = ""; };
+  }, [item.Id]);
 
   /** Android TV's translateDescription: request it, then read the item until the pending language clears. */
   async function translateDescription() {
@@ -96,6 +101,8 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
       },
       isCurrent: () => translationFor.current === runKey
     });
+    // Not translated: let automatic mode try again the next time the title is opened.
+    if (result !== "translated") releaseAutoTranslation(detail.Id, language);
     if (result === "abandoned") return;
     translationFor.current = "";
     if (result === "failed") { setTranslation("failed"); return; }

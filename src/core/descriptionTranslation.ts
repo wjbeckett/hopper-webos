@@ -39,12 +39,17 @@ export async function runDescriptionTranslation(options: {
 
 const autoStarted = new Set<string>();
 
-/** "auto" mode starts a translation once per title and language for as long as the app runs. */
+/** "auto" mode starts a translation once per title and language while one is running or has landed. */
 export function claimAutoTranslation(contentId: string, language: string) {
   const key = `${contentId}|${language}`;
   if (autoStarted.has(key)) return false;
   autoStarted.add(key);
   return true;
+}
+
+/** Frees a claim whose run failed or was left, so the next visit starts it again. */
+export function releaseAutoTranslation(contentId: string, language: string) {
+  autoStarted.delete(`${contentId}|${language}`);
 }
 
 /** Whether the server reports the overview itself as machine-translated (it can mark only a tagline). */

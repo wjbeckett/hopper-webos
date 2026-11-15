@@ -8,7 +8,7 @@ import { PlaybackOptionsDialog, PlaybackSummary, useWatchDetail } from "../compo
 import { GearIcon, MoreIcon, PlayIcon, RestartIcon, WatchlistIcon, TranslateIcon } from "../components/icons";
 import { MediaRail } from "../components/MediaRail";
 import { ExpandableOverview } from "../components/ExpandableOverview";
-import { claimAutoTranslation, hasMachineTranslatedOverview, runDescriptionTranslation } from "../core/descriptionTranslation";
+import { claimAutoTranslation, hasMachineTranslatedOverview, releaseAutoTranslation, runDescriptionTranslation } from "../core/descriptionTranslation";
 import { useMetadataAiOnView } from "./useMetadataAiOnView";
 import { ArtworkImage } from "../components/ArtworkImage";
 import type { PlaybackChoices, WatchDetail } from "../api/playback";
@@ -108,7 +108,12 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
   const onView = useMetadataAiOnView(session);
   const [translation, setTranslation] = useState<"idle" | "translating" | "failed">("idle");
   const translationFor = useRef("");
-  useEffect(() => { translationFor.current = ""; setTranslation("idle"); }, [series.Id]);
+  useEffect(() => {
+    translationFor.current = "";
+    setTranslation("idle");
+    // Leaving the series stops a run in progress (it ends "abandoned" and frees the automatic claim).
+    return () => { translationFor.current = ""; };
+  }, [series.Id]);
   const [choices, setChoices] = useState<PlaybackChoices>({});
   const [optionsOpen, setOptionsOpen] = useState(false);
   const optionsRef = useRef<HTMLButtonElement>(null);
@@ -123,7 +128,13 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
 
   useEffect(() => {
     let alive = true;
-    getCatalogItem(session, series.Id).then(next => { if (alive) setShow({ ...series, ...next }); }).catch(() => undefined);
+    getCatalogItem(session, series.Id).then(next => {
+      if (!alive) return;
+      // A translation that landed first is newer than this read: keep its description.
+      setShow(current => current.Id === series.Id && current.MachineTranslatedFields && !current.PendingTranslationLanguage && next.PendingTranslationLanguage
+        ? { ...series, ...next, Overview: current.Overview, MachineTranslatedFields: current.MachineTranslatedFields, PendingTranslationLanguage: undefined }
+        : { ...series, ...next });
+    }).catch(() => undefined);
     Promise.all([isFavorite(session, series.Id), isInWatchlist(session, series.Id)])
       .then(([nextFavorite, nextWatchlist]) => {
         if (!alive) return;
@@ -246,6 +257,8 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
       },
       isCurrent: () => translationFor.current === runKey
     });
+    // Not translated: let automatic mode try again the next time the series is opened.
+    if (result !== "translated") releaseAutoTranslation(show.Id, language);
     if (result === "abandoned") return;
     translationFor.current = "";
     if (result === "failed") { setTranslation("failed"); return; }
@@ -292,6 +305,10 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
         return fresh.find(episode => episode.PendingTranslationLanguage)?.PendingTranslationLanguage;
       },
       isCurrent: () => alive
+    }).then(result => {
+      // Failed, or left for another season or screen: returning to the season asks again.
+      // The server hands back the job already running rather than starting a second one.
+      if (result !== "translated") releaseAutoTranslation(season.Id, language);
     });
     return () => { alive = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -305,6 +322,7 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
   const machineTranslated = Boolean(synopsis) && (focusedEpisode
     ? hasMachineTranslatedOverview(focusedEpisode.MachineTranslatedFields)
     : hasMachineTranslatedOverview(show.MachineTranslatedFields) && translation !== "translating");
+  const showTranslateButton = !focusedEpisode && Boolean(show.PendingTranslationLanguage) && (onView === "button" || translation !== "idle");
   const metaTokens = [
     focusedEpisode
       ? [focusedEpisode.ParentIndexNumber === 0 ? "Specials" : `Season ${focusedEpisode.ParentIndexNumber}`, `Episode ${focusedEpisode.IndexNumber ?? ""}`].filter(Boolean).join(" · ")
@@ -386,7 +404,6 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
             {metaTokens.map(token => <span key={token}>{token}</span>)}
             {rating ? <span>{`★ ${rating.toFixed(1)}`}</span> : null}
             {target && resume > 0 ? <ResumeProgress position={resume} duration={(target.RunTimeTicks ?? 0) / 10_000_000} /> : null}
-            {machineTranslated ? <span className="series-machine-translated">Translated by AI</span> : null}
           </div>
           {/* The slot keeps its height with no overview, so the buttons and the episode row never move. */}
           <div className="series-overview-slot">
@@ -406,15 +423,6 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
                 <span className="tv-button-label">Start Over</span>
               </button>
             ) : null}
-            {show.PendingTranslationLanguage && (onView === "button" || translation !== "idle") ? (
-              // Stays a button while translating (aria-disabled, not disabled) so focus is not thrown out.
-              <button type="button" data-tv-focusable="true" className={`tv-button secondary series-translate ${translation === "translating" ? "pin-open" : ""}`} aria-disabled={translation === "translating"}
-                aria-label={translation === "translating" ? "Translating description…" : translation === "failed" ? "Translation failed — retry" : "Translate description"}
-                onFocus={() => setActiveButton("translate")} onClick={() => void translateSeries()}>
-                {translation === "translating" ? <span className="details-translate-spinner" aria-hidden="true" /> : <TranslateIcon />}
-                <span className="tv-button-label">{translation === "translating" ? "Translating…" : translation === "failed" ? "Retry translation" : "Translate"}</span>
-              </button>
-            ) : null}
             <button type="button" data-tv-focusable="true" className="tv-button secondary" aria-label={watchlist ? "In Watchlist" : "Watchlist"} onFocus={() => setActiveButton("watchlist")} onClick={() => void toggleWatchlist()}>
               <WatchlistIcon active={watchlist} />
               <span className="tv-button-label">{watchlist ? "In Watchlist" : "Watchlist"}</span>
@@ -429,6 +437,17 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
               <MoreIcon />
               <span className="tv-button-label">More</span>
             </button>
+            {/* At the end of the row, as on Android TV's series hero: the button for the series' own description, or else the mark. */}
+            {showTranslateButton ? (
+              // Stays a button while translating (aria-disabled, not disabled) so focus is not thrown out.
+              <button type="button" data-tv-focusable="true" className="tv-button secondary series-translate" aria-disabled={translation === "translating"}
+                onFocus={() => setActiveButton("translate")} onClick={() => void translateSeries()}>
+                {translation === "translating" ? <span className="details-translate-spinner" aria-hidden="true" /> : null}
+                <span>{translation === "translating" ? "Translating description…" : translation === "failed" ? "Translation failed — retry" : "Translate description"}</span>
+              </button>
+            ) : machineTranslated ? (
+              <span className="series-machine-translated" aria-label="Translated by AI"><TranslateIcon /><span aria-hidden="true">Translated by AI</span></span>
+            ) : null}
           </div>
           {error ? <div className="error">{error}</div> : null}
         </div>

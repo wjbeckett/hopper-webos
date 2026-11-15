@@ -12,7 +12,11 @@ export function useMetadataAiOnView(session: Session) {
     let alive = true;
     let pending = metadataAiOnView.get(key);
     if (!pending) {
-      pending = getMetadataAiOnView(session).catch(() => "off" as const);
+      // A failed lookup is not kept: the next screen asks again.
+      pending = getMetadataAiOnView(session).catch(() => {
+        metadataAiOnView.delete(key);
+        return "off" as const;
+      });
       metadataAiOnView.set(key, pending);
     }
     void pending.then(value => { if (alive) setOnView(value); });
