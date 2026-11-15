@@ -5286,6 +5286,13 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
   color: var(--muted-foreground);
   font-size: 1.25rem;
 }
+.series-machine-translated {
+  color: rgba(255,255,255,.7);
+  font-size: 1.25rem;
+}
+.series-translate[aria-disabled="true"] { color: rgba(255,255,255,.75); }
+.series-translate .details-translate-spinner { margin: 0; }
+
 .details-translate {
   display: inline-flex;
   align-items: center;

@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { backdropUrl, getCatalogItem, getMetadataAiOnView, getSimilarItems, requestDescriptionTranslation, imageUrl, isFavorite, isInWatchlist, mediaLogoUrl, setFavorite, setWatched, setWatchlist } from "../api/silo";
+import { backdropUrl, getCatalogItem, getSimilarItems, requestDescriptionTranslation, imageUrl, isFavorite, isInWatchlist, mediaLogoUrl, setFavorite, setWatched, setWatchlist } from "../api/silo";
 import { CastSection, FactsSection, TrailersSection, factsFor, useDetailExtras } from "../components/DetailSections";
 import { PlaybackOptionsDialog, PlaybackSummary, useWatchDetail } from "../components/PlaybackOptions";
 import { GearIcon, MoreIcon, PlayIcon, RestartIcon, WatchlistIcon } from "../components/icons";
 import { MediaRail } from "../components/MediaRail";
 import { ExpandableOverview } from "../components/ExpandableOverview";
-import type { MetadataAiOnView } from "../api/silo";
+import { useMetadataAiOnView } from "./useMetadataAiOnView";
 import { claimAutoTranslation, hasMachineTranslatedOverview, runDescriptionTranslation } from "../core/descriptionTranslation";
 import { ResumeProgress } from "../components/ResumeProgress";
 import type { PlaybackChoices } from "../api/playback";
@@ -51,25 +51,6 @@ function typeLabel(type?: string) {
   if (type === "AudioBook") return "Audiobook";
   if (type === "Episode") return "Episode";
   return type ?? "";
-}
-
-/** The metadata-AI capability per server and profile, read once per app run. */
-const metadataAiOnView = new Map<string, Promise<MetadataAiOnView>>();
-
-function useMetadataAiOnView(session: Session) {
-  const key = `${session.serverUrl}|${session.profileId ?? ""}`;
-  const [onView, setOnView] = useState<MetadataAiOnView>("off");
-  useEffect(() => {
-    let alive = true;
-    let pending = metadataAiOnView.get(key);
-    if (!pending) {
-      pending = getMetadataAiOnView(session).catch(() => "off" as const);
-      metadataAiOnView.set(key, pending);
-    }
-    void pending.then(value => { if (alive) setOnView(value); });
-    return () => { alive = false; };
-  }, [key]);
-  return onView;
 }
 
 export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex, onOpenPerson, onPlayExtra }: Props) {
