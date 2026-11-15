@@ -36,7 +36,7 @@ stay online during review.
 |---|---|
 | Store icon 400×400 | `brand/out/store/hopper-icon-400.png` |
 | Hero / preview 1920×1080 | `brand/out/store/hopper-store-banner-1920x1080.png` |
-| Screenshots 1920×1080 | `brand/store/screenshots/01–04` |
+| Screenshots 1920×1080 | `brand/store/screenshots/01–05` |
 
 ## Before you submit
 The steps left before submission are the open issues in the [Store submission milestone](https://github.com/wjbeckett/hopper-webos/milestone/2).

@@ -53,16 +53,28 @@ brand/render.sh   # needs Google Chrome + macOS sips; also copies the app assets
 
 Taken on an LG TV (webOS 22) against the public demo server (`demo.siloserver.org`, demo/demo), so no
 personal library appears. Content is open movies (Sintel, Big Buck Bunny) and public-domain titles.
+The demo server also has clips named after Dolby, Netflix and LG; keep them out of the shots (frame
+Home on a Recently Added row, and filter Movies → Browse to a genre such as Drama).
 
 | File | Size | Screen |
 |---|---|---|
-| `01-home.png` | 1920×1080 | Home: Sintel hero, Continue Watching |
-| `02-details.png` | 1920×1080 | Sintel details: Resume, time-left ring, cast |
-| `03-movies.png` | 1920×1080 | Movies: poster row |
-| `04-series.png` | 1920×1080 | Series: The Lucy Show hero |
+| `01-home.png` | 1920×1080 | Home: Sintel hero, Recently Added in Movies |
+| `02-details.png` | 1920×1080 | Sintel details: Resume, time-left ring, version, cast, trailers |
+| `03-movies.png` | 1920×1080 | Movies → Browse filtered to Drama: sort, filter, poster grid |
+| `04-series.png` | 1920×1080 | The Lucy Show series page: Play next episode, season tab, episode row |
+| `05-player.png` | 1920×1080 | Sintel paused at 0:32 with the player controls (composite, see below) |
 
-Playback can't be captured over the inspector, because webOS plays video on a hardware layer the
-page screenshot doesn't include. To include a player shot, use the TV's own capture.
+The page shots are inspector captures (`Page.captureScreenshot`) with the app's page focused. If the
+page has lost system focus (`document.hasFocus()` false, which happens after a few idle minutes),
+focus rings don't draw: restart the app and take the shot again.
+
+webOS plays video on a hardware layer that page captures leave out, and the TV refuses screen capture
+to apps (`com.webos.service.capture` denies `executeOneShot`). `05-player.png` is therefore a
+composite of two real parts: the player UI captured on the TV with a transparent background (page and
+`.player-shell` backgrounds cleared, video hidden, `Emulation.setDefaultBackgroundColorOverride` alpha
+0), laid over the same file's frame at the same position (0:32.303), rendered by desktop Chrome with
+`object-fit: contain` at 1920×1080 as the TV shows it. The demo copy of Sintel is 564×240, so the
+picture is as soft as it is on the TV.
 
 The draft listing text is in `store/LISTING.md`.
 Check the sizes against the current LG Seller Lounge guide before you submit.
