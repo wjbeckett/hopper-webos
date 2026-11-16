@@ -18,7 +18,7 @@
 // files the report reads are downloaded. The /silo-watch skill (.claude/skills/silo-watch) runs
 // this, checks each item against Hopper and files issues for the ones worth doing.
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -34,7 +34,7 @@ const git = (repo, args) => execFileSync("git", ["-C", join(cacheDir, `${repo}.g
 });
 
 if (process.argv.includes("--advance")) {
-  if (!existsSync(lastRunFile)) { console.error("No report has been run yet: run without --advance first."); process.exit(1); }
+  if (!existsSync(lastRunFile)) { console.error("No complete report to advance from: run the report first, and check it finished without problems."); process.exit(1); }
   const lastRun = JSON.parse(readFileSync(lastRunFile, "utf8"));
   const checkpoint = { reviewed: new Date().toISOString().slice(0, 10), repos: lastRun.heads };
   writeFileSync(checkpointFile, `${JSON.stringify(checkpoint, null, 2)}\n`);
@@ -44,8 +44,10 @@ if (process.argv.includes("--advance")) {
 
 const checkpoint = JSON.parse(readFileSync(checkpointFile, "utf8"));
 
-// Fetch (or make) the partial clones.
+// Fetch (or make) the partial clones. A previous run's heads are dropped first, so --advance only
+// ever uses the heads of the latest complete report.
 mkdirSync(cacheDir, { recursive: true });
+rmSync(lastRunFile, { force: true });
 const heads = {};
 for (const repo of REPOS) {
   const dir = join(cacheDir, `${repo}.git`);
@@ -56,7 +58,8 @@ for (const repo of REPOS) {
   }
   heads[repo] = git(repo, ["rev-parse", "main"]).trim();
 }
-writeFileSync(lastRunFile, `${JSON.stringify({ ran: new Date().toISOString(), heads }, null, 2)}\n`);
+// Parts of the report that could not be read. An incomplete report is not saved for --advance.
+const problems = [];
 
 // ---------- Commits ----------
 
@@ -104,14 +107,38 @@ function sort(list, { skipScopes = new Set(), keepFixScopes = null } = {}) {
 // ---------- API contract ----------
 
 const CONTRACT = "contracts/api/v2/openapi.json";
+const exists = (repo, sha, path) => {
+  try { git(repo, ["cat-file", "-e", `${sha}:${path}`]); return true; } catch { return false; }
+};
+/** A JSON file from silo-server at a commit: null when the file isn't there, an error when it can't be read. */
+const jsonAt = (sha, path) => exists("silo-server", sha, path) ? JSON.parse(git("silo-server", ["show", `${sha}:${path}`])) : null;
 const contractAt = sha => {
-  try { return JSON.parse(git("silo-server", ["show", `${sha}:${CONTRACT}`])); } catch { return null; }
+  try {
+    const spec = jsonAt(sha, CONTRACT);
+    if (!spec) problems.push(`\`${CONTRACT}\` is missing at silo-server ${sha.slice(0, 9)}.`);
+    return spec;
+  } catch (error) {
+    problems.push(`\`${CONTRACT}\` at silo-server ${sha.slice(0, 9)} could not be read: ${error.message.split("\n")[0]}`);
+    return null;
+  }
 };
 const METHODS = ["get", "put", "post", "delete", "patch", "head", "options"];
+/** Each operation with what it inherits: the path's parameters (the operation's own win, by name
+ *  and location) and the document's security when the operation sets none. */
 const operations = spec => {
   const map = new Map();
   for (const [path, item] of Object.entries(spec?.paths ?? {})) {
-    for (const method of METHODS) if (item[method]) map.set(`${method.toUpperCase()} ${path}`, item[method]);
+    for (const method of METHODS) {
+      const op = item[method];
+      if (!op) continue;
+      const own = op.parameters ?? [];
+      const inherited = (item.parameters ?? []).filter(p => !own.some(o => o.name === p.name && o.in === p.in));
+      map.set(`${method.toUpperCase()} ${path}`, {
+        ...op,
+        parameters: [...inherited, ...own],
+        security: op.security ?? spec.security ?? [],
+      });
+    }
   }
   return map;
 };
@@ -136,6 +163,12 @@ function operationChanges(before, after) {
   if (rr.length) changes.push(`responses removed: ${rr.join(", ")}`);
   const bodyChanged = codes(after).filter(c => codes(before).includes(c) && !same(before.responses[c]?.content, after.responses[c]?.content));
   if (bodyChanged.length) changes.push(`response ${bodyChanged.join(", ")} changed`);
+  if (!same(before.security, after.security)) {
+    const open = list => !list.length || list.some(requirement => !Object.keys(requirement).length);
+    changes.push(open(before.security) === open(after.security)
+      ? "authentication changed"
+      : open(after.security) ? "no longer needs authentication" : "now needs authentication");
+  }
   if (Boolean(before.deprecated) !== Boolean(after.deprecated)) changes.push(after.deprecated ? "now deprecated" : "no longer deprecated");
   return changes;
 }
@@ -245,14 +278,30 @@ if (!before || !after) {
   write("");
 }
 
-let approvals = [];
-try {
-  const read = sha => JSON.parse(git("silo-server", ["show", `${sha}:contracts/api/v2/breaking-approvals.json`])).approvals ?? [];
-  const old = new Set(read(checkpoint.repos["silo-server"]).map(a => JSON.stringify(a)));
-  approvals = read(heads["silo-server"]).filter(a => !old.has(JSON.stringify(a)));
-} catch { /* file missing at one end */ }
+// A file missing at the checkpoint (added since) counts as no earlier approvals; missing at the
+// head or unreadable at either end makes the report incomplete.
+const APPROVALS = "contracts/api/v2/breaking-approvals.json";
 write("### Approved breaking changes", "");
-write(...(approvals.length ? approvals.map(a => `- \`${JSON.stringify(a)}\``) : ["None."]), "");
+try {
+  const read = sha => {
+    const file = jsonAt(sha, APPROVALS);
+    if (file && !Array.isArray(file.approvals)) throw new Error("no approvals list");
+    return file?.approvals ?? null;
+  };
+  const old = read(checkpoint.repos["silo-server"]) ?? [];
+  const now = read(heads["silo-server"]);
+  if (now === null) {
+    problems.push(`\`${APPROVALS}\` is missing at the silo-server head.`);
+    write("Not compared: the file is missing at the head.", "");
+  } else {
+    const seen = new Set(old.map(a => JSON.stringify(a)));
+    const approvals = now.filter(a => !seen.has(JSON.stringify(a)));
+    write(...(approvals.length ? approvals.map(a => `- \`${JSON.stringify(a)}\``) : ["None."]), "");
+  }
+} catch (error) {
+  problems.push(`\`${APPROVALS}\` could not be read: ${error.message.split("\n")[0]}`);
+  write("Not compared: the file could not be read.", "");
+}
 
 const section = (title, repo, { groups, skipped }, fixTitle = "Fixes") => {
   write(`## ${title}`, "");
@@ -279,4 +328,11 @@ section("Android TV", "silo-android", sort(commits("silo-android", ["androidTvAp
   section("tvOS (second reference)", "silo-apple", sort(apple, { skipScopes: new Set(["ios", "macos", "ipados", "watchos"]) }), "tvOS fixes");
 }
 
+if (problems.length) write("## Incomplete report", "", ...problems.map(p => `- ${p}`), "", "The checkpoint can't be advanced from this run.");
 process.stdout.write(`${out.join("\n").trim()}\n`);
+if (problems.length) {
+  console.error(`silo-watch: incomplete report (${problems.length} problem${problems.length === 1 ? "" : "s"}); --advance is not available for it.`);
+  process.exitCode = 1;
+} else {
+  writeFileSync(lastRunFile, `${JSON.stringify({ ran: new Date().toISOString(), heads }, null, 2)}\n`);
+}

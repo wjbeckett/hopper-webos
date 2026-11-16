@@ -11,9 +11,15 @@ Silo moves fast: hundreds of server commits and over a hundred Android commits a
 
 ```bash
 git fetch origin main
-git checkout -b chore/silo-watch-$(date +%Y-%m-%d) origin/main
-node scripts/silo-watch.mjs > "$SCRATCH/silo-watch.md"   # $SCRATCH: your scratchpad, not the repo
+branch="chore/silo-watch-$(date +%Y-%m-%d)"
+# A second review the same day carries on with that day's branch rather than starting over.
+git switch "$branch" 2>/dev/null || git switch -c "$branch" origin/main || exit 1
+node scripts/silo-watch.mjs > <scratchpad>/silo-watch.md
 ```
+
+Write the report to your scratchpad directory (the absolute path from your environment), never into the repository. If the branch already exists and has a review commit, ask the maintainer whether to continue it or start a fresh branch with a suffix (`-2`).
+
+If the script exits with an error, read the report's "Incomplete report" section, fix or report the cause, and run it again. `--advance` refuses to use a report that didn't complete.
 
 The script reads the checkpoint in `scripts/silo-watch.json`, updates partial clones of `Silo-Server/silo-server`, `silo-android` and `silo-apple` in `.cache/silo-watch/` (git-ignored), and writes:
 
@@ -41,7 +47,12 @@ How to check:
 - **API changes:** for each **[Hopper uses]** item, find the call in `src/api` and the parsing of the changed schema. A new optional field or a new error code is usually only "worth doing" if Hopper should use it. Rule 3 in `CLAUDE.md` still holds: new routes come from the contract, never invented.
 - **Android features and fixes:** read the upstream PR (`gh pr view <n> --repo Silo-Server/silo-android`) when the title isn't enough, then look for the same behaviour in Hopper. A `fix(tv)` often describes a bug Hopper can have too; check whether it does.
 - **Group related items.** Many commits often make one feature (box sets: server endpoints, schemas and Android commits). File them as one issue.
-- Don't open GitHub issues that already exist: search first (`gh api 'repos/wjbeckett/hopper-webos/issues?state=all&per_page=100'`).
+- Don't open GitHub issues that already exist. Search every page, open and closed:
+
+  ```bash
+  gh api --paginate 'repos/wjbeckett/hopper-webos/issues?state=all&per_page=100' \
+    --jq '.[] | select(.pull_request | not) | "#\(.number) [\(.state)] \(.title)"'
+  ```
 
 ## 3. Show the maintainer, then file issues
 
@@ -69,7 +80,7 @@ git push -u origin HEAD
 gh pr create --base main --title "Silo watch: reviewed upstream to <date>" --body-file <file>
 ```
 
-`--advance` uses the heads saved by the last report, not the current ones, so anything that landed during the review is in the next report.
+`--advance` uses the heads saved by the last complete report, not the current ones, so anything that landed during the review is in the next report. A report with problems saves no heads, so it can't be advanced from.
 
 The PR body lists the issues filed, the items judged not for Hopper and why, and has `## Release note` "None". Follow `.github/pull_request_template.md`. If the review changed nothing else, the checkpoint file is the whole diff.
 
