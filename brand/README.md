@@ -86,7 +86,7 @@ LG won't review the app without these two, filled in for the build being submitt
 
 | File | What it is |
 |---|---|
-| `self_evaluation_checklist_5.0.xlsx` | LG's self-checklist v5.0, with Pass or N/A and a comment on all 53 test items and the "Other Check Points" sheet. Items still marked TO CONFIRM need a result before submitting. |
-| `ux_scenario_document.pptx` | The UX scenario document, following LG's v4.3 template: basic information, remote keys, login steps with the reviewer account, and each screen with numbered controls. Fill in the cover (submission date, app version, developer) before submitting. |
+| `self_evaluation_checklist_5.0.xlsx` | LG's self-checklist v5.0, with Pass or N/A and a comment on all 53 test items and the "Other Check Points" sheet. |
+| `ux_scenario_document.pptx` | The UX scenario document, following LG's v4.3 template: basic information, remote keys, login steps with the reviewer account, and each screen with numbered controls. The cover gives the submission date, app version and developer; set the app version to the exact build (1.0.N) being uploaded. |
 
 The screens in the UX document were captured on the TV against the demo server, with the position of each numbered control read from the page. The player slide uses `screenshots/05-player.png`, for the reason given above. When a screen changes, retake it and update the slide.

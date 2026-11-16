@@ -46,10 +46,10 @@ npm test                                               # unit tests (Vitest, jsd
 WEBOS_DEVICE=livingroom npm run webos:deploy           # build, package IPK (app + services/pairing), install, launch
 WEBOS_DEVICE=livingroom npm run webos:inspect          # LG Web Inspector
 npm run webos:check                                    # verify node/ares tooling and devices
-node scripts/release-notes.mjs --version 0.3.999       # preview the next release's notes (needs gh)
+node scripts/release-notes.mjs --version 1.0.999       # preview the next release's notes (needs gh)
 ```
 - There is no linter. `npm run build`, which type-checks, and `npm test` are the checks to run before committing; CI runs both. Tests sit next to the code as `*.test.ts` and cover logic only (API parsing, token refresh, navigation scoring, the Dolby splitter, resume and episode rules). Add one when you change that kind of logic. They do not replace a check on the TV. It fails on unused locals, imports and parameters (`noUnusedLocals`, `noUnusedParameters`); prefix a parameter you must keep with `_`.
-- Every build gets its own version, `<major>.<minor>.<commit count>` (for example 0.3.215), from `vite.config.ts`. It is stamped into the packaged `appinfo.json`, shown under Settings → Server with the commit hash, and sent in playback requests. `package.json` holds only `<major>.<minor>`; bump it there to start a new release line. Don't hand-edit version numbers anywhere else.
+- Every build gets its own version, `<major>.<minor>.<commit count>` (for example 1.0.390), from `vite.config.ts`. It is stamped into the packaged `appinfo.json`, shown under Settings → Server with the commit hash, and sent in playback requests. `package.json` holds only `<major>.<minor>`; bump it there to start a new release line. Don't hand-edit version numbers anywhere else.
 - `WEBOS_APP_ID` overrides the app ID for launch and inspect.
 - In the browser, arrow keys move focus, Enter selects, and Escape or Backspace act as Back.
 - During `vite dev`, `POST /__client-log` echoes client logs to the terminal.
