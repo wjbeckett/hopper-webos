@@ -34,6 +34,7 @@ gh api 'repos/wjbeckett/hopper-webos/issues?state=open&milestone=<number>&per_pa
 
 - **Working an issue** uses the `fix-issue` skill (`/fix-issue <number>`), for features and verification as well as bugs. The PR says `Fixes #<number>` so merging closes the issue.
 - **Labels:** `maintainer` issues need a decision or action from the maintainer; don't attempt them. `needs: tv` and `needs: live server` issues can't be finished without that hardware or server: do what can be done, say exactly what is left, and leave the issue open. `verification` issues are checks of things already built.
+- **Keeping up with Silo** uses the `silo-watch` skill (`/silo-watch`), run when the maintainer asks. It reports server API contract, Android TV and tvOS changes since the checkpoint in `scripts/silo-watch.json`, files the items worth doing as `upstream` issues with no milestone, and moves the checkpoint in a PR.
 - **Work you find but don't do** becomes a new issue, with area labels and no milestone, so the maintainer can place it. Don't leave it as a note in a doc or a code comment.
 - **Partly done:** if a PR finishes only part of an issue, say `Part of #<number>` and comment on the issue with what is left.
 
@@ -47,6 +48,7 @@ WEBOS_DEVICE=livingroom npm run webos:deploy           # build, package IPK (app
 WEBOS_DEVICE=livingroom npm run webos:inspect          # LG Web Inspector
 npm run webos:check                                    # verify node/ares tooling and devices
 node scripts/release-notes.mjs --version 1.0.999       # preview the next release's notes (needs gh)
+node scripts/silo-watch.mjs                            # what Silo changed upstream since scripts/silo-watch.json (the /silo-watch skill)
 ```
 - There is no linter. `npm run build`, which type-checks, and `npm test` are the checks to run before committing; CI runs both. Tests sit next to the code as `*.test.ts` and cover logic only (API parsing, token refresh, navigation scoring, the Dolby splitter, resume and episode rules). Add one when you change that kind of logic. They do not replace a check on the TV. It fails on unused locals, imports and parameters (`noUnusedLocals`, `noUnusedParameters`); prefix a parameter you must keep with `_`.
 - Every build gets its own version, `<major>.<minor>.<commit count>` (for example 1.0.390), from `vite.config.ts`. It is stamped into the packaged `appinfo.json`, shown under Settings → Server with the commit hash, and sent in playback requests. `package.json` holds only `<major>.<minor>`; bump it there to start a new release line. Don't hand-edit version numbers anywhere else.
