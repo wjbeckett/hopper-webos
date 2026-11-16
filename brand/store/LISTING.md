@@ -4,6 +4,8 @@
 **Category:** Entertainment
 **App ID:** com.hopperapp.hopper · **Version:** 1.0 (the build number, 1.0.N, is set when the release is built)
 **Privacy policy:** https://wjbeckett.github.io/hopper-webos/privacy/ (source: `docs/privacy.md`, published with GitHub Pages from `/docs` on `main`)
+**Seller contact:** https://wjbeckett.github.io/hopper-webos/support/ (source: `docs/support.md`). A page rather than an email address, so the contact route can change without changing the listing.
+**Tag keywords:** media server, Silo, movies, TV shows, series, home media, personal media, self-hosted, video player, audiobooks, music, streaming
 
 ## Short description
 Watch your own Silo media server on your LG TV.
