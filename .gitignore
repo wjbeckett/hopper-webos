@@ -8,5 +8,7 @@ release/
 .env.*.local
 .DS_Store
 silo-android
+# LG submission documents: kept by the maintainer, not published
+brand/store/qa/
 .claude/*
 !.claude/skills/
