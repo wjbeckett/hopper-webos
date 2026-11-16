@@ -314,6 +314,12 @@ function focusElement(element: HTMLElement) {
     return;
   }
 
+  // A row of controls near the top (Calendar's filters and week) brings the page back to the top,
+  // so it is never left under the fixed top menu after the cards below were scrolled to.
+  if (element.closest("[data-nav-row='true']")) {
+    keepInViewVertically(element, true);
+    return;
+  }
   if (element.closest(".tv-nav")) {
     window.scrollTo({ top: 0, behavior: "smooth" });
     document.querySelector<HTMLElement>(".library-results")?.scrollTo({ top: 0, behavior: "smooth" });
@@ -362,7 +368,7 @@ export function attemptFirstContentFocus(remaining: number) {
     }
     const firstCard = focusables(".content-screen .media-card")[0];
     const firstContentControl = focusables(".content-screen [data-tv-focusable='true']")[0];
-    const target = firstCard ?? firstContentControl;
+    const target = firstNavRowEntry() ?? firstCard ?? firstContentControl;
     if (target) {
       focusElement(target);
       cancel();
@@ -383,10 +389,38 @@ export function focusNavigationTarget(element: HTMLElement) {
   focusElement(element);
 }
 
+/** On a screen that starts with rows of controls (data-nav-row, Calendar), the first row's
+ *  selected control, or its first: Android TV enters such a screen there, not at a card below. */
+function firstNavRowEntry(): HTMLElement | undefined {
+  const row = Array.from(document.querySelectorAll<HTMLElement>(".content-screen [data-nav-row='true']"))
+    .find(candidate => candidate.offsetParent !== null);
+  return row ? navRowEntry(row) : undefined;
+}
+
+/** The nearest data-nav-row above or below `from` on the current screen, other than `exclude`. */
+export function navRowInDirection(from: DOMRect, direction: "up" | "down", exclude?: HTMLElement) {
+  return Array.from(document.querySelectorAll<HTMLElement>(".content-screen [data-nav-row='true']"))
+    .filter(row => row !== exclude && row.offsetParent !== null)
+    .map(row => ({ row, rect: row.getBoundingClientRect() }))
+    .filter(({ rect }) => direction === "up" ? rect.bottom <= from.top + 1 : rect.top >= from.bottom - 1)
+    .sort((a, b) => direction === "up" ? b.rect.bottom - a.rect.bottom : a.rect.top - b.rect.top)[0]?.row;
+}
+
+/** Where focus lands when it moves into a data-nav-row: its selected control, or its first. */
+export function navRowEntry(row: HTMLElement) {
+  const items = focusables("[data-tv-focusable='true']").filter(item => row.contains(item));
+  return items.find(item => item.getAttribute("aria-pressed") === "true") ?? items[0];
+}
+
 function focusFirstContentBelow(current: HTMLElement) {
   const browseControl = focusables(".content-screen .browse-toolbar [data-browse-dropdown-trigger]")[0];
   if (browseControl) {
     focusElement(browseControl);
+    return true;
+  }
+  const navRowEntry = firstNavRowEntry();
+  if (navRowEntry) {
+    focusElement(navRowEntry);
     return true;
   }
   const cards = focusables(".content-screen .media-card");
@@ -1001,6 +1035,32 @@ export function installSpatialNavigation() {
       }
     }
 
+    // A row of controls marked data-nav-row (Calendar's filters and week, #152). Left and Right stay
+    // in the row and stop at its ends, rather than scoring the top menu or the row below as nearer
+    // than a control far along the same row. Up and Down go to the next marked row in that direction,
+    // onto its selected control (aria-pressed), as Android's focus groups do; with no marked row
+    // there, geometry below takes over.
+    const navRow = current.closest<HTMLElement>("[data-nav-row='true']");
+    if (navRow) {
+      const from = current.getBoundingClientRect();
+      if (direction === "left" || direction === "right") {
+        const next = allFocusables
+          .filter(candidate => candidate !== current && navRow.contains(candidate))
+          .map(candidate => ({ candidate, score: candidateScore(from, candidate.getBoundingClientRect(), direction) }))
+          .sort((a, b) => a.score - b.score)[0];
+        if (next && Number.isFinite(next.score)) focusElement(next.candidate);
+        event.preventDefault();
+        return;
+      }
+      const nextRow = navRowInDirection(navRow.getBoundingClientRect(), direction, navRow);
+      const entry = nextRow ? navRowEntry(nextRow) : undefined;
+      if (entry) {
+        focusElement(entry);
+        event.preventDefault();
+        return;
+      }
+    }
+
     // Profile form fields: Left/Right stay in the text; Up/Down move between
     // fields by geometry (below) instead of jumping to the nav or a card.
     if (current instanceof HTMLInputElement && current.closest(".profile-form") && (direction === "left" || direction === "right")) return;
@@ -1050,6 +1110,31 @@ export function installSpatialNavigation() {
       .map(candidate => ({ candidate, score: candidateScore(from, candidate.getBoundingClientRect(), direction) }))
       .sort((a, b) => a.score - b.score)[0];
     if (target && Number.isFinite(target.score)) {
+      // Rows of controls (data-nav-row) are entered from above or below, never from the side: Left
+      // from the first release card on Calendar stays put rather than jumping to the week's chevron.
+      const targetNavRow = target.candidate.closest<HTMLElement>("[data-nav-row='true']");
+      // Nor does a sideways move leave the screen for the top menu: Left or Right at the end of a
+      // row of cards stays on the card (#152), as on Android TV, where only Up reaches the top bar.
+      const intoTopMenu = Boolean(target.candidate.closest(".tv-nav")) && !current.closest(".tv-nav");
+      if ((targetNavRow || intoTopMenu) && (direction === "left" || direction === "right")) {
+        event.preventDefault();
+        return;
+      }
+      // Going up or down past a row of controls stops at it, on its selected control: Up from a
+      // release card goes to the selected day, even when a top-menu item lines up better (#152).
+      if (direction === "up" || direction === "down") {
+        const between = navRowInDirection(from, direction);
+        const targetRect = target.candidate.getBoundingClientRect();
+        const passes = between && (direction === "up"
+          ? targetRect.bottom <= between.getBoundingClientRect().top + 1
+          : targetRect.top >= between.getBoundingClientRect().bottom - 1);
+        const entry = between && (passes || targetNavRow === between) ? navRowEntry(between) : undefined;
+        if (entry) {
+          focusElement(entry);
+          event.preventDefault();
+          return;
+        }
+      }
       const targetRow = target.candidate.closest<HTMLElement>(".episode-rail, .detail-cast-track, .detail-trailer-track, .rail-track");
       if (targetRow && !targetRow.contains(current) && (direction === "up" || direction === "down")) {
         const firstInRow = targetRow.closest(".home-rails") ? focusables("[data-tv-focusable='true']").find(item => targetRow.contains(item) && item.offsetParent !== null) : rowEntry(targetRow);

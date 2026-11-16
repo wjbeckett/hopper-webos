@@ -59,7 +59,8 @@ export function CalendarScreen({ session, onOpen }: {
     date.setDate(week.getDate() + index);
     return date;
   }), [week]);
-  const selectedItems = days.find(day => day.date === selectedDate)?.items ?? [];
+  // Memoised: a new empty array on every render re-ran the focus effect below on every render.
+  const selectedItems = useMemo(() => days.find(day => day.date === selectedDate)?.items ?? [], [days, selectedDate]);
 
   useEffect(() => {
     let alive = true;
@@ -89,43 +90,45 @@ export function CalendarScreen({ session, onOpen }: {
 
   return (
     <main className="content-screen calendar-screen">
-      <div className="calendar-toolbar">
-        <button type="button" className="tv-button secondary" data-tv-focusable="true" onClick={() => moveWeek(-1)}>‹ Previous week</button>
-        <div className="calendar-filters" aria-label="Calendar filter">
-          {filters.map(option => (
-            <button
-              key={option.value}
-              type="button"
-              data-tv-focusable="true"
-              className={`library-view-tab ${filter === option.value ? "active" : ""}`}
-              aria-pressed={filter === option.value}
-              onClick={() => setFilter(option.value)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-        <button type="button" className="tv-button secondary" data-tv-focusable="true" onClick={() => moveWeek(1)}>Next week ›</button>
+      {/* Android TV's layout: the filters as one segmented row, then the week with a chevron on
+          each side. Each is a data-nav-row, so Left and Right stay in it (#152). */}
+      <div className="calendar-filters" role="group" aria-label="Calendar filter" data-nav-row="true">
+        {filters.map(option => (
+          <button
+            key={option.value}
+            type="button"
+            data-tv-focusable="true"
+            className={`library-view-tab ${filter === option.value ? "active" : ""}`}
+            aria-pressed={filter === option.value}
+            onClick={() => setFilter(option.value)}
+          >
+            {option.label}
+          </button>
+        ))}
       </div>
-      <div className="calendar-week" aria-label="Week">
-        {dates.map(date => {
-          const key = dateKey(date);
-          const count = days.find(day => day.date === key)?.items.length ?? 0;
-          return (
-            <button
-              key={key}
-              type="button"
-              data-tv-focusable="true"
-              className={`calendar-day ${selectedDate === key ? "active" : ""}`}
-              aria-pressed={selectedDate === key}
-              onClick={() => setSelectedDate(key)}
-            >
-              <span>{date.toLocaleDateString(undefined, { weekday: "short" })}</span>
-              <strong>{date.getDate()}</strong>
-              <small>{count ? `${count} titles` : "—"}</small>
-            </button>
-          );
-        })}
+      <div className="calendar-week-row" data-nav-row="true">
+        <button type="button" className="calendar-chevron" data-tv-focusable="true" aria-label="Previous week" onClick={() => moveWeek(-1)}>‹</button>
+        <div className="calendar-week" aria-label="Week">
+          {dates.map(date => {
+            const key = dateKey(date);
+            const count = days.find(day => day.date === key)?.items.length ?? 0;
+            return (
+              <button
+                key={key}
+                type="button"
+                data-tv-focusable="true"
+                className={`calendar-day ${selectedDate === key ? "active" : ""}`}
+                aria-pressed={selectedDate === key}
+                onClick={() => setSelectedDate(key)}
+              >
+                <span>{date.toLocaleDateString(undefined, { weekday: "short" })}</span>
+                <strong>{date.getDate()}</strong>
+                <small>{count ? `${count} titles` : "—"}</small>
+              </button>
+            );
+          })}
+        </div>
+        <button type="button" className="calendar-chevron" data-tv-focusable="true" aria-label="Next week" onClick={() => moveWeek(1)}>›</button>
       </div>
       {error ? <div className="error">{error}</div> : null}
       {loading ? <LoadingState label="Loading release calendar" /> : selectedItems.length ? (
