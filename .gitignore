@@ -12,3 +12,5 @@ silo-android
 brand/store/qa/
 .claude/*
 !.claude/skills/
+# Upstream Silo clones for scripts/silo-watch.mjs
+.cache/

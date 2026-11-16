@@ -1,0 +1,8 @@
+{
+  "reviewed": "2026-10-28",
+  "repos": {
+    "silo-server": "1a43919c8855967f4a7a2eef39d878133b9b6327",
+    "silo-android": "3cecc7a661d8c7b3844128c79a1312ac0f370979",
+    "silo-apple": "3c2471cf28c81975c24ba1b09d4087ec23627e56"
+  }
+}

@@ -66,6 +66,7 @@ To review any pull request on demand through the read-only path: **Actions → P
 - **Milestones:** *Public repo* (before the repository is made public), *Store submission* (before submitting to the LG Content Store, including features you want in the first store release), *v1.1* (the first update after the 1.0 store release, where new work goes) and *After store release* (not yet planned for a release). An issue with no milestone has not been triaged; give it one or close it.
 - **You:** run `/fix-issue` in Claude Code to triage open issues, or `/fix-issue <number>` to work one. It lists them by milestone, severity and effort, investigates the one you pick, does the work on a branch and opens the PR. It handles features and verification checks as well as bugs. There is no automatic issue bot.
 - **Claude Code** opens a new issue, with no milestone, for work it finds but does not do.
+- **Keeping up with Silo:** run `/silo-watch` in Claude Code whenever you want to check upstream. `scripts/silo-watch.mjs` reports what changed since the last review in the server's API contract (`contracts/api/v2/openapi.json`), the Android TV app and the tvOS app, and marks the endpoints Hopper calls. Claude checks each item against Hopper, shows you what is worth doing, files the ones you approve as `upstream` issues with no milestone, and opens a PR that moves the checkpoint (`scripts/silo-watch.json`). Nothing runs it on a schedule.
 
 ## Releases
 
@@ -108,6 +109,7 @@ To check a release before publishing, install the attached IPK on a TV: `ares-in
 | `maintainer` | **You** or Claude Code | Needs a decision or action only you can take |
 | `verification` | **You** or Claude Code | Already built; needs checking against a live server or on a TV |
 | `needs: tv`, `needs: live server` | **You** or Claude Code | Cannot be finished without a physical LG TV or a real Silo server |
+| `upstream` | Claude Code (`/silo-watch`) | Something Silo added or changed upstream that Hopper should pick up |
 
 Triage creates any label that does not exist yet.
 
