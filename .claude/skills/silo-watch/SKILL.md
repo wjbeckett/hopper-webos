@@ -72,7 +72,7 @@ Run issue text through the `unslop` skill before posting.
 Once the review is done (whether or not issues were filed), record it:
 
 ```bash
-node scripts/silo-watch.mjs --advance   # sets scripts/silo-watch.json to the heads the report used
+node scripts/silo-watch.mjs --advance <run ID>   # the ID at the top of the report you reviewed
 npm run build && npm test
 git add scripts/silo-watch.json
 git commit -m "Silo watch: reviewed upstream to <date>"
@@ -80,7 +80,7 @@ git push -u origin HEAD
 gh pr create --base main --title "Silo watch: reviewed upstream to <date>" --body-file <file>
 ```
 
-`--advance` uses the heads saved by the last complete report, not the current ones, so anything that landed during the review is in the next report. A report with problems saves no heads, so it can't be advanced from.
+`--advance` uses the heads saved by the last complete report, not the current ones, so anything that landed during the review is in the next report. It takes the run ID printed at the top of the report and refuses if a later run has replaced that report: review the newer report, then advance with its ID. A report with problems saves no heads, so it can't be advanced from.
 
 The PR body lists the issues filed, the items judged not for Hopper and why, and has `## Release note` "None". Follow `.github/pull_request_template.md`. If the review changed nothing else, the checkpoint file is the whole diff.
 

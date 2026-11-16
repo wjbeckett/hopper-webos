@@ -2,7 +2,7 @@
 // Reports what changed upstream in Silo since the last review (Markdown, to stdout).
 //
 //   node scripts/silo-watch.mjs                 report from the checkpoint to each repo's main
-//   node scripts/silo-watch.mjs --advance       move the checkpoint to the heads the last report used
+//   node scripts/silo-watch.mjs --advance <id>  move the checkpoint to the heads of the report with that run ID
 //
 // It reads three public repositories in the Silo-Server organisation:
 //   silo-server   contracts/api/v2/openapi.json (endpoints and schemas, compared between the two
@@ -18,6 +18,7 @@
 // files the report reads are downloaded. The /silo-watch skill (.claude/skills/silo-watch) runs
 // this, checks each item against Hopper and files issues for the ones worth doing.
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -33,9 +34,19 @@ const git = (repo, args) => execFileSync("git", ["-C", join(cacheDir, `${repo}.g
   encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 256 * 1024 * 1024,
 });
 
-if (process.argv.includes("--advance")) {
+/** Names a report by the heads it covers, so --advance can check it is the report that was reviewed. */
+const runId = heads => createHash("sha1").update(JSON.stringify(heads)).digest("hex").slice(0, 8);
+
+const advanceAt = process.argv.indexOf("--advance");
+if (advanceAt !== -1) {
+  const wanted = process.argv[advanceAt + 1];
+  if (!wanted) { console.error("--advance needs the run ID printed at the top of the report you reviewed."); process.exit(1); }
   if (!existsSync(lastRunFile)) { console.error("No complete report to advance from: run the report first, and check it finished without problems."); process.exit(1); }
   const lastRun = JSON.parse(readFileSync(lastRunFile, "utf8"));
+  if (lastRun.id !== wanted) {
+    console.error(`The latest complete report is run ${lastRun.id}, not ${wanted}. A later run replaced the one you reviewed: review its report, then advance with its ID.`);
+    process.exit(1);
+  }
   const checkpoint = { reviewed: new Date().toISOString().slice(0, 10), repos: lastRun.heads };
   writeFileSync(checkpointFile, `${JSON.stringify(checkpoint, null, 2)}\n`);
   console.log(`Checkpoint moved to ${Object.entries(lastRun.heads).map(([repo, sha]) => `${repo}@${sha.slice(0, 9)}`).join(", ")}`);
@@ -123,16 +134,24 @@ const contractAt = sha => {
   }
 };
 const METHODS = ["get", "put", "post", "delete", "patch", "head", "options"];
+/** A parameter's identity: location and name, or its $ref when it can't be resolved. */
+const paramKey = p => p.in && p.name ? `${p.in}:${p.name}` : `ref:${p.$ref ?? JSON.stringify(p)}`;
 /** Each operation with what it inherits: the path's parameters (the operation's own win, by name
- *  and location) and the document's security when the operation sets none. */
+ *  and location) and the document's security when the operation sets none. Parameters given as
+ *  $refs to components.parameters are resolved first. */
 const operations = spec => {
+  const resolve = p => {
+    const name = typeof p.$ref === "string" && p.$ref.startsWith("#/components/parameters/") ? p.$ref.slice("#/components/parameters/".length) : null;
+    return name && spec.components?.parameters?.[name] ? spec.components.parameters[name] : p;
+  };
   const map = new Map();
   for (const [path, item] of Object.entries(spec?.paths ?? {})) {
     for (const method of METHODS) {
       const op = item[method];
       if (!op) continue;
-      const own = op.parameters ?? [];
-      const inherited = (item.parameters ?? []).filter(p => !own.some(o => o.name === p.name && o.in === p.in));
+      const own = (op.parameters ?? []).map(resolve);
+      const ownKeys = new Set(own.map(paramKey));
+      const inherited = (item.parameters ?? []).map(resolve).filter(p => !ownKeys.has(paramKey(p)));
       map.set(`${method.toUpperCase()} ${path}`, {
         ...op,
         parameters: [...inherited, ...own],
@@ -147,7 +166,7 @@ const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 /** What differs between two versions of an operation, ignoring prose. */
 function operationChanges(before, after) {
   const changes = [];
-  const params = op => new Map((op.parameters ?? []).map(p => [`${p.in}:${p.name}`, p]));
+  const params = op => new Map((op.parameters ?? []).map(p => [paramKey(p), p]));
   const pb = params(before), pa = params(after);
   const added = [...pa.keys()].filter(k => !pb.has(k));
   const removed = [...pb.keys()].filter(k => !pa.has(k));
@@ -221,6 +240,7 @@ const commitCount = repo => Number(git(repo, ["rev-list", "--count", "--no-merge
 
 write(`# Silo watch since ${checkpoint.reviewed}`, "");
 write(`Generated ${new Date().toISOString().slice(0, 10)}. Ranges: ${REPOS.map(r => `${r} \`${shortRange(r)}\` (${commitCount(r)} commits)`).join(", ")}.`, "");
+write(`Run ID \`${runId(heads)}\`. Once this report has been reviewed: \`node scripts/silo-watch.mjs --advance ${runId(heads)}\`.`, "");
 write("Items marked **[Hopper uses]** match a path written in Hopper's `src/api` (a heuristic: check the code).", "");
 
 // API contract.
@@ -334,5 +354,5 @@ if (problems.length) {
   console.error(`silo-watch: incomplete report (${problems.length} problem${problems.length === 1 ? "" : "s"}); --advance is not available for it.`);
   process.exitCode = 1;
 } else {
-  writeFileSync(lastRunFile, `${JSON.stringify({ ran: new Date().toISOString(), heads }, null, 2)}\n`);
+  writeFileSync(lastRunFile, `${JSON.stringify({ id: runId(heads), ran: new Date().toISOString(), heads }, null, 2)}\n`);
 }
