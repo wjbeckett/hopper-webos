@@ -2,7 +2,7 @@
 
 **App name:** Hopper
 **Category:** Entertainment
-**App ID:** com.hopperapp.hopper · **Version:** 0.3.0
+**App ID:** com.hopperapp.hopper · **Version:** 1.0 (the build number, 1.0.N, is set when the release is built)
 **Privacy policy:** https://wjbeckett.github.io/hopper-webos/privacy/ (source: `docs/privacy.md`, published with GitHub Pages from `/docs` on `main`)
 
 ## Short description

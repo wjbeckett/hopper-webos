@@ -19,7 +19,7 @@ Hopper is an independent, community-built client. It is not affiliated with or e
 | --- | --- | --- | --- |
 | LG Content Store | Not yet submitted | – | Store assets and listing are ready |
 | GitHub Releases (IPK) | Not yet published | – | |
-| Build from source | Available | 0.3.x (every build has its own number) | Sideload with LG Developer Mode |
+| Build from source | Available | 1.0.x (every build has its own number) | Sideload with LG Developer Mode |
 
 ## Screenshots
 

@@ -15,9 +15,9 @@ on:
   workflow_dispatch:
     inputs:
       prerelease:
-        description: Mark the release as a pre-release (Hopper is 0.x and not in the LG Content Store yet)
+        description: Mark the release as a pre-release (a test build, not one for the LG Content Store)
         type: boolean
-        default: true
+        default: false
 
 permissions:
   contents: write
