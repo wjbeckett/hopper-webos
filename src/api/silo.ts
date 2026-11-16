@@ -1409,6 +1409,15 @@ export async function searchItems(session: Session, query: string): Promise<Silo
   return unpack(await requestV2<NativeList>(session, catalogPath("all", 60, query.trim()))).Items;
 }
 
+/**
+ * The deployment's stable identity (`server_id`), the same at every address. Phone remote control
+ * matches a phone on another address of this server by it (#155). Public: never authorize on it alone.
+ */
+export async function getServerIdentity(session: Session): Promise<string> {
+  const data = await requestV2<{ server_id?: string }>(session, "/system/identity");
+  return typeof data.server_id === "string" ? data.server_id.trim() : "";
+}
+
 export async function getCatalogItem(session: Session, contentId: string): Promise<SiloItem> {
   const data = await requestV2<NativeItem>(session, `/catalog/items/${encodeURIComponent(contentId)}`);
   return toItem(data);

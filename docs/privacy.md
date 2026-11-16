@@ -53,6 +53,12 @@ server is up to its operator. For the Silo server software, see
 - **Phone setup:** to sign in with your phone, Hopper announces itself on your home network
   (mDNS) so the Silo app on your phone can find it. That exchange stays on your local network,
   between your phone, your TV and your server.
+- **Phone remote:** while you're signed in, Hopper announces itself on your home network (mDNS)
+  so the Silo phone app can find the TV and control playback. The announcement carries the TV's
+  name, its random identifier, and your server's name and address, and anyone on your network
+  can see it. A phone connects to the TV directly; that connection isn't encrypted, as with
+  Silo's Roku app, and stays on your local network. Only phones signed in to the same server can
+  control playback. Nothing about this is stored or sent anywhere else.
 
 ## Diagnostics
 

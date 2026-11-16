@@ -38,3 +38,31 @@ export function lunaCall(uri: string, parameters: Record<string, unknown>, timeo
     } catch { finish(null); }
   });
 }
+
+/**
+ * A Luna subscription (`subscribe: true`): `onReply` gets every reply until the returned function
+ * cancels it. The bridge must stay referenced for the replies to keep coming, so it lives in the
+ * closure. Does nothing without a bridge (a desktop browser).
+ */
+export function lunaSubscribe(uri: string, parameters: Record<string, unknown>, onReply: (reply: LunaReply) => void): () => void {
+  if (!lunaAvailable()) return () => undefined;
+  let bridge: PalmBridge | null = null;
+  try {
+    bridge = new PalmServiceBridge!();
+    bridge.onservicecallback = raw => {
+      try {
+        const reply = JSON.parse(raw) as LunaReply;
+        if (reply && typeof reply === "object") onReply(reply);
+      } catch { /* an unreadable reply */ }
+    };
+    bridge.call(uri, JSON.stringify({ ...parameters, subscribe: true }));
+  } catch {
+    bridge = null;
+  }
+  return () => {
+    if (!bridge) return;
+    bridge.onservicecallback = null;
+    try { bridge.cancel?.(); } catch { /* already gone */ }
+    bridge = null;
+  };
+}

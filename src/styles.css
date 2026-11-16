@@ -5436,3 +5436,31 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 }
 .buffering-pill-button.primary { border-color: transparent; background: rgba(255, 255, 255, .24); color: #fff; font-weight: 600; }
 .buffering-pill-button:focus { outline: none; border-color: #fff; background: #fff; color: #000; }
+
+/* Phone remote control (#155): "<phone> connected", over any screen. Not focusable. */
+.remote-notice {
+  position: fixed;
+  top: 40px;
+  left: 50%;
+  z-index: 1000;
+  max-width: 60vw;
+  padding: 14px 28px;
+  border-radius: 999px;
+  color: #f4f4f2;
+  background: rgba(16,17,19,.92);
+  box-shadow: 0 8px 32px rgba(0,0,0,.45);
+  font-size: 1.25rem;
+  font-weight: calc(600 + var(--font-weight-boost));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -12px);
+  transition: opacity .25s ease, transform .25s ease;
+}
+
+.remote-notice.visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}

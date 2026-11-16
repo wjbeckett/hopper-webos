@@ -45,6 +45,9 @@ import { applyResumeState, applyWatchedState, publishWatchState } from "./core/w
 import { firstEpisodeOfSeason, nextEpisodeAfter } from "./core/episodeNavigation";
 import { publishRailsChanged } from "./core/watchState";
 import { connectEventsSocket } from "./api/events";
+import { configureRemoteControl, startRemoteControl } from "./control/hub";
+import type { LaunchIntent } from "./control/protocol";
+import { showRemoteNotice } from "./components/remoteNotice";
 import { scheduleBandwidthProbe } from "./core/bandwidthProbe";
 import { subscribeReload, subscribeSessionExpired, watchServer } from "./api/connection";
 import { ConnectionLost } from "./components/ConnectionLost";
@@ -61,7 +64,7 @@ type DetailRoute =
   | { name: "details"; item: SiloItem; castIndex?: number }
   | { name: "series"; item: SiloItem; selectedEpisode?: SiloItem; castIndex?: number }
   | { name: "person"; personId?: string; personName: string; back: DetailRoute }
-  | { name: "player"; item: SiloItem; startPosition?: number; autoAdvanceCount?: number; choices?: PlaybackChoices; returnTo?: { series: SiloItem; selectedEpisode: SiloItem }; shuffleId?: string; shuffleNext?: SiloItem; shuffleScope?: string };
+  | { name: "player"; item: SiloItem; startPosition?: number; autoAdvanceCount?: number; choices?: PlaybackChoices; returnTo?: { series: SiloItem; selectedEpisode: SiloItem }; shuffleId?: string; shuffleNext?: SiloItem; shuffleScope?: string; remoteLaunch?: number };
 
 type BrowseDetail =
   | { kind: "collection"; library: SiloLibrary; collection: SiloCollection }
@@ -196,6 +199,32 @@ export default function App() {
     if (!session) return;
     return connectEventsSocket(session, publishRailsChanged);
   }, [session]);
+
+  // Phone remote control (#155): a Silo phone app on the same network can control playback and
+  // start titles while someone is signed in. Launches go to the profile open on the TV.
+  const remoteProfile = session?.profileId && profileHydrated ? { id: session.profileId, name: session.username } : null;
+  const remoteProfileRef = useRef(remoteProfile);
+  remoteProfileRef.current = remoteProfile;
+  const remoteLaunchRef = useRef<(intent: LaunchIntent) => Promise<void>>(async () => undefined);
+  remoteLaunchRef.current = async (intent) => {
+    const current = sessionRef.current;
+    if (!current?.profileId) throw new Error("Choose a profile on the TV first.");
+    const item = await getCatalogItem(current, intent.contentId);
+    const returnTo = item.Type === "Episode" && item.SeriesId
+      ? { series: { Id: item.SeriesId, Name: item.SeriesName ?? "Series", Type: "Series" }, selectedEpisode: item }
+      : undefined;
+    setRoute({ name: "player", item, startPosition: intent.startPosition, choices: intent.choices, returnTo, remoteLaunch: Date.now() });
+  };
+  useEffect(() => {
+    if (!session) return;
+    return startRemoteControl({
+      getSession: () => sessionRef.current,
+      profile: remoteProfileRef.current,
+      onLaunch: intent => remoteLaunchRef.current(intent),
+      onNotice: showRemoteNotice
+    });
+  }, [session?.serverUrl, session?.userId]);
+  useEffect(() => configureRemoteControl(remoteProfile), [remoteProfile?.id, remoteProfile?.name]);
 
   useEffect(() => {
     if (!session || profileHydrated) return;
@@ -744,7 +773,7 @@ export default function App() {
   if (route.name === "player") {
     return (
       <PlayerScreen
-        key={route.item.Id}
+        key={`${route.item.Id}:${route.remoteLaunch ?? 0}`}
         session={session}
         item={route.item}
         startPosition={route.startPosition}
