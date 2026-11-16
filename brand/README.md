@@ -10,7 +10,7 @@ The mark shows poster tiles dropping into an aurora-gradient hopper. The hopper 
 | Role | Colour |
 |---|---|
 | Aurora gradient | teal `#5EEAD4` → violet `#818CF8` → rose `#F472B6` |
-| Background | navy `#0E1030` (also `bgColor`, `iconColor` and `splashColor` in `public/appinfo.json`) |
+| Background | navy `#0E1030` (also `bgColor`, `iconColor` and `splashColor` in `public/appinfo.json`, and the App Tile Color in LG Seller Lounge) |
 
 ## In the app
 
@@ -26,7 +26,7 @@ If you change the artwork, update the SVG, `HopperMark.tsx` and the splash layer
 
 | File | Size | Use |
 |---|---|---|
-| `hopper-icon.svg` | 1024×1024 | Master icon |
+| `hopper-icon.svg` | 1024×1024 | Master icon. Its background is flat `#0E1030`, with no gradient: LG requires the icon's background to match the App Tile Color |
 | `hopper-splash.svg` | 1920×1080 | Full splash artwork: backdrop, mark and wordmark. Reference for the resting frame of the startup animation |
 | `hopper-splash-backdrop.svg` | 1920×1080 | The same backdrop with no mark or wordmark: LG's native launch splash. Keep its gradients identical to `hopper-splash.svg` and `#boot-splash` in `index.html` |
 | `hopper-store-banner.svg` | 1920×1080 | Store hero / promo image |

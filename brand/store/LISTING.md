@@ -35,7 +35,7 @@ stay online during review.
 ## Assets
 | Item | File |
 |---|---|
-| Store icon 400×400 | `brand/out/store/hopper-icon-400.png` |
+| Store icon 400×400 | `brand/out/store/hopper-icon-400.png` (App Tile Color `#0E1030`, the icon's flat background) |
 | Hero / preview 1920×1080 | `brand/out/store/hopper-store-banner-1920x1080.png` |
 | Screenshots 1920×1080 | `brand/store/screenshots/01–05` |
 | Self-checklist (v5.0), UX scenario document (v4.3) | Kept by the maintainer, not in the repository (`brand/store/qa/` is git-ignored) |
