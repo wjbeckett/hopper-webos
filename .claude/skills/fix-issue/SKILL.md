@@ -16,7 +16,7 @@ fix/<number>-<slug>  ──pull request──►  main
 
 `main` is the only long-lived branch. Every fix goes on its own branch and reaches `main` through a pull request; never commit to `main` directly.
 
-Before anything else, read `docs/DECISIONS.md` so you know what Hopper does differently on purpose and what is not planned. Issues are grouped by milestone (`CLAUDE.md`, "What to work on"): Public repo first, then Store submission, then After store release.
+Before anything else, read `docs/DECISIONS.md` so you know what Hopper does differently on purpose and what is not planned. Issues are grouped by milestone (`CLAUDE.md`, "What to work on"): Public repo first, then Store submission, then v1.1, then After store release.
 
 Issues are not only bugs. Features and `verification` checks go through the same stages; for a feature, "root cause" below means the design and what it touches.
 

@@ -22,7 +22,8 @@ GitHub issues are the only list of work. Do not keep to-do lists in docs.
 | --- | --- |
 | Public repo | What must happen before the repository is made public |
 | Store submission | What must happen before Hopper is submitted to the LG Content Store, including features the maintainer wants in the first store release |
-| After store release | Features and improvements that do not block the store |
+| v1.1 | The first update after the 1.0 store release. New work goes here from 16 November 2026 |
+| After store release | Features and improvements not yet planned for a release |
 
 Work the earliest milestone that has open issues, unless the maintainer names an issue. An issue with no milestone has not been triaged yet; ask before starting it.
 
