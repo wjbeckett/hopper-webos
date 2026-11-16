@@ -11,14 +11,14 @@
 Hopper is an independent, community-built client. It is not affiliated with or endorsed by the Silo project. "Silo" is a trademark of its owners and is used here only to describe compatibility.
 
 > [!NOTE]
-> Hopper is in active development and is not yet in the LG Content Store. You can sideload it on a TV in Developer Mode. See [CONTRIBUTING.md](CONTRIBUTING.md).
+> Hopper 1.0 has been submitted to the LG Content Store and is waiting for LG's review. Until it's approved, you can install the [latest release](https://github.com/wjbeckett/hopper-webos/releases/latest) on a TV in Developer Mode. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Availability
 
 | Channel | Status | Version | Notes |
 | --- | --- | --- | --- |
-| LG Content Store | Not yet submitted | – | Store assets and listing are ready |
-| GitHub Releases (IPK) | Not yet published | – | |
+| LG Content Store | In review (submitted 16 November 2026) | 1.0.388 | Waiting for LG's QA |
+| GitHub Releases (IPK) | Available | 1.0.388 | [Latest release](https://github.com/wjbeckett/hopper-webos/releases/latest), sideload with LG Developer Mode |
 | Build from source | Available | 1.0.x (every build has its own number) | Sideload with LG Developer Mode |
 
 ## Screenshots
