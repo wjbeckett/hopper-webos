@@ -18,8 +18,8 @@ independently and is not affiliated with Silo or LG.
 
 ## Signing in
 
-- **With your phone:** on the TV's first screen, open the Silo phone app, choose "Sign in on TV" and pick
-  your TV. The phone and TV need to be on the same network.
+- **With your phone:** on the TV's first screen, open the Silo phone app and tap "Set up" on the card for
+  your TV, then confirm the code. The phone and TV need to be on the same network.
 - **With a code:** choose code sign-in on the TV, then follow the QR code or enter the code on another
   device.
 - **With a password:** from the code screen, choose "Use password instead".
