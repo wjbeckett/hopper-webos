@@ -63,7 +63,7 @@ To review any pull request on demand through the read-only path: **Actions → P
 
 - **Automatic:** issues opened from the bug or feature form are labelled `bug` or `enhancement`. The bug form requires the TV model, webOS version and steps.
 - **Issues are the only work list.** There is no backlog or handoff file. Decisions that are not work (what Hopper does differently on purpose, what is not planned) are in `docs/DECISIONS.md`.
-- **Milestones:** *Public repo* (before the repository is made public), *Store submission* (before submitting to the LG Content Store, including features you want in the first store release) and *After store release*. An issue with no milestone has not been triaged; give it one or close it.
+- **Milestones:** *Public repo* (before the repository is made public), *Store submission* (before submitting to the LG Content Store, including features you want in the first store release) *v1.1* (the first update after the 1.0 store release, where new work goes) and *After store release* (not yet planned for a release). An issue with no milestone has not been triaged; give it one or close it.
 - **You:** run `/fix-issue` in Claude Code to triage open issues, or `/fix-issue <number>` to work one. It lists them by milestone, severity and effort, investigates the one you pick, does the work on a branch and opens the PR. It handles features and verification checks as well as bugs. There is no automatic issue bot.
 - **Claude Code** opens a new issue, with no milestone, for work it finds but does not do.
 
