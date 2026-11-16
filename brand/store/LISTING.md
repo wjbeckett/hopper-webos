@@ -27,7 +27,7 @@ LG QA can't review the app without a server and an account:
 - Server: `https://demo.siloserver.org`
 - Username: `demo`
 - Password: `demo`
-- Steps: on first launch choose "Enter server address", enter the URL and select Continue, then on the code screen select "Use password instead" and sign in. The UX scenario document (section 4) shows each screen.
+- Steps: on first launch choose "Enter server address", enter the URL and select Continue, then on the code screen select "Use password instead" and sign in. The UX scenario document (section 4, kept by the maintainer) shows each screen.
 
 Confirm with the demo server's operator that LG may use these credentials and that the server will
 stay online during review.
@@ -38,8 +38,7 @@ stay online during review.
 | Store icon 400×400 | `brand/out/store/hopper-icon-400.png` |
 | Hero / preview 1920×1080 | `brand/out/store/hopper-store-banner-1920x1080.png` |
 | Screenshots 1920×1080 | `brand/store/screenshots/01–05` |
-| Self-checklist (v5.0) | `brand/store/qa/self_evaluation_checklist_5.0.xlsx` |
-| UX scenario document (v4.3) | `brand/store/qa/ux_scenario_document.pptx` |
+| Self-checklist (v5.0), UX scenario document (v4.3) | Kept by the maintainer, not in the repository (`brand/store/qa/` is git-ignored) |
 
 ## Permissions
 `appinfo.json` asks for the `settings` group (LG's "Read and modify system preferences and settings"). Hopper only reads the TV's caption style, for Settings → Subtitles → Use Device Settings. A developer-installed build is refused it, so whether it works can only be checked on the store-signed build (#106). If LG questions it, that is the reason; if they refuse it, the app keeps its own subtitle style.

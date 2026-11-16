@@ -78,15 +78,8 @@ picture is as soft as it is on the TV.
 
 The draft listing text is in `store/LISTING.md`.
 Check the sizes against the current LG Seller Lounge guide before you submit.
-"Hopper" has not been checked for conflicts with existing trademarks or store listings. `TRADEMARK.md` claims only unregistered (™) rights.
+Before the 1.0 submission the maintainer found no trademark for "Hopper" as a media or TV app, and no other LG Content Store app called Hopper. `TRADEMARK.md` claims only unregistered (™) rights.
 
-## LG submission documents (`store/qa/`)
+## LG submission documents
 
-LG won't review the app without these two, filled in for the build being submitted:
-
-| File | What it is |
-|---|---|
-| `self_evaluation_checklist_5.0.xlsx` | LG's self-checklist v5.0, with Pass or N/A and a comment on all 53 test items and the "Other Check Points" sheet. |
-| `ux_scenario_document.pptx` | The UX scenario document, following LG's v4.3 template: basic information, remote keys, login steps with the reviewer account, and each screen with numbered controls. The cover gives the submission date, app version and developer; set the app version to the exact build (1.0.N) being uploaded. |
-
-The screens in the UX document were captured on the TV against the demo server, with the position of each numbered control read from the page. The player slide uses `screenshots/05-player.png`, for the reason given above. When a screen changes, retake it and update the slide.
+LG won't review the app without its self-checklist (v5.0) and a UX scenario document (v4.3), both from https://webostv.developer.lge.com/distribute/app-self-checklist. They are kept by the maintainer, not in the repository: `brand/store/qa/` is git-ignored. Set the app version on the UX document's cover to the exact build (1.0.N) being uploaded.
