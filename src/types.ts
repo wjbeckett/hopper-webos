@@ -8,6 +8,19 @@ export type Session = {
   profileMetadataLoaded?: boolean;
   userId: string;
   username: string;
+  /** A phone profile's borrowed sign-in (#156): memory only, refreshed in its own lane. */
+  temporary?: TemporaryLane;
+};
+
+/**
+ * The tokens of a borrowed sign-in, shared by every copy of its Session. It never reaches the
+ * server registry or storage; `onRefused` ends it when the server refuses a refresh.
+ */
+export type TemporaryLane = {
+  accessToken: string;
+  refreshToken: string;
+  ended: boolean;
+  onRefused(): void;
 };
 
 export type SiloItem = {

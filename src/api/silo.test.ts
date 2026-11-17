@@ -146,3 +146,44 @@ describe("invite sign-up errors", () => {
     await expect(signUp("https://silo.test", "u", "u@example.com", "pw", "CODE")).rejects.toThrow("Username or email already in use");
   });
 });
+
+describe("a borrowed sign-in (#156)", () => {
+  function borrowed(onRefused = vi.fn()) {
+    const lane = { accessToken: "phone-access-1", refreshToken: "phone-refresh-1", ended: false, onRefused };
+    const session: Session = { serverUrl: SERVER, accessToken: lane.accessToken, refreshToken: lane.refreshToken, userId: "user-phone", username: "", profileId: "profile-phone", profileToken: "pin-proof", temporary: lane };
+    return { lane, session, onRefused };
+  }
+
+  it("refreshes in its own lane, sends the phone profile's headers and never touches the saved sign-in", async () => {
+    const own = signedIn();
+    const { lane, session } = borrowed();
+    const copy = { ...session };
+    fetchMock
+      .mockResolvedValueOnce(new Response("", { status: 401 }))
+      .mockResolvedValueOnce(json({ access_token: "phone-access-2", refresh_token: "phone-refresh-2" }))
+      .mockResolvedValueOnce(json({ content_id: "movie-1", type: "movie", title: "A Film" }));
+    await getCatalogItem(session, "movie-1");
+    const headers = fetchMock.mock.calls[2][1].headers;
+    expect(headers).toMatchObject({ Authorization: "Bearer phone-access-2", "X-Profile-Id": "profile-phone", "X-Profile-Token": "pin-proof" });
+    expect(lane).toMatchObject({ accessToken: "phone-access-2", refreshToken: "phone-refresh-2" });
+    expect(serverRegistry.active()?.session).toMatchObject({ userId: own.userId, refreshToken: "refresh-1" });
+    // Another copy of the borrowed session takes the renewed pair instead of spending the old one.
+    await refreshSession(copy);
+    expect(copy.refreshToken).toBe("phone-refresh-2");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("ends only itself when the server refuses its refresh", async () => {
+    signedIn();
+    const { lane, session, onRefused } = borrowed();
+    const expired = vi.fn();
+    const stop = subscribeSessionExpired(expired);
+    fetchMock.mockResolvedValueOnce(new Response("", { status: 401 }));
+    await expect(refreshSession(session)).rejects.toThrow("AUTH_EXPIRED");
+    stop();
+    expect(onRefused).toHaveBeenCalledTimes(1);
+    expect(lane.ended).toBe(true);
+    expect(expired).not.toHaveBeenCalled();
+    expect(serverRegistry.active()?.session?.refreshToken).toBe("refresh-1");
+  });
+});

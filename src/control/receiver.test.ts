@@ -8,6 +8,9 @@ const config: ReceiverConfig = { origin: ORIGIN, serverName: "Home", serverIdent
 /** Every phone is already allowed unless a test says which are. */
 function setup(overrides: Partial<ReceiverConfig> = {}, known: (deviceId: string) => boolean = () => true) {
   const asks: string[] = [];
+  const handoffs: Array<{ id: string; profileId: string; deviceId: string }> = [];
+  const cancels: Array<{ id: string; requestId?: string }> = [];
+  const borrowedLaunches: boolean[] = [];
   const sent: Array<{ id: string; message: Envelope }> = [];
   const closed: Array<{ id: string; reason: string }> = [];
   const launches: string[] = [];
@@ -17,7 +20,9 @@ function setup(overrides: Partial<ReceiverConfig> = {}, known: (deviceId: string
     send: (id, message) => sent.push({ id, message }),
     close: (id, reason) => closed.push({ id, reason }),
     announce: name => notices.push(name),
-    launch: (_id, request) => launches.push(request.playback.contentId),
+    launch: (_id, request, borrowed) => { launches.push(request.playback.contentId); borrowedLaunches.push(borrowed); },
+    handoff: (id, offered, phone) => handoffs.push({ id, profileId: offered.profileId, deviceId: phone.deviceId }),
+    handoffCancel: (id, requestId) => cancels.push({ id, requestId }),
     control: (_id, command) => commands.push(command.name),
     changed: () => undefined,
     allowed: known,
@@ -25,7 +30,7 @@ function setup(overrides: Partial<ReceiverConfig> = {}, known: (deviceId: string
     askEnded: id => { const at = asks.indexOf(id); if (at >= 0) asks.splice(at, 1); }
   }, { ...config, ...overrides }, () => "token-1");
   const of = (id: string, type: string) => sent.filter(entry => entry.id === id && entry.message.type === type).map(entry => entry.message);
-  return { receiver, sent, closed, launches, commands, notices, asks, of };
+  return { receiver, sent, closed, launches, commands, notices, asks, handoffs, cancels, borrowedLaunches, of };
 }
 
 const phoneHello = (deviceId: string, server = serverIdOf(ORIGIN), identity?: string) => ({
@@ -94,14 +99,41 @@ describe("ControlReceiver", () => {
     expect(t.launches).toEqual(["movie-1"]);
   });
 
-  it("refuses another profile until the handoff exists (#156)", () => {
+  it("hands another profile's offer to the hub and launches once it is ready (#156)", () => {
     const t = setup();
     t.receiver.connected("c1");
     t.receiver.message("c1", phoneHello("a"), 0);
     t.receiver.message("c1", offer("p-sam"), 0);
-    expect(t.of("c1", "handoff_cancel")).toMatchObject([{ handoffCancel: { reason: "handoff_failed" } }]);
+    expect(t.handoffs).toEqual([{ id: "c1", profileId: "p-sam", deviceId: "a" }]);
+    expect(t.of("c1", "handoff_cancel")).toEqual([]);
     t.receiver.message("c1", launch, 0);
     expect(t.launches).toEqual([]);
+    t.receiver.markReady("c1", "p-sam");
+    t.receiver.message("c1", launch, 0);
+    expect(t.launches).toEqual(["movie-1"]);
+    expect(t.borrowedLaunches).toEqual([true]);
+  });
+
+  it("keeps a borrowed readiness when the TV's profile changes, and drops it when it ends", () => {
+    const t = setup();
+    t.receiver.connected("c1");
+    t.receiver.message("c1", phoneHello("a"), 0);
+    t.receiver.markReady("c1", "p-sam");
+    t.receiver.configure({ ...config, profile: { id: "p-kim", name: "Kim" } });
+    t.receiver.message("c1", launch, 0);
+    expect(t.launches).toEqual(["movie-1"]);
+    t.receiver.unready("c1", "p-sam");
+    t.receiver.message("c1", launch, 0);
+    expect(t.launches).toEqual(["movie-1"]);
+  });
+
+  it("passes the phone's cancel and its closing on to the hub", () => {
+    const t = setup();
+    t.receiver.connected("c1");
+    t.receiver.message("c1", phoneHello("a"), 0);
+    t.receiver.message("c1", { type: "handoff_cancel", v: 2, handoffCancel: { requestId: "r1", reason: "canceled" } }, 0);
+    t.receiver.closed("c1");
+    expect(t.cancels).toEqual([{ id: "c1", requestId: "r1" }, { id: "c1", requestId: undefined }]);
   });
 
   it("refuses an offer on the profile picker", () => {

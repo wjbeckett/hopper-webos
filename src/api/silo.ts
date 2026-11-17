@@ -1,6 +1,6 @@
 import { titleArtEnabled } from "../core/titleArt";
 import type { ThemeSelection } from "../core/themeMusic";
-import type { HomeRail, ItemsResponse, Session, SiloCalendarDay, SiloCalendarItem, SiloCollection, SiloItem, SiloLibrary, SiloMediaRequest, SiloProfile, SiloRequestResult } from "../types";
+import type { HomeRail, ItemsResponse, Session, TemporaryLane, SiloCalendarDay, SiloCalendarItem, SiloCollection, SiloItem, SiloLibrary, SiloMediaRequest, SiloProfile, SiloRequestResult } from "../types";
 import { serverRegistry } from "../core/serverRegistry";
 import { getDeviceId } from "../platform/device";
 import { publishSessionExpired, serverFetch } from "./connection";
@@ -80,6 +80,7 @@ function savedSession(session: Session): Session | undefined {
  * and tells the app, which returns to sign-in. Does nothing if the saved sign-in is a newer one.
  */
 function expireSession(session: Session) {
+  if (session.temporary) { endTemporary(session.temporary); return; }
   const saved = savedSession(session);
   if (!saved || saved.refreshToken !== session.refreshToken) return;
   serverRegistry.clearSession(session.serverUrl);
@@ -91,6 +92,13 @@ function expireSession(session: Session) {
  * same sign-in) already renewed them, take the renewed pair. Returns true when it did.
  */
 function adoptRenewedTokens(session: Session): boolean {
+  const lane = session.temporary;
+  if (lane) {
+    if (lane.ended || lane.refreshToken === session.refreshToken) return false;
+    session.accessToken = lane.accessToken;
+    session.refreshToken = lane.refreshToken;
+    return true;
+  }
   const saved = savedSession(session);
   if (!saved?.refreshToken || saved.refreshToken === session.refreshToken || !saved.accessToken) return false;
   session.accessToken = saved.accessToken;
@@ -108,7 +116,56 @@ export async function ensureAccessToken(session: Session): Promise<void> {
   await refreshSession(session);
 }
 
+function endTemporary(lane: TemporaryLane) {
+  if (lane.ended) return;
+  lane.ended = true;
+  lane.onRefused();
+}
+
+const temporaryRefreshes = new WeakMap<TemporaryLane, Promise<void>>();
+
+/**
+ * A borrowed sign-in's refresh (#156): single-flight per lane, and the new tokens go to the lane
+ * only, never to the server registry. A refusal ends the borrowed sign-in, not the TV's.
+ */
+async function refreshTemporary(session: Session, lane: TemporaryLane): Promise<void> {
+  if (lane.ended) throw new Error("AUTH_EXPIRED");
+  const existing = temporaryRefreshes.get(lane);
+  if (existing) {
+    await existing;
+    adoptRenewedTokens(session);
+    return;
+  }
+  if (adoptRenewedTokens(session)) return;
+  const spent = lane.refreshToken;
+  const refresh = (async () => {
+    const response = await serverFetch(session.serverUrl, apiUrl(session.serverUrl, "/auth/refresh", "v2"), {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: spent })
+    });
+    if (!response.ok) {
+      if (response.status === 400 || response.status === 401 || response.status === 403) {
+        endTemporary(lane);
+        throw new Error("AUTH_EXPIRED");
+      }
+      throw new Error(`/auth/refresh: ${response.status} ${response.statusText}`);
+    }
+    const tokens = await response.json() as RefreshResponse;
+    if (!tokens.access_token || !tokens.refresh_token) throw new Error(`/auth/refresh: the server sent no tokens`);
+    // Ended while the request was out: the logout has gone or is going; keep nothing.
+    if (lane.ended) throw new Error("AUTH_EXPIRED");
+    lane.accessToken = tokens.access_token;
+    lane.refreshToken = tokens.refresh_token;
+    session.accessToken = tokens.access_token;
+    session.refreshToken = tokens.refresh_token;
+  })().finally(() => temporaryRefreshes.delete(lane));
+  temporaryRefreshes.set(lane, refresh);
+  return refresh;
+}
+
 export async function refreshSession(session: Session): Promise<void> {
+  if (session.temporary) return refreshTemporary(session, session.temporary);
   const key = `${session.serverUrl}|${session.userId}`;
   const existing = refreshes.get(key);
   if (existing) {

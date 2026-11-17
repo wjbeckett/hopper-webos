@@ -45,7 +45,7 @@ import { applyResumeState, applyWatchedState, publishWatchState } from "./core/w
 import { firstEpisodeOfSeason, nextEpisodeAfter } from "./core/episodeNavigation";
 import { publishRailsChanged } from "./core/watchState";
 import { connectEventsSocket } from "./api/events";
-import { configureRemoteControl, startRemoteControl } from "./control/hub";
+import { configureRemoteControl, startRemoteControl, type BorrowedPlayback } from "./control/hub";
 import type { LaunchIntent } from "./control/protocol";
 import { showRemoteNotice } from "./components/remoteNotice";
 import { scheduleBandwidthProbe } from "./core/bandwidthProbe";
@@ -65,7 +65,7 @@ type DetailRoute =
   | { name: "details"; item: SiloItem; castIndex?: number }
   | { name: "series"; item: SiloItem; selectedEpisode?: SiloItem; castIndex?: number }
   | { name: "person"; personId?: string; personName: string; back: DetailRoute }
-  | { name: "player"; item: SiloItem; startPosition?: number; autoAdvanceCount?: number; choices?: PlaybackChoices; returnTo?: { series: SiloItem; selectedEpisode: SiloItem }; shuffleId?: string; shuffleNext?: SiloItem; shuffleScope?: string; remoteLaunch?: number };
+  | { name: "player"; item: SiloItem; startPosition?: number; autoAdvanceCount?: number; choices?: PlaybackChoices; returnTo?: { series: SiloItem; selectedEpisode: SiloItem }; shuffleId?: string; shuffleNext?: SiloItem; shuffleScope?: string; remoteLaunch?: number; borrowed?: BorrowedPlayback };
 
 type BrowseDetail =
   | { kind: "collection"; library: SiloLibrary; collection: SiloCollection }
@@ -207,11 +207,19 @@ export default function App() {
   const remoteProfile = session?.profileId && profileHydrated && !profileError ? { id: session.profileId, name: session.username } : null;
   const remoteProfileRef = useRef(remoteProfile);
   remoteProfileRef.current = remoteProfile;
-  const remoteLaunchRef = useRef<(intent: LaunchIntent) => Promise<void>>(async () => undefined);
-  remoteLaunchRef.current = async (intent) => {
+  const remoteLaunchRef = useRef<(intent: LaunchIntent, borrowed?: BorrowedPlayback) => Promise<void>>(async () => undefined);
+  remoteLaunchRef.current = async (intent, borrowed) => {
     const current = sessionRef.current;
     const profileId = remoteProfileRef.current?.id;
     if (!current?.profileId || profileId !== current.profileId) throw new Error("Choose a profile on the TV first.");
+    if (borrowed) {
+      // The phone's own profile (#156): the title is read, and played, as that profile.
+      const item = await getCatalogItem(borrowed.session, intent.contentId);
+      if (borrowed.session.temporary?.ended) throw new Error("The phone profile session ended. Try again.");
+      if (sessionRef.current?.serverUrl !== current.serverUrl || sessionRef.current?.userId !== current.userId) throw new Error("The TV signed out. Try again.");
+      setRoute({ name: "player", item, startPosition: intent.startPosition, choices: intent.choices, remoteLaunch: Date.now(), borrowed });
+      return;
+    }
     const item = await getCatalogItem(current, intent.contentId);
     // The profile changed (or the picker opened) while the title loaded: it was for the old one.
     if (remoteProfileRef.current?.id !== profileId || sessionRef.current?.profileId !== profileId) throw new Error("The profile on the TV changed. Try again.");
@@ -225,7 +233,8 @@ export default function App() {
     return startRemoteControl({
       getSession: () => sessionRef.current,
       profile: remoteProfileRef.current,
-      onLaunch: intent => remoteLaunchRef.current(intent),
+      onLaunch: (intent, borrowed) => remoteLaunchRef.current(intent, borrowed),
+      onBorrowedExpired: () => setRoute(current => current.name === "player" && current.borrowed ? { name: "main" } : current),
       onNotice: showRemoteNotice
     });
   }, [session?.serverUrl, session?.userId]);
@@ -614,7 +623,7 @@ export default function App() {
     setSectionBrowse({ sectionId: rail.sectionId, title: rail.title, libraryId: rail.libraryId ?? null, mediaScope });
   }
 
-  async function resolveNextEpisode(current: SiloItem): Promise<SiloItem | null> {
+  async function resolveNextEpisode(current: SiloItem, session = sessionRef.current): Promise<SiloItem | null> {
     if (!session || !current.SeriesId || current.ParentIndexNumber == null || current.IndexNumber == null) return null;
     const currentSeason = current.ParentIndexNumber;
     const episodes = await getEpisodes(session, current.SeriesId, currentSeason);
@@ -653,6 +662,11 @@ export default function App() {
   }
 
   function leavePlayer(current: Extract<DetailRoute, { name: "player" }>) {
+    // A phone profile's title may not be one the TV's profile can open: back to the TV's screen.
+    if (current.borrowed) {
+      setRoute({ name: "main" });
+      return;
+    }
     if (current.shuffleId) {
       if (session) void deleteShuffle(session, current.shuffleId).catch(() => undefined);
       setRoute({ name: "main" });
@@ -777,15 +791,19 @@ export default function App() {
   }
 
   if (route.name === "player") {
+    // A phone profile's playback (#156) uses its borrowed sign-in, and leaves the TV profile's
+    // watch state on the cards alone: that progress belongs to the other profile.
+    const borrowed = route.borrowed;
+    const publishOwn = (state: Parameters<typeof publishWatchState>[0]) => { if (!borrowed) publishWatchState(state); };
     return (
       <>
       <PlayerScreen
         key={`${route.item.Id}:${route.remoteLaunch ?? 0}`}
-        session={session}
+        session={borrowed?.session ?? session}
         item={route.item}
         startPosition={route.startPosition}
         choices={route.choices}
-        resolveNextEpisode={() => resolveNextEpisode(route.item)}
+        resolveNextEpisode={() => resolveNextEpisode(route.item, borrowed?.session ?? session)}
         autoAdvanceCount={route.autoAdvanceCount ?? 0}
         shuffle={route.shuffleId ? { id: route.shuffleId, scopeLabel: route.shuffleScope, next: route.shuffleNext } : undefined}
         onShuffleAdvance={(autoAdvanceCount) => {
@@ -794,16 +812,16 @@ export default function App() {
         }}
         onPlayNext={(next, autoAdvanceCount) => {
           if (route.shuffleId && session) void deleteShuffle(session, route.shuffleId).catch(() => undefined);
-          publishWatchState(applyWatchedState(route.item, true));
+          publishOwn(applyWatchedState(route.item, true));
           const parentSeries = route.returnTo?.series ?? { Id: route.item.SeriesId ?? "", Name: route.item.SeriesName ?? "Series", Type: "Series" };
-          setRoute({ name: "player", item: next, startPosition: 0, autoAdvanceCount, returnTo: { series: parentSeries, selectedEpisode: next } });
+          setRoute({ name: "player", item: next, startPosition: 0, autoAdvanceCount, returnTo: { series: parentSeries, selectedEpisode: next }, borrowed });
         }}
         onBack={(position) => {
-          publishWatchState(applyResumeState(route.item, position));
+          publishOwn(applyResumeState(route.item, position));
           leavePlayer(route);
         }}
         onEnded={route.shuffleId ? () => void advanceShuffleRoute(route.shuffleId!, route.item) : () => {
-          publishWatchState(applyWatchedState(route.item, true));
+          publishOwn(applyWatchedState(route.item, true));
           leavePlayer(route);
         }}
       />
