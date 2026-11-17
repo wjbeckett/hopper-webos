@@ -103,6 +103,7 @@ Keep each concern in its own layer:
 ### Navigation
 - **`src/navigation/spatial.ts`** is one global keydown handler. It covers D-pad movement, the top nav, library grids, rails (`RAIL_SELECTOR` pins the focused card), modals (`[data-modal="true"]`) and Back.
   - Focusable elements are marked `data-tv-focusable="true"`, with `data-nav-primary` for the preferred target.
+  - A row of controls marked `data-nav-row="true"` (Calendar's filters and week) keeps Left and Right inside it, and Up and Down from it go to the next marked row, onto its selected control (`aria-pressed`). Content below stops at the row on the way up, sideways moves never enter it, and a screen that has one is entered at its first row. Left or Right from content never moves into the top menu on any screen.
   - The handler steps aside entirely while `.player-shell` exists. `PlayerScreen` owns its own key map, mirroring Android's player.
   - Screens use `focusFirstContentCard`, `attemptFirstContentFocus` and `focusTopNavigation` for focus on entry.
 - **`src/navigation/pointer.ts`** is the Magic Remote pointer. Pointing at a control focuses it, which is its selection effect; text fields are the exception (focus opens the TV's keyboard) and get a hover style.
