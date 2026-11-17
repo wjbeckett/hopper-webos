@@ -1,7 +1,8 @@
 /**
  * The SiloControl receiver's rules (#155), after silo-roku's source/control/receiver.bs and
  * AppSceneControl.bs: hello and authorization, the command budget, the profile handoff for the
- * profile open on the TV, and who may launch. The pairing service does the sockets, pings and the
+ * profile open on the TV, and who may launch. Hopper adds one step (#162): a phone on the right
+ * server is held until the viewer allows it on the TV, once; after that the TV knows it. The pairing service does the sockets, pings and the
  * hello watchdog (services/pairing/control.js); the hub (hub.ts) carries out what this decides.
  */
 import {
@@ -15,6 +16,9 @@ const COMMAND_BURST = 40;
 const RATE_NOTICE_MS = 1000;
 /** Android TV and Roku give an own-profile handoff a 24-hour session. */
 const OWN_SESSION_MS = 24 * 60 * 60 * 1000;
+/** A phone the viewer turned away isn't asked about again for this long. */
+export const REFUSED_MS = 10 * 60 * 1000;
+const ALLOW_FIRST = "Press OK on the TV to allow this phone.";
 
 export type ReceiverConfig = {
   /** The signed-in server's URL, which the phones' serverId names. */
@@ -31,6 +35,12 @@ export type Controller = {
   id: string;
   saidHello: boolean;
   authorized: boolean;
+  /** Its hello named this TV's server; it still needs allowing if the TV doesn't know it. */
+  matched: boolean;
+  /** The TV is asking the viewer about it. */
+  asking: boolean;
+  /** An offer that arrived before the phone was allowed, answered once it is. */
+  heldOffer: HandoffOffer | null;
   passive: boolean;
   deviceName: string;
   deviceId: string;
@@ -53,6 +63,12 @@ export type ReceiverIo = {
   control(id: string, command: ControlCommand): void;
   /** Who is connected changed (the `playing` TXT, state ticks). */
   changed(): void;
+  /** Whether the viewer has allowed this phone before (by its hello's deviceId). */
+  allowed(deviceId: string): boolean;
+  /** Ask the viewer to allow a phone. */
+  ask(id: string, deviceName: string): void;
+  /** Stop asking: answered, the phone left, or it was turned away. */
+  askEnded(id: string): void;
 };
 
 export class ControlReceiver {
@@ -62,6 +78,8 @@ export class ControlReceiver {
   /** The last resume token issued, reused for the same profile. */
   private issued: { profileId: string; token: string } | null = null;
   private lastState: Envelope | null = null;
+  /** Phones the viewer turned away, by deviceId, until when. */
+  private refused = new Map<string, number>();
 
   constructor(private io: ReceiverIo, private config: ReceiverConfig, private randomToken: () => string) {}
 
@@ -71,9 +89,9 @@ export class ControlReceiver {
     this.config = config;
     if (profileChanged) this.ready.clear();
     for (const controller of this.controllers.values()) {
-      if (controller.saidHello && !controller.authorized && this.matches(controller)) {
-        controller.authorized = true;
-        this.welcome(controller);
+      if (controller.saidHello && !controller.matched && this.matches(controller)) {
+        controller.matched = true;
+        this.admit(controller);
       }
     }
     this.io.changed();
@@ -81,15 +99,58 @@ export class ControlReceiver {
 
   connected(id: string) {
     this.controllers.set(id, {
-      id, saidHello: false, authorized: false, passive: false, deviceName: "", deviceId: "", serverId: "",
+      id, saidHello: false, authorized: false, matched: false, asking: false, heldOffer: null, passive: false, deviceName: "", deviceId: "", serverId: "",
       serverIdentity: "", features: [], tokens: COMMAND_BURST, tokensAt: null, noticeAt: null
     });
   }
 
   closed(id: string) {
-    if (!this.controllers.delete(id)) return;
+    const controller = this.controllers.get(id);
+    if (!controller) return;
+    this.controllers.delete(id);
     this.ready.delete(id);
+    if (controller.asking) { controller.asking = false; this.io.askEnded(id); }
     this.io.changed();
+  }
+
+  /** The viewer allowed the phone (the hub has remembered it). */
+  approve(id: string) {
+    const controller = this.controllers.get(id);
+    if (!controller || !controller.matched || controller.authorized) return;
+    this.stopAsking(controller);
+    controller.authorized = true;
+    this.welcome(controller);
+    const offer = controller.heldOffer;
+    controller.heldOffer = null;
+    if (offer) this.offer(controller, offer);
+    this.io.changed();
+  }
+
+  /** The viewer turned the phone away: closed, and not asked about again for REFUSED_MS. */
+  refuse(id: string, now: number) {
+    const controller = this.controllers.get(id);
+    if (!controller || controller.authorized) return;
+    if (controller.deviceId) this.refused.set(controller.deviceId, now + REFUSED_MS);
+    this.turnAway(controller, "This TV didn't allow this phone.");
+  }
+
+  /** Nobody answered: closed, but asked about again next time. */
+  withdraw(id: string) {
+    const controller = this.controllers.get(id);
+    if (!controller || controller.authorized) return;
+    this.turnAway(controller, "Nobody answered on the TV. Try again.");
+  }
+
+  /** The viewer forgot a phone (or every phone, with no deviceId): its connections close. */
+  revoke(deviceId?: string) {
+    for (const controller of [...this.controllers.values()]) {
+      if (controller.authorized && (deviceId == null || controller.deviceId === deviceId)) this.drop(controller, "unauthorized");
+    }
+  }
+
+  /** The deviceId a connection's hello gave, or "" before its hello. */
+  deviceIdOf(id: string) {
+    return this.controllers.get(id)?.deviceId ?? "";
   }
 
   authorizedCount() {
@@ -114,9 +175,13 @@ export class ControlReceiver {
     if (decoded.kind === "ignored") return;
     switch (decoded.type) {
       case "ping": case "pong": case "close": return; // the pairing service handles these
-      case "hello": this.hello(controller, decoded.payload); return;
+      case "hello": this.hello(controller, decoded.payload, now); return;
       case "presence":
-        if (controller.saidHello) { controller.passive = decoded.payload.passive; this.io.changed(); }
+        if (controller.saidHello) {
+          controller.passive = decoded.payload.passive;
+          if (!controller.passive && controller.matched && !controller.authorized) this.askFor(controller);
+          this.io.changed();
+        }
         return;
       case "handoff_offer":
         if (!controller.saidHello) {
@@ -125,6 +190,13 @@ export class ControlReceiver {
         }
         // Hopper hands off only to the profile open on the TV, so a phone whose hello named another
         // server has nothing to prepare here (Android TV and Roku accept it for a server switch).
+        if (controller.matched && !controller.authorized) {
+          // Answered once the viewer allows the phone, so picking a title and pressing OK on the
+          // TV is all it takes the first time.
+          controller.heldOffer = decoded.payload;
+          this.askFor(controller);
+          return;
+        }
         if (!controller.authorized) {
           this.io.send(id, handoffCancel(decoded.payload.requestId, "handoff_failed", `This TV plays from ${this.config.serverName}.`));
           return;
@@ -135,6 +207,11 @@ export class ControlReceiver {
       default: break;
     }
     if (!controller.authorized) {
+      if (controller.matched) {
+        this.io.send(id, errorMessage("unauthorized", ALLOW_FIRST));
+        this.askFor(controller);
+        return;
+      }
       this.io.send(id, errorMessage("unauthorized", "Connect with a matching Silo account first."));
       return;
     }
@@ -148,7 +225,7 @@ export class ControlReceiver {
     this.io.control(id, decoded.payload);
   }
 
-  private hello(controller: Controller, hello: { role: string; deviceName: string; deviceId: string; serverId?: string; serverIdentity?: string; supportedVersions: number[]; features?: string[]; passive?: boolean }) {
+  private hello(controller: Controller, hello: { role: string; deviceName: string; deviceId: string; serverId?: string; serverIdentity?: string; supportedVersions: number[]; features?: string[]; passive?: boolean }, now: number) {
     if (controller.saidHello) return;
     controller.features = hello.features ?? [];
     if (hello.role !== "phone" || !hello.supportedVersions.includes(PROTOCOL_VERSION) || !hello.serverId) {
@@ -162,13 +239,48 @@ export class ControlReceiver {
     controller.serverId = hello.serverId;
     controller.serverIdentity = (hello.serverIdentity ?? "").trim();
     controller.passive = hello.passive === true;
-    controller.authorized = this.matches(controller);
+    controller.matched = this.matches(controller);
     // A second connection from the same phone replaces the abandoned one.
     for (const other of [...this.controllers.values()]) {
       if (other.id !== controller.id && other.deviceId && other.deviceId === controller.deviceId) this.drop(other, "replaced");
     }
-    if (controller.authorized) this.welcome(controller);
+    const until = this.refused.get(controller.deviceId);
+    if (controller.matched && until != null && until > now) {
+      this.turnAway(controller, "This TV didn't allow this phone.");
+      return;
+    }
+    if (until != null && until <= now) this.refused.delete(controller.deviceId);
+    if (controller.matched) this.admit(controller);
     this.io.changed();
+  }
+
+  /** A phone on the right server: in at once if the TV knows it, else the viewer is asked. */
+  private admit(controller: Controller) {
+    if (controller.deviceId && this.io.allowed(controller.deviceId)) {
+      controller.authorized = true;
+      this.welcome(controller);
+      return;
+    }
+    // A silent reconnect waits until the phone is used, so the TV doesn't ask out of nowhere.
+    if (!controller.passive) this.askFor(controller);
+  }
+
+  private askFor(controller: Controller) {
+    if (controller.asking || controller.authorized) return;
+    controller.asking = true;
+    this.io.ask(controller.id, controller.deviceName);
+  }
+
+  private stopAsking(controller: Controller) {
+    if (!controller.asking) return;
+    controller.asking = false;
+    this.io.askEnded(controller.id);
+  }
+
+  private turnAway(controller: Controller, message: string) {
+    if (controller.heldOffer) this.io.send(controller.id, handoffCancel(controller.heldOffer.requestId, "handoff_failed", message));
+    else this.io.send(controller.id, errorMessage("unauthorized", message));
+    this.drop(controller, "unauthorized");
   }
 
   private matches(controller: Controller) {

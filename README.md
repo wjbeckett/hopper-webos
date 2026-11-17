@@ -64,7 +64,7 @@ Hopper is an independent, community-built client. It is not affiliated with or e
 - Dolby Digital and Dolby Digital Plus audio is sent to the TV untouched, so the TV can pass it to a soundbar or receiver. If the stream fails, playback starts again where it stopped, and the server converts the audio if it fails a second time.
 
 **Built for the TV**
-- Phone remote: the Silo phone app on the same network finds the TV and controls what's playing (play, pause, seek, audio and subtitles, quality, mute, next episode), and can start a title on the TV for the profile open on it. The TV has to be showing Hopper.
+- Phone remote: the Silo phone app on the same network finds the TV and controls what's playing (play, pause, seek, audio and subtitles, quality, mute, next episode), and can start a title on the TV for the profile open on it. The TV has to be showing Hopper. The first time a phone connects, the TV asks whether to allow it; Settings → Server lists the allowed phones, and you can forget one there.
 - Every screen works with arrows, OK and Back on the LG remote, and the remote's media keys control playback.
 - The Magic Remote pointer works too: point at a control to select it, use the arrows at the ends of a row to see more of it, scroll with the wheel, and click the timeline to seek.
 - Press Home during a video and Hopper stops it with its position saved; when you come back you're on its page, ready to resume.
@@ -79,7 +79,7 @@ Hopper is an independent, community-built client. It is not affiliated with or e
 
 - **Audiobooks** play in the video player. Multi-part books don't have one continuous timeline yet, and bookmarks are missing.
 - **TV models:** Hopper needs webOS 6 (2021 TVs) or later. Playback has been tested on one LG TV (webOS 22). Other webOS versions and codecs haven't been fully tested, and webOS 6 hasn't been tried on a TV yet.
-- **Phone remote:** a phone on a different profile than the one open on the TV can control playback but not start a title yet, and the phone can't open Hopper on the TV.
+- **Phone remote:** a phone on a different profile than the one open on the TV can control playback but not start a title yet, and the phone can't open Hopper on the TV. The connection between phone and TV isn't encrypted, as with Silo's other TV apps.
 - **Connection errors:** the connection-lost and signed-out screens have been tested in a desktop browser only, not yet on a TV.
 - **Audio delay** can only delay audio by 0 to 1000 ms. It can't move audio earlier.
 - **Playback speed** isn't available. The TV ignores speed changes on streamed video, so Hopper doesn't offer it.

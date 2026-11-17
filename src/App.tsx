@@ -51,6 +51,7 @@ import { showRemoteNotice } from "./components/remoteNotice";
 import { scheduleBandwidthProbe } from "./core/bandwidthProbe";
 import { subscribeReload, subscribeSessionExpired, watchServer } from "./api/connection";
 import { ConnectionLost } from "./components/ConnectionLost";
+import { PhoneApproval } from "./components/PhoneApproval";
 import type { HomeRail, Session, SiloCollection, SiloItem, SiloLibrary, SiloProfile } from "./types";
 import { LoadingState } from "./components/LoadingState";
 
@@ -743,7 +744,8 @@ export default function App() {
     );
   }
 
-  const connectionLost = <ConnectionLost serverName={serverRegistry.active()?.name ?? "the server"} />;
+  // Over every signed-in screen: the connection-lost dialog and the allow-a-phone question (#162).
+  const overlays = <><ConnectionLost serverName={serverRegistry.active()?.name ?? "the server"} /><PhoneApproval /></>;
 
   if (profileError) {
     return (
@@ -757,7 +759,7 @@ export default function App() {
         onActiveProfileDeleted={clearDeletedProfile}
         fullScreen
       />
-      {connectionLost}
+      {overlays}
       </>
     );
   }
@@ -776,6 +778,7 @@ export default function App() {
 
   if (route.name === "player") {
     return (
+      <>
       <PlayerScreen
         key={`${route.item.Id}:${route.remoteLaunch ?? 0}`}
         session={session}
@@ -804,6 +807,8 @@ export default function App() {
           leavePlayer(route);
         }}
       />
+      <PhoneApproval />
+      </>
     );
   }
 
@@ -817,7 +822,7 @@ export default function App() {
         name={route.personName}
         onOpen={openItem}
       />
-      {connectionLost}
+      {overlays}
       </>
     );
   }
@@ -837,7 +842,7 @@ export default function App() {
         onShuffle={startShuffle}
         onOpen={openItem}
       />
-      {connectionLost}
+      {overlays}
       </>
     );
   }
@@ -855,7 +860,7 @@ export default function App() {
         onPlay={(startPosition, choices) => setRoute({ name: "player", item: route.item, startPosition, choices })}
         onOpen={openItem}
       />
-      {connectionLost}
+      {overlays}
       </>
     );
   }
@@ -1004,7 +1009,7 @@ export default function App() {
         onChangeServer={changeServer}
       />}
       <Fragment key={connectionEpoch}>{body}</Fragment>
-      {connectionLost}
+      {overlays}
     </div>
   );
 }

@@ -4,6 +4,7 @@
  * App.tsx starts and configures it; PlayerScreen registers itself as the player.
  */
 import { getServerIdentity } from "../api/silo";
+import { allowPhone, forgetAllPhones, forgetPhone, isPhoneAllowed } from "../core/allowedPhones";
 import { serverRegistry } from "../core/serverRegistry";
 import { getDeviceId } from "../platform/device";
 import { lunaCall } from "../platform/luna";
@@ -23,6 +24,11 @@ const STATE_INTERVAL_MS = 500;
 /** A launch that hasn't reached the player by then no longer blocks the next one. */
 const LAUNCH_WAIT_MS = 20000;
 const FALLBACK_NAME = "LG webOS TV";
+/** A request to allow a phone that nobody answers is withdrawn after this long. */
+const ASK_TIMEOUT_MS = 2 * 60 * 1000;
+
+/** A phone waiting for the viewer to allow it (#162). */
+export type PhoneRequest = { id: string; deviceName: string };
 
 export type CommandResult = { ok: true } | { ok: false; code: string; message: string };
 
@@ -56,6 +62,68 @@ type Running = {
 
 let running: Running | null = null;
 let player: { contentId: string; adapter: RemotePlayer; at: number } | null = null;
+let requests: PhoneRequest[] = [];
+const requestTimers = new Map<string, number>();
+const requestListeners = new Set<() => void>();
+
+function setRequests(next: PhoneRequest[]) {
+  requests = next;
+  requestListeners.forEach(listener => listener());
+}
+
+function endRequest(id: string) {
+  const timer = requestTimers.get(id);
+  if (timer != null) { window.clearTimeout(timer); requestTimers.delete(id); }
+  if (requests.some(request => request.id === id)) setRequests(requests.filter(request => request.id !== id));
+}
+
+function clearRequests() {
+  requestTimers.forEach(timer => window.clearTimeout(timer));
+  requestTimers.clear();
+  if (requests.length) setRequests([]);
+}
+
+/** Phones waiting to be allowed, oldest first. The TV asks about the first. */
+export function phoneRequests() {
+  return requests;
+}
+
+export function subscribePhoneRequests(listener: () => void) {
+  requestListeners.add(listener);
+  return () => { requestListeners.delete(listener); };
+}
+
+/**
+ * The viewer's answer. An allowed phone is remembered; a refused one isn't asked about for
+ * REFUSED_MS; a dismissed one (Back) is closed and may ask again.
+ */
+export function answerPhoneRequest(id: string, answer: "allow" | "refuse" | "dismiss") {
+  const state = running;
+  const request = requests.find(entry => entry.id === id);
+  endRequest(id);
+  if (!state || !request) return;
+  if (answer === "allow") {
+    const deviceId = state.receiver.deviceIdOf(id);
+    if (deviceId) allowPhone(deviceId, request.deviceName);
+    state.receiver.approve(id);
+  } else if (answer === "refuse") {
+    state.receiver.refuse(id, Date.now());
+  } else {
+    state.receiver.withdraw(id);
+  }
+}
+
+/** Forgets one phone, closing its connection. */
+export function forgetRemotePhone(deviceId: string) {
+  forgetPhone(deviceId);
+  running?.receiver.revoke(deviceId);
+}
+
+/** Forgets every phone, closing their connections. */
+export function forgetAllRemotePhones() {
+  forgetAllPhones();
+  running?.receiver.revoke();
+}
 
 function randomToken() {
   const bytes = new Uint8Array(16);
@@ -173,7 +241,19 @@ export function startRemoteControl(options: RemoteControlOptions): () => void {
     announce: deviceName => { if (running === state) state.options.onNotice(`${deviceName || "A phone"} connected`); },
     launch: (id, request) => applyLaunch(state, id, launchIntent(request.playback)),
     control: (id, command) => applyCommand(state, id, command),
-    changed: () => { state.lastIdle = ""; updateTicking(state); publishState(state); }
+    changed: () => { state.lastIdle = ""; updateTicking(state); publishState(state); },
+    allowed: isPhoneAllowed,
+    ask: (id, deviceName) => {
+      if (running !== state) return;
+      endRequest(id);
+      requestTimers.set(id, window.setTimeout(() => {
+        requestTimers.delete(id);
+        endRequest(id);
+        if (running === state) state.receiver.withdraw(id);
+      }, ASK_TIMEOUT_MS));
+      setRequests([...requests, { id, deviceName: deviceName.trim() || "A phone" }]);
+    },
+    askEnded: endRequest
   }, config, randomToken);
   running = state;
 
@@ -220,6 +300,7 @@ export function stopRemoteControl() {
   running = null;
   if (!state) return;
   if (state.timer != null) window.clearInterval(state.timer);
+  clearRequests();
   state.unsubscribe();
   void stopControlService();
 }

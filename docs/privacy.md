@@ -5,7 +5,7 @@ permalink: /privacy/
 
 # Hopper privacy policy
 
-*Last updated: 15 November 2026*
+*Last updated: 17 November 2026*
 
 Hopper is an app for LG webOS TVs that plays media from a Silo media server. It is developed
 independently and is not affiliated with Silo or LG. This policy covers the Hopper app only.
@@ -24,6 +24,8 @@ Kept in the app's storage on the TV, and nowhere else:
   the TV;
 - a random identifier for this TV, created on first launch, so your server can tell your
   devices apart;
+- the names and identifiers of the phones you allow to control the TV (see "Phone remote"
+  below);
 - app preferences, such as browsing and sort choices, the last screen you were on, and a
   measurement of your network speed used to choose playback quality.
 
@@ -57,10 +59,11 @@ server is up to its operator. For the Silo server software, see
   so the Silo phone app can find the TV and control playback. The announcement carries the TV's
   name, its random identifier, and your server's name and address, and anyone on your network
   can see it. A phone connects to the TV directly; that connection isn't encrypted, as with
-  Silo's Roku app, and stays on your local network. The TV accepts a phone that names the same
-  server; it doesn't check that the phone is signed in, so another device on your network could
-  control what's playing (pause, seek, change tracks), as with Silo's Roku app.
-  Nothing about this is stored or sent anywhere else.
+  Silo's other TV apps, and stays on your local network. The first time a phone connects, the TV
+  asks whether to allow it. The TV keeps the name and identifier of each phone you allow, so it
+  can let that phone in next time; Settings → Server lists them and forgets them. Because the
+  connection isn't encrypted, a device that can watch your network traffic could copy an allowed
+  phone's identifier. Nothing about this is sent anywhere else.
 
 ## Diagnostics
 
