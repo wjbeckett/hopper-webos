@@ -49,9 +49,6 @@ function withQueryParam(url: string, name: string, value: string) {
   parsed.searchParams.set(name, value);
   return parsed.toString();
 }
-/** After this long in the background the stream is started again on return: the server may have closed it. */
-const BACKGROUND_RESTART_MS = 10 * 60 * 1000;
-
 // Seek grammar mirrors the Android TV player exactly (TvSeekRateLadder):
 // a signed 1x..32x ladder, a 100 ms tick carrying 2.0s of content per tick
 // per rate unit, and a hidden-controls hold that ramps 1 -> 2 -> 4 -> 8.
@@ -263,7 +260,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   // to it. Only the newest restart may install its plan.
   const restartId = useRef(0);
   const restartIdCounter = useRef(0);
-  const restartStream = useRef<(at: number) => void>(() => undefined);
+  const leaveWhenHidden = useRef<() => void>(() => undefined);
   const unmounted = useRef(false);
   // Goes up to run the start-up again when the network was lost before anything played.
   const [startAttempt, setStartAttempt] = useState(0);
@@ -812,26 +809,15 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     } catch { localStorage.removeItem(ACTIVE_PLAYBACK_KEY); }
   }, [session]);
 
-  // Home key, or another app in front: the page is hidden but keeps running, and the TV pauses
-  // the video by itself and plays it again on return. The position is saved at once, because
-  // the TV may close a hidden app without telling it. Closing the page is handled below.
+  // Home key, or another app in front: the player closes, as on Android TV (TvPlayerScreen's
+  // ON_STOP observer). The position is saved and the session stopped, and the viewer comes back
+  // to the title's page. The TV may close a hidden app without telling it, and a session left
+  // open would keep running on the server. Closing the page is handled below.
   useEffect(() => {
-    let hiddenAt = 0;
-    const onVisibility = () => {
-      const active = stateRef.current;
-      if (!active || closedSessions.current.has(active.plan.session_id)) return;
-      if (document.hidden) {
-        hiddenAt = Date.now();
-        void reportProgress(session, active.plan.session_id, sourcePosition(), true).catch(() => undefined);
-        return;
-      }
-      const away = hiddenAt ? Date.now() - hiddenAt : 0;
-      hiddenAt = 0;
-      if (away > BACKGROUND_RESTART_MS) restartStream.current(sourcePosition());
-    };
+    const onVisibility = () => { if (document.hidden) leaveWhenHidden.current(); };
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [session, sourcePosition]);
+  }, []);
 
   useEffect(() => {
     const unload = () => closePlayback(true);
@@ -1515,9 +1501,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     }
   }
 
-  restartStream.current = (at: number) => {
-    if (!outageWait.current && !busy && !restartId.current) void resumeAfterOutage(at);
-  };
+  leaveWhenHidden.current = exitPlayer;
 
   // Returns false when the stream has already been restarted several times without playing:
   // the server answers but the stream does not load, so the caller shows the error instead.
