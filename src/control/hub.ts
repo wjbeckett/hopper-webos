@@ -4,7 +4,7 @@
  * App.tsx starts and configures it; PlayerScreen registers itself as the player.
  */
 import { cancelDeviceLogin, getDeviceLoginCapability, logoutTemporary, pollDeviceLogin, startRemotePlaybackLogin } from "../api/deviceLogin";
-import { getServerIdentity } from "../api/silo";
+import { getServerIdentity, settleTemporaryRefresh } from "../api/silo";
 import { allowPhone, forgetAllPhones, forgetPhone, isPhoneAllowed } from "../core/allowedPhones";
 import { serverRegistry } from "../core/serverRegistry";
 import { getDeviceId } from "../platform/device";
@@ -308,7 +308,8 @@ export function startRemoteControl(options: RemoteControlOptions): () => void {
       start: startRemotePlaybackLogin,
       poll: pollDeviceLogin,
       cancel: cancelDeviceLogin,
-      logout: logoutTemporary
+      logout: logoutTemporary,
+      settle: settleTemporaryRefresh
     },
     send,
     ready: (id, profileId) => state.receiver.markReady(id, profileId),

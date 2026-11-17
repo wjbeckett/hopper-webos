@@ -153,8 +153,13 @@ async function refreshTemporary(session: Session, lane: TemporaryLane): Promise<
     }
     const tokens = await response.json() as RefreshResponse;
     if (!tokens.access_token || !tokens.refresh_token) throw new Error(`/auth/refresh: the server sent no tokens`);
-    // Ended while the request was out: the logout has gone or is going; keep nothing.
-    if (lane.ended) throw new Error("AUTH_EXPIRED");
+    // Ended while the request was out: the old refresh token is spent, so the lane keeps the new
+    // pair for the logout, which waits for this (settleTemporaryRefresh). Nothing else gets them.
+    // A lane already cleared after its logout keeps nothing.
+    if (lane.ended) {
+      if (lane.refreshToken === spent) { lane.accessToken = tokens.access_token; lane.refreshToken = tokens.refresh_token; }
+      throw new Error("AUTH_EXPIRED");
+    }
     lane.accessToken = tokens.access_token;
     lane.refreshToken = tokens.refresh_token;
     session.accessToken = tokens.access_token;
@@ -162,6 +167,11 @@ async function refreshTemporary(session: Session, lane: TemporaryLane): Promise<
   })().finally(() => temporaryRefreshes.delete(lane));
   temporaryRefreshes.set(lane, refresh);
   return refresh;
+}
+
+/** Waits for a borrowed sign-in's refresh that is already on its way, whatever its result (#156). */
+export async function settleTemporaryRefresh(lane: TemporaryLane): Promise<void> {
+  await temporaryRefreshes.get(lane)?.catch(() => undefined);
 }
 
 export async function refreshSession(session: Session): Promise<void> {

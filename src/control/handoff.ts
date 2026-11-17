@@ -24,6 +24,8 @@ export type HandoffApi = {
   poll(serverUrl: string, deviceCode: string): Promise<DeviceLoginPoll>;
   cancel(serverUrl: string, deviceCode: string): Promise<void>;
   logout(session: Session): Promise<void>;
+  /** Waits for a refresh of this lane that is already on its way (its new tokens are kept for the logout). */
+  settle(lane: TemporaryLane): Promise<void>;
 };
 
 export type HandoffDeps = {
@@ -194,7 +196,11 @@ export class HandoffManager {
         void api.cancel(serverUrl, started.device_code).catch(() => undefined);
         throw reason;
       }
-      if (pending.cancelled || this.stopped) return;
+      if (pending.cancelled || this.stopped) {
+        // An approval that raced the cancel: nobody will use it, so end it on the server.
+        if (poll.status === "approved") this.discard(poll);
+        return;
+      }
       if (poll.status === "pending") { wait = Math.max(1, poll.poll_after ?? started.interval ?? 1); continue; }
       if (poll.status === "approved") { this.approved(pending, offer, phone, poll); return; }
       if (poll.status === "denied") throw new HandoffFailure("The handoff was declined on the phone.");
@@ -210,9 +216,7 @@ export class HandoffManager {
     const refreshToken = poll.tokens?.refresh_token ?? poll.refresh_token;
     if (!accessToken || !refreshToken || poll.temporary !== true || poll.profile_id !== offer.profileId) {
       // Don't leave an unusable session open on the server.
-      if (accessToken) {
-        void this.deps.api.logout({ serverUrl: this.deps.serverUrl, accessToken, profileId: poll.profile_id, profileToken: poll.profile_token, userId: "", username: "" }).catch(() => undefined);
-      }
+      this.discard(poll);
       throw new HandoffFailure("The server approved a different profile.");
     }
     const parsed = poll.session_expires_at ? Date.parse(poll.session_expires_at) : NaN;
@@ -241,6 +245,16 @@ export class HandoffManager {
     this.armLaunchTimer(identity);
     this.deps.ready(pending.controllerId, identity.profileId);
     this.deps.send(pending.controllerId, this.readyMessage(identity, offer, false, phone));
+  }
+
+  /** Logs out an approved sign-in the TV won't use. */
+  private discard(poll: DeviceLoginPoll) {
+    const accessToken = poll.tokens?.access_token ?? poll.access_token;
+    if (!accessToken) return;
+    const refreshToken = poll.tokens?.refresh_token ?? poll.refresh_token;
+    void this.deps.api.logout({
+      serverUrl: this.deps.serverUrl, accessToken, refreshToken, profileId: poll.profile_id, profileToken: poll.profile_token, userId: "", username: ""
+    }).catch(() => undefined);
   }
 
   private readyMessage(identity: Identity, offer: HandoffOffer, reused: boolean, phone: PhoneInfo) {
@@ -277,9 +291,14 @@ export class HandoffManager {
       this.deps.unready(identity.controllerId, identity.profileId);
     }
     this.retiring = this.retiring.filter(entry => entry !== identity);
-    // Logged out once, before the lane closes; never retried. Then the tokens are forgotten.
+    // The lane closes now, so nothing new refreshes it. A refresh already out may spend the refresh
+    // token; its new tokens are kept on the lane, so the logout waits for it and uses the lane's
+    // tokens. Logged out once, never retried; then the tokens are forgotten.
     const session = identity.session;
-    void this.deps.api.logout(session).catch(() => undefined).finally(() => {
+    const lane = identity.lane;
+    void this.deps.api.settle(lane)
+      .then(() => this.deps.api.logout({ ...session, accessToken: lane.accessToken, refreshToken: lane.refreshToken }))
+      .catch(() => undefined).finally(() => {
       identity.lane.ended = true;
       identity.lane.accessToken = "";
       identity.lane.refreshToken = "";
@@ -287,7 +306,7 @@ export class HandoffManager {
       session.refreshToken = "";
       session.profileToken = undefined;
     });
-    identity.lane.ended = true;
+    lane.ended = true;
   }
 
   private abandon(pending: Pending) {

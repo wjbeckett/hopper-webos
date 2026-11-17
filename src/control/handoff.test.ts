@@ -36,6 +36,7 @@ function setup(polls: DeviceLoginPoll[] = [{ status: "pending" }, approved()], o
     poll: vi.fn(async () => queue.shift() ?? { status: "pending" }),
     cancel: vi.fn(async (_url: string, code: string) => { cancels.push(code); }),
     logout: vi.fn(async (session: Session) => { logouts.push({ ...session }); }),
+    settle: vi.fn(async () => undefined),
     ...overrides
   };
   const manager = new HandoffManager({
@@ -90,6 +91,36 @@ describe("HandoffManager (#156)", () => {
     expect(t.cancels).toEqual(["dev-code"]);
     expect(t.of("handoff_cancel")).toMatchObject([{ handoffCancel: { requestId: "r1", reason: "handoff_failed" } }]);
     expect(t.ready).toEqual([]);
+  });
+
+  it("logs out an approval that arrives after the phone cancelled", async () => {
+    let answer: (poll: DeviceLoginPoll) => void = () => undefined;
+    const t = setup([], { poll: vi.fn(() => new Promise<DeviceLoginPoll>(resolve => { answer = resolve; })) });
+    t.manager.offer("c1", offer(), phone);
+    await flush();
+    t.manager.cancel("c1", "r1");
+    answer(approved());
+    await flush();
+    expect(t.ready).toEqual([]);
+    expect(t.logouts).toMatchObject([{ accessToken: "acc", profileId: "p-sam" }]);
+  });
+
+  it("logs out with the tokens of a refresh that was on its way when the sign-in ended", async () => {
+    let settled: () => void = () => undefined;
+    const t = setup(undefined, { settle: vi.fn(() => new Promise<void>(resolve => { settled = resolve; })) });
+    t.manager.offer("c1", offer(), phone);
+    await flush();
+    const identity = t.manager.sessionFor("c1")!;
+    t.manager.stop();
+    await flush();
+    expect(t.logouts).toEqual([]);
+    // The refresh finishes after the lane closed and leaves its new pair on the lane.
+    identity.lane.accessToken = "acc-2";
+    identity.lane.refreshToken = "ref-2";
+    settled();
+    await flush();
+    expect(t.logouts).toMatchObject([{ accessToken: "acc-2", refreshToken: "ref-2" }]);
+    expect(identity.lane.accessToken).toBe("");
   });
 
   it("fails without starting when the server can't hand off", async () => {

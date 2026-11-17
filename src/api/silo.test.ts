@@ -21,6 +21,7 @@ const { getCatalogItem, refreshSession } = await import("./silo");
 const { serverRegistry } = await import("../core/serverRegistry");
 const { subscribeSessionExpired } = await import("./connection");
 const { logoutTemporary } = await import("./deviceLogin");
+const { settleTemporaryRefresh } = await import("./silo");
 
 const SERVER = "https://silo.test";
 let counter = 0;
@@ -198,5 +199,19 @@ describe("a borrowed sign-in (#156)", () => {
     expect(String(fetchMock.mock.calls[1][0])).toContain("/api/v2/auth/refresh");
     expect(String(fetchMock.mock.calls[2][0])).toContain("/api/v2/auth/logout");
     expect(fetchMock.mock.calls[2][1].headers).toMatchObject({ Authorization: "Bearer phone-access-2", "X-Profile-Id": "profile-phone" });
+  });
+  it("keeps a refresh that lands after the sign-in ended, for its logout", async () => {
+    const { lane, session } = borrowed();
+    let respond: (response: Response) => void = () => undefined;
+    fetchMock.mockReturnValueOnce(new Promise<Response>(resolve => { respond = resolve; }));
+    const refreshing = refreshSession(session).catch(error => error);
+    lane.ended = true;
+    respond(json({ access_token: "phone-access-2", refresh_token: "phone-refresh-2" }));
+    await settleTemporaryRefresh(lane);
+    expect(await refreshing).toMatchObject({ message: "AUTH_EXPIRED" });
+    expect(lane).toMatchObject({ accessToken: "phone-access-2", refreshToken: "phone-refresh-2" });
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    await logoutTemporary({ ...session, accessToken: lane.accessToken, refreshToken: lane.refreshToken });
+    expect(fetchMock.mock.calls[1][1].headers).toMatchObject({ Authorization: "Bearer phone-access-2" });
   });
 });
