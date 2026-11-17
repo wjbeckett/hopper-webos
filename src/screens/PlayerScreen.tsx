@@ -2089,7 +2089,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         qualityOptions: qualities.length ? [{ id: "auto", label: "Auto" }, ...qualities.map(quality => ({ id: quality.label, label: quality.label }))] : [],
         activeQualityId: qualityRef.current,
         isQualitySwitching: busy && Boolean(plan),
-        playbackSpeed,
+        playbackSpeed: 1, // no speed control (no_playback_speed, #159)
         isMuted: Boolean(video?.muted),
         hasNextEpisode: Boolean(upNext),
         nextEpisodeTitle: upNext ? upNext.Name : undefined
