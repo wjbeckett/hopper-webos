@@ -64,7 +64,7 @@ Hopper is an independent, community-built client. It is not affiliated with or e
 - Dolby Digital and Dolby Digital Plus audio is sent to the TV untouched, so the TV can pass it to a soundbar or receiver. If the stream fails, playback starts again where it stopped, and the server converts the audio if it fails a second time.
 
 **Built for the TV**
-- Phone remote: the Silo phone app on the same network finds the TV and controls what's playing (play, pause, seek, audio and subtitles, quality, speed, mute, next episode), and can start a title on the TV for the profile open on it. The TV has to be showing Hopper.
+- Phone remote: the Silo phone app on the same network finds the TV and controls what's playing (play, pause, seek, audio and subtitles, quality, mute, next episode), and can start a title on the TV for the profile open on it. The TV has to be showing Hopper.
 - Every screen works with arrows, OK and Back on the LG remote, and the remote's media keys control playback.
 - The Magic Remote pointer works too: point at a control to select it, use the arrows at the ends of a row to see more of it, scroll with the wheel, and click the timeline to seek.
 - Press Home during a video and it pauses with its position saved, then carries on when you come back.

@@ -2128,10 +2128,6 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
           if (!command.value) return refused("No quality given.");
           selectQuality({ label: command.value });
           break;
-        case "set_playback_speed":
-          if (command.speed == null || command.speed < 0.25 || command.speed > 4) return refused("That speed isn't available.");
-          setPlaybackSpeed(command.speed);
-          break;
         case "set_muted": if (video && command.enabled != null) video.muted = command.enabled; break;
         // The TV's volume can't be set by an app, so a level only mutes (0) or unmutes, as on Roku.
         case "set_volume": if (video && command.volume != null) video.muted = command.volume <= 0; break;

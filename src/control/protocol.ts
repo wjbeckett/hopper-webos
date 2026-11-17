@@ -8,10 +8,11 @@
 export const PROTOCOL_VERSION = 2;
 
 /**
- * The TV hello's features. Hopper can mute but can't set the TV's volume, as on Roku
- * (`volume_mute_only`). It has playback speed, so it doesn't send `no_playback_speed`.
+ * The TV hello's features. As on Roku, Hopper can mute but can't set the TV's volume
+ * (`volume_mute_only`), and has no playback speed (`no_playback_speed`): webOS ignores
+ * `playbackRate` on the MediaSource streams Hopper plays (measured on a webOS 22 TV).
  */
-export const TV_FEATURES = ["multi_controller", "close_reason", "resume_token", "presence", "volume_mute_only"];
+export const TV_FEATURES = ["multi_controller", "close_reason", "resume_token", "presence", "volume_mute_only", "no_playback_speed"];
 
 const COMMAND_NAMES = [
   "play", "pause", "play_pause", "seek", "stop", "select_audio_track", "select_subtitle_track",
