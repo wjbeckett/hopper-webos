@@ -13,11 +13,11 @@ import {
   closeControlConnection, remoteControlAvailable, sendControlMessage, startControlService, stopControlService,
   subscribeControlEvents, updateControlService, type ControlServiceEvent
 } from "../platform/remoteControl";
-import type { Session } from "../types";
+import type { Session, TemporaryLane } from "../types";
 import { HandoffManager, type Identity } from "./handoff";
 import {
   envelope, errorMessage, idleState, launchIntent, loadingState, serverIdOf, stateBody, tvHello,
-  type ControlCommand, type Envelope, type LaunchIntent, type RemoteSnapshot
+  type ControlCommand, type Envelope, type LaunchIntent, type NowPlayingSummary, type RemoteSnapshot
 } from "./protocol";
 import { ControlReceiver, type ReceiverConfig } from "./receiver";
 
@@ -72,7 +72,8 @@ type Running = {
 };
 
 let running: Running | null = null;
-let player: { contentId: string; adapter: RemotePlayer; at: number } | null = null;
+/** The open player, the profile it plays as, and its borrowed sign-in's lane if it has one (#156). */
+let player: { contentId: string; adapter: RemotePlayer; at: number; profileId?: string; lane?: TemporaryLane } | null = null;
 let requests: PhoneRequest[] = [];
 const requestTimers = new Map<string, number>();
 const requestListeners = new Set<() => void>();
@@ -240,6 +241,21 @@ function applyLaunch(state: Running, id: string, intent: LaunchIntent, borrowed:
   });
 }
 
+/** The title on screen if it plays as another profile than `profileId` (the replace confirmation). */
+function nowPlayingOther(state: Running, profileId: string): NowPlayingSummary | null {
+  if (!player || player.profileId === profileId) return null;
+  const snapshot = player.adapter.snapshot();
+  const identity = player.lane ? state.handoff.identityFor(player.lane) : null;
+  return {
+    contentId: snapshot.contentId || undefined,
+    title: snapshot.title || "a title",
+    subtitle: snapshot.subtitle || undefined,
+    // A borrowed player names only its own profile; one that sent none stays unnamed ("Someone").
+    profileName: (player.lane ? identity?.profileName : state.config.profile?.name) || undefined,
+    controllerName: identity?.deviceName || undefined
+  };
+}
+
 function updateTicking(state: Running) {
   const wanted = state.started && state.receiver.authorizedCount() > 0;
   if (wanted && state.timer == null) state.timer = window.setInterval(() => publishState(state), STATE_INTERVAL_MS);
@@ -268,6 +284,7 @@ export function startRemoteControl(options: RemoteControlOptions): () => void {
     launch: (id, request, borrowed) => applyLaunch(state, id, launchIntent(request.playback), borrowed),
     handoff: (id, offer, phone) => state.handoff.offer(id, offer, phone),
     handoffCancel: (id, requestId) => state.handoff.cancel(id, requestId),
+    playingOther: profileId => nowPlayingOther(state, profileId),
     control: (id, command) => applyCommand(state, id, command),
     changed: () => { state.lastIdle = ""; updateTicking(state); publishState(state); },
     allowed: isPhoneAllowed,
@@ -357,8 +374,8 @@ export function stopRemoteControl() {
  * unregisters it. A borrowed session (#156) is ended a moment after its last player closes.
  */
 export function registerRemotePlayer(contentId: string, adapter: RemotePlayer, session?: Session): () => void {
-  const entry = { contentId, adapter, at: Date.now() };
   const lane = session?.temporary;
+  const entry = { contentId, adapter, at: Date.now(), profileId: session?.profileId, lane };
   const handoff = running?.handoff;
   if (lane && handoff) handoff.playerOpened(lane);
   player = entry;

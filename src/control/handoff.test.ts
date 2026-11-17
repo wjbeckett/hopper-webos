@@ -73,6 +73,25 @@ describe("HandoffManager (#156)", () => {
     expect(t.manager.sessionFor("c2")).toBeNull();
   });
 
+  it("rides out a failed poll", async () => {
+    let calls = 0;
+    const t = setup([], { poll: vi.fn(async () => { calls += 1; if (calls === 1) throw new Error("offline"); return approved(); }) });
+    t.manager.offer("c1", offer(), phone);
+    await flush();
+    expect(t.ready).toEqual(["c1:p-sam"]);
+    expect(t.cancels).toEqual([]);
+  });
+
+  it("cancels the login after three failed polls in a row", async () => {
+    const t = setup([], { poll: vi.fn(async (): Promise<DeviceLoginPoll> => { throw new Error("offline"); }) });
+    t.manager.offer("c1", offer(), phone);
+    await flush();
+    expect(t.api.poll).toHaveBeenCalledTimes(3);
+    expect(t.cancels).toEqual(["dev-code"]);
+    expect(t.of("handoff_cancel")).toMatchObject([{ handoffCancel: { requestId: "r1", reason: "handoff_failed" } }]);
+    expect(t.ready).toEqual([]);
+  });
+
   it("fails without starting when the server can't hand off", async () => {
     const t = setup([], { capability: vi.fn(async () => ({ state: "available", remote_playback_handoff: false, protocol_versions: [2] })) });
     t.manager.offer("c1", offer(), phone);

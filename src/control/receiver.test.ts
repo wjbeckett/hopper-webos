@@ -16,6 +16,8 @@ function setup(overrides: Partial<ReceiverConfig> = {}, known: (deviceId: string
   const launches: string[] = [];
   const commands: string[] = [];
   const notices: string[] = [];
+  /** What the TV plays, as which profile (the replace confirmation). */
+  const screen: { playing: { profileId: string; contentId: string; title: string; profileName?: string } | null } = { playing: null };
   const receiver = new ControlReceiver({
     send: (id, message) => sent.push({ id, message }),
     close: (id, reason) => closed.push({ id, reason }),
@@ -23,6 +25,10 @@ function setup(overrides: Partial<ReceiverConfig> = {}, known: (deviceId: string
     launch: (_id, request, borrowed) => { launches.push(request.playback.contentId); borrowedLaunches.push(borrowed); },
     handoff: (id, offered, phone) => handoffs.push({ id, profileId: offered.profileId, deviceId: phone.deviceId }),
     handoffCancel: (id, requestId) => cancels.push({ id, requestId }),
+    playingOther: profileId => {
+      const now = screen.playing;
+      return now && now.profileId !== profileId ? { contentId: now.contentId, title: now.title, profileName: now.profileName } : null;
+    },
     control: (_id, command) => commands.push(command.name),
     changed: () => undefined,
     allowed: known,
@@ -30,7 +36,7 @@ function setup(overrides: Partial<ReceiverConfig> = {}, known: (deviceId: string
     askEnded: id => { const at = asks.indexOf(id); if (at >= 0) asks.splice(at, 1); }
   }, { ...config, ...overrides }, () => "token-1");
   const of = (id: string, type: string) => sent.filter(entry => entry.id === id && entry.message.type === type).map(entry => entry.message);
-  return { receiver, sent, closed, launches, commands, notices, asks, handoffs, cancels, borrowedLaunches, of };
+  return { receiver, sent, closed, launches, commands, notices, asks, handoffs, cancels, borrowedLaunches, of, screen };
 }
 
 const phoneHello = (deviceId: string, server = serverIdOf(ORIGIN), identity?: string) => ({
@@ -38,6 +44,14 @@ const phoneHello = (deviceId: string, server = serverIdOf(ORIGIN), identity?: st
   hello: { role: "phone", deviceName: `Phone ${deviceId}`, deviceId, serverId: server, serverIdentity: identity, supportedVersions: [2], features: ["close_reason", "resume_token"] }
 });
 const offer = (profileId: string) => ({ type: "handoff_offer", v: 2, handoffOffer: { requestId: "r1", serverId: serverIdOf(ORIGIN), serverURL: ORIGIN, profileId } });
+const confirmingHello = (deviceId: string) => {
+  const message = phoneHello(deviceId);
+  return { ...message, hello: { ...message.hello, features: ["close_reason", "resume_token", "replace_confirmation"] } };
+};
+const confirmedOffer = (profileId: string, replacingContentId: string) => {
+  const message = offer(profileId);
+  return { ...message, handoffOffer: { ...message.handoffOffer, replaceConfirmed: true, replacingContentId } };
+};
 const launch = { type: "launch", v: 2, launch: { serverId: serverIdOf(ORIGIN), playback: { contentId: "movie-1", startFromBeginning: false } } };
 
 describe("ControlReceiver", () => {
@@ -281,6 +295,54 @@ describe("ControlReceiver", () => {
       expect(t.closed).toEqual([{ id: "c1", reason: "unauthorized" }]);
       t.receiver.revoke();
       expect(t.receiver.authorizedCount()).toBe(0);
+    });
+  });
+  describe("replace confirmation (Android TV)", () => {
+    it("asks the phone before a handoff replaces another profile's title, then goes ahead once confirmed", () => {
+      const t = setup();
+      t.screen.playing = { profileId: "p-alex", contentId: "movie-9", title: "Film", profileName: "Alex" };
+      t.receiver.connected("c1");
+      t.receiver.message("c1", confirmingHello("a"), 0);
+      t.receiver.message("c1", offer("p-sam"), 0);
+      const [refusal] = t.of("c1", "handoff_cancel");
+      expect(refusal.handoffCancel).toMatchObject({ requestId: "r1", reason: "replace_confirmation_required", nowPlaying: { contentId: "movie-9", title: "Film", profileName: "Alex" } });
+      expect(t.handoffs).toEqual([]);
+      t.receiver.message("c1", confirmedOffer("p-sam", "movie-9"), 0);
+      expect(t.handoffs).toEqual([{ id: "c1", profileId: "p-sam", deviceId: "a" }]);
+    });
+
+    it("asks again when the confirmation was for another title", () => {
+      const t = setup();
+      t.screen.playing = { profileId: "p-alex", contentId: "movie-9", title: "Film" };
+      t.receiver.connected("c1");
+      t.receiver.message("c1", confirmingHello("a"), 0);
+      t.receiver.message("c1", confirmedOffer("p-sam", "movie-1"), 0);
+      expect(t.of("c1", "handoff_cancel")).toHaveLength(1);
+      expect(t.handoffs).toEqual([]);
+    });
+
+    it("asks before the TV's own profile replaces a phone profile's title", () => {
+      const t = setup();
+      t.screen.playing = { profileId: "p-sam", contentId: "movie-9", title: "Film", profileName: "Sam" };
+      t.receiver.connected("c1");
+      t.receiver.message("c1", confirmingHello("a"), 0);
+      t.receiver.message("c1", offer("p-alex"), 0);
+      expect(t.of("c1", "handoff_cancel")[0].handoffCancel).toMatchObject({ reason: "replace_confirmation_required" });
+      expect(t.of("c1", "handoff_ready")).toEqual([]);
+    });
+
+    it("doesn't ask when the title plays as the offered profile, or the phone can't ask", () => {
+      const t = setup();
+      t.screen.playing = { profileId: "p-sam", contentId: "movie-9", title: "Film" };
+      t.receiver.connected("c1");
+      t.receiver.message("c1", confirmingHello("a"), 0);
+      t.receiver.message("c1", offer("p-sam"), 0);
+      t.receiver.connected("c2");
+      t.receiver.message("c2", phoneHello("b"), 0);
+      t.receiver.message("c2", offer("p-alex"), 0);
+      expect(t.of("c1", "handoff_cancel")).toEqual([]);
+      expect(t.handoffs).toEqual([{ id: "c1", profileId: "p-sam", deviceId: "a" }]);
+      expect(t.of("c2", "handoff_ready")).toHaveLength(1);
     });
   });
 });

@@ -20,6 +20,7 @@ vi.mock("../core/secureStore", () => {
 const { getCatalogItem, refreshSession } = await import("./silo");
 const { serverRegistry } = await import("../core/serverRegistry");
 const { subscribeSessionExpired } = await import("./connection");
+const { logoutTemporary } = await import("./deviceLogin");
 
 const SERVER = "https://silo.test";
 let counter = 0;
@@ -185,5 +186,17 @@ describe("a borrowed sign-in (#156)", () => {
     expect(lane.ended).toBe(true);
     expect(expired).not.toHaveBeenCalled();
     expect(serverRegistry.active()?.session?.refreshToken).toBe("refresh-1");
+  });
+  it("renews an expired access token once to log out", async () => {
+    const { session } = borrowed();
+    fetchMock
+      .mockResolvedValueOnce(new Response("", { status: 401 }))
+      .mockResolvedValueOnce(json({ access_token: "phone-access-2", refresh_token: "phone-refresh-2" }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    await logoutTemporary(session);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(String(fetchMock.mock.calls[1][0])).toContain("/api/v2/auth/refresh");
+    expect(String(fetchMock.mock.calls[2][0])).toContain("/api/v2/auth/logout");
+    expect(fetchMock.mock.calls[2][1].headers).toMatchObject({ Authorization: "Bearer phone-access-2", "X-Profile-Id": "profile-phone" });
   });
 });

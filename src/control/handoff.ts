@@ -15,6 +15,8 @@ export const LAUNCH_TIMEOUT_MS = 60 * 1000;
 export const END_AFTER_PLAYER_MS = 5 * 1000;
 const DEFAULT_SESSION_MS = 24 * 60 * 60 * 1000;
 const MAX_TIMER_MS = 2147483647;
+/** Polls in a row that may fail (the network) before the handoff gives up and cancels the login. */
+const MAX_POLL_FAILURES = 3;
 
 export type HandoffApi = {
   capability(serverUrl: string): Promise<DeviceLoginCapability>;
@@ -80,6 +82,12 @@ export class HandoffManager {
   sessionFor(controllerId: string): Identity | null {
     const identity = this.current;
     return identity && !identity.ended && identity.controllerId === controllerId ? identity : null;
+  }
+
+  /** The live borrowed sign-in that owns this lane, or null. */
+  identityFor(lane: TemporaryLane): Identity | null {
+    const identity = this.find(lane);
+    return identity && !identity.ended ? identity : null;
   }
 
   /** An offer for a profile other than the TV's. Answers the phone itself. */
@@ -171,16 +179,28 @@ export class HandoffManager {
 
     const deadline = this.deps.now() + Math.max(1, started.expires_in) * 1000;
     let wait = Math.max(1, started.interval || 1);
+    let failures = 0;
     while (this.deps.now() < deadline) {
       await this.deps.sleep(wait * 1000);
       if (pending.cancelled || this.stopped) return;
-      const poll = await api.poll(serverUrl, started.device_code);
+      let poll: DeviceLoginPoll;
+      try {
+        poll = await api.poll(serverUrl, started.device_code);
+        failures = 0;
+      } catch (reason) {
+        // A dropped poll isn't the end; after a few in a row, cancel the login so an approval the
+        // TV will never see can't leave a session open on the server.
+        if (++failures < MAX_POLL_FAILURES) continue;
+        void api.cancel(serverUrl, started.device_code).catch(() => undefined);
+        throw reason;
+      }
       if (pending.cancelled || this.stopped) return;
       if (poll.status === "pending") { wait = Math.max(1, poll.poll_after ?? started.interval ?? 1); continue; }
       if (poll.status === "approved") { this.approved(pending, offer, phone, poll); return; }
       if (poll.status === "denied") throw new HandoffFailure("The handoff was declined on the phone.");
       throw new HandoffFailure("The handoff expired. Try again.");
     }
+    void api.cancel(serverUrl, started.device_code).catch(() => undefined);
     throw new HandoffFailure("The handoff expired. Try again.");
   }
 

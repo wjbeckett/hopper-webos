@@ -6,8 +6,8 @@
  * hello watchdog (services/pairing/control.js); the hub (hub.ts) carries out what this decides.
  */
 import {
-  decode, errorMessage, handoffCancel, handoffReady, PROTOCOL_VERSION, serverMatches,
-  type ControlCommand, type Envelope, type HandoffOffer, type LaunchRequest
+  decode, errorMessage, handoffCancel, handoffReady, PROTOCOL_VERSION, replaceConfirmationRequired, serverMatches,
+  type ControlCommand, type Envelope, type HandoffOffer, type LaunchRequest, type NowPlayingSummary
 } from "./protocol";
 
 /** tvOS's command budget, as on Roku: 20 a second, bursts of 40, and a notice at most once a second. */
@@ -66,6 +66,8 @@ export type ReceiverIo = {
   handoff(id: string, offer: HandoffOffer, phone: { deviceId: string; deviceName: string; features: string[] }): void;
   /** The phone cancelled an offer, or (no requestId) its connection closed. */
   handoffCancel(id: string, requestId?: string): void;
+  /** The title on screen when it plays under a profile other than this one, else null. */
+  playingOther(profileId: string): NowPlayingSummary | null;
   /** A control command from an authorized phone. */
   control(id: string, command: ControlCommand): void;
   /** Who is connected changed (the `playing` TXT, state ticks). */
@@ -330,6 +332,17 @@ export class ControlReceiver {
     if (!profile) {
       this.io.send(controller.id, handoffCancel(requestId, "handoff_failed", "Choose a profile on the TV first."));
       return;
+    }
+    // Android TV: a handoff that would replace another profile's title asks the phone first, and
+    // the phone resends with `replaceConfirmed` for that title. Phones that can't ask keep
+    // newest-launch-wins.
+    if (controller.features.includes("replace_confirmation")) {
+      const nowPlaying = this.io.playingOther(offer.profileId);
+      const confirmed = offer.replaceConfirmed === true && (offer.replacingContentId || "") === (nowPlaying?.contentId || "");
+      if (nowPlaying && !confirmed) {
+        this.io.send(controller.id, replaceConfirmationRequired(requestId, nowPlaying));
+        return;
+      }
     }
     if (offer.profileId !== profile.id) {
       this.io.handoff(controller.id, offer, { deviceId: controller.deviceId, deviceName: controller.deviceName, features: controller.features });

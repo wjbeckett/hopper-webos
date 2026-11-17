@@ -40,7 +40,7 @@ import { FirstRunSetupScreen } from "./screens/FirstRunSetupScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { SectionBrowseScreen, type SectionBrowseArgs } from "./screens/SectionBrowseScreen";
 import type { AudiobookGroup } from "./api/silo";
-import type { PlaybackChoices } from "./api/playback";
+import { invalidateWatchDetail, type PlaybackChoices } from "./api/playback";
 import { applyResumeState, applyWatchedState, publishWatchState } from "./core/watchState";
 import { firstEpisodeOfSeason, nextEpisodeAfter } from "./core/episodeNavigation";
 import { publishRailsChanged } from "./core/watchState";
@@ -794,7 +794,12 @@ export default function App() {
     // A phone profile's playback (#156) uses its borrowed sign-in, and leaves the TV profile's
     // watch state on the cards alone: that progress belongs to the other profile.
     const borrowed = route.borrowed;
-    const publishOwn = (state: Parameters<typeof publishWatchState>[0]) => { if (!borrowed) publishWatchState(state); };
+    // Its cached /watch detail still goes, so a second run as that profile resumes from the new position.
+    const publishOwn = (state: Parameters<typeof publishWatchState>[0]) => {
+      if (!borrowed) { publishWatchState(state); return; }
+      invalidateWatchDetail(state.Id);
+      if (state.SeriesId) invalidateWatchDetail(state.SeriesId);
+    };
     return (
       <>
       <PlayerScreen
