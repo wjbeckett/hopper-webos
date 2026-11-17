@@ -1,12 +1,13 @@
 "use strict";
-// Minimal mDNS advertiser for `_silopair-roku._tcp` (proven on a webOS 22 TV).
+// Minimal mDNS advertiser (proven on a webOS 22 TV): `_silopair-roku._tcp` for phone setup, and
+// `_silocast-roku._tcp` for phone remote control (silo-roku docs/silocontrol.md section 5.1).
 // Node 12 safe: no optional chaining, no nullish coalescing.
 var dgram = require("dgram");
 var os = require("os");
 
 var MDNS_ADDR = "224.0.0.251";
 var MDNS_PORT = 5353;
-var SERVICE = "_silopair-roku._tcp.local";
+var PAIRING_SERVICE = "_silopair-roku._tcp.local";
 var META = "_services._dns-sd._udp.local";
 
 function localIp() {
@@ -69,11 +70,13 @@ function questions(buf) {
 }
 
 /**
- * options: { name, id, port, state ("setup"|"login"), serverIdentity?, onError? }
+ * options: { name, id, port, state ("setup"|"login"), serverIdentity?, onError? } for phone setup, or
+ * with `service`, `instance` and `txt` (an array of "key=value" strings) for another service type.
  * Labels may not contain dots, so the instance name is sanitised.
  */
 function createAdvertiser(options) {
-  var label = String(options.name || "Silo TV").replace(/\./g, " ").slice(0, 60);
+  var SERVICE = options.service || PAIRING_SERVICE;
+  var label = String(options.instance || options.name || "Silo TV").replace(/\./g, " ").slice(0, 60);
   var instance = label + "." + SERVICE;
   var host = "silo-" + String(options.id || "tv").replace(/[^a-z0-9]/gi, "").slice(0, 12).toLowerCase() + ".local";
   var ip = localIp();
@@ -82,7 +85,7 @@ function createAdvertiser(options) {
   var lastReply = {};
 
   function txtRecord() {
-    var pairs = [
+    var pairs = options.txt ? options.txt.slice() : [
       "v=1", "name=" + label, "id=" + options.id,
       "sid=" + Date.now().toString(36), "st=" + (options.state || "setup")
     ];
@@ -113,7 +116,8 @@ function createAdvertiser(options) {
     for (var i = 0; i < qs.length; i++) {
       if (qs[i].name === META) {
         send(response([record(META, 12, 1, 120, encName(SERVICE))]));
-      } else if (qs[i].name === SERVICE) {
+      } else if (qs[i].name === SERVICE || qs[i].name === instance.toLowerCase() || qs[i].name === host) {
+        // A browse (PTR), or a resolve of our own instance or host name: all four records answer it.
         // Answer each asker at most once a second; browsers retry in bursts.
         var now = Date.now();
         if (now - (lastReply[rinfo.address] || 0) < 1000) continue;
@@ -139,6 +143,11 @@ function createAdvertiser(options) {
         timer = setInterval(function () { send(announce(120)); }, 15000);
         done(null);
       });
+    },
+    // New TXT pairs (the control service's `playing` flag, a server change): announced at once.
+    update: function (txt) {
+      options.txt = txt;
+      if (sock) send(announce(120));
     },
     stop: function () {
       if (timer) { clearInterval(timer); timer = null; }

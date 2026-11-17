@@ -24,6 +24,7 @@ import { languageSearchCode } from "../core/languageNames";
 import { AiTranslateDialog, type AiSource } from "../components/AiTranslateDialog";
 import { createAiTranslateStore, type AiTranslateStore } from "../core/aiTranslateJob";
 import { getAiStatus, type AiStatus } from "../api/subtitles";
+import { registerRemotePlayer, type RemotePlayer } from "../control/hub";
 import { createSubtitleSyncStore, delaySecondsLabel, FORBIDDEN_MESSAGE, timingActionsFor, timingValue, type SubtitleSyncStore, type SyncUiState } from "../core/subtitleSync";
 import { delayLabel, localAudioSyncMs, localDolbyVisionEnabled, localHdrEnabled, localPassOutThreshold, localResumeRewindSeconds, localSubtitleSyncMs, markerAction, resumePositionWithRewind, setLocalAudioSyncMs, setLocalDolbyVisionEnabled, setLocalHdrEnabled, setLocalSubtitleSyncMs } from "../core/playerSettings";
 
@@ -205,6 +206,14 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const sidecarTrack = useRef<TextTrack | null>(null);
   const closedSessions = useRef(new Set<string>());
   const stateRef = useRef<PlaybackState | undefined>(undefined);
+  const remoteRef = useRef<RemotePlayer | null>(null);
+  // A track or quality change is on its way to Silo. A phone can send another before it lands, and
+  // that request would carry the old choice for the other track, so the remote waits for it.
+  const replanning = useRef(false);
+  useEffect(() => registerRemotePlayer(item.Id, {
+    snapshot: () => remoteRef.current!.snapshot(),
+    command: command => remoteRef.current!.command(command)
+  }), [item.Id]);
   /** The source position a plan was asked to start at, until its stream first plays. */
   const startingAt = useRef<number | null>(null);
   const qualityRef = useRef("auto");
@@ -1196,6 +1205,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   async function replan(operation: "track_change" | "quality_change", quality: string, audio?: { id: string; index?: number }, subtitle?: { id: string; index?: number }) {
     const active = stateRef.current;
     if (!active) return;
+    replanning.current = true;
     setBusy(true); setError("");
     const pick = operation === "quality_change";
     if (pick) bufferQuality.controller.onQualityPickSent();
@@ -1219,7 +1229,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       if (pick) bufferQuality.controller.onQualityPickRefused();
       setError(reason instanceof Error ? reason.message : "Silo could not change playback.");
     }
-    finally { setBusy(false); }
+    finally { setBusy(false); replanning.current = false; }
   }
 
   function selectAudio(track: AudioTrack, fallbackIndex?: number) {
@@ -2058,6 +2068,80 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const bandRanges = (["intro", "recap", "credits", "preview"] as const)
     .map(kind => ({ kind, segment: (markers?.[kind] ?? null) as MarkerSegment | null }))
     .filter((entry): entry is { kind: typeof entry.kind; segment: MarkerSegment } => entry.segment != null && entry.segment.end_seconds > entry.segment.start_seconds);
+
+  // Phone remote control (#155): what the phone sees, and its commands, through the same paths as
+  // the remote's own presses. Audio tracks are numbered by the server's index and subtitles by
+  // their combined index, the numbers a phone sends a Roku-type TV.
+  remoteRef.current = {
+    snapshot: () => {
+      const video = videoRef.current;
+      return {
+        contentId: item.Id,
+        sessionId: plan?.session_id,
+        title: detail?.title ?? item.Name,
+        subtitle: detail?.series_title || item.SeriesName ? eyebrowText : undefined,
+        currentTime: position,
+        duration,
+        isPlaying: playing,
+        isLoading: !plan,
+        isBuffering: buffering,
+        error: error || undefined,
+        audioTracks: audioTracks.map((track, i) => ({ trackId: track.index ?? i, title: audioTrackDescription(track, i) })),
+        selectedAudioTrackId: selectedAudioTrack ? selectedAudioTrack.index ?? audioTracks.indexOf(selectedAudioTrack) : undefined,
+        subtitleTracks: subtitles.map(track => ({ trackId: track.combined_index, title: subtitleName(track), detail: subtitleDetail(track) })),
+        selectedSubtitleTrackId: activeSubtitle?.combined_index,
+        qualityOptions: qualities.length ? [{ id: "auto", label: "Auto" }, ...qualities.map(quality => ({ id: quality.label, label: quality.label }))] : [],
+        activeQualityId: qualityRef.current,
+        isQualitySwitching: busy && Boolean(plan),
+        playbackSpeed: 1, // no speed control (no_playback_speed, #159)
+        isMuted: Boolean(video?.muted),
+        hasNextEpisode: Boolean(upNext),
+        nextEpisodeTitle: upNext ? upNext.Name : undefined
+      };
+    },
+    command: (command) => {
+      const video = videoRef.current;
+      const refused = (message: string) => ({ ok: false as const, code: "command_failed", message });
+      const switching = command.name === "select_audio_track" || command.name === "select_subtitle_track" || command.name === "set_quality";
+      if (switching && replanning.current) return refused("The TV is still switching. Try again in a moment.");
+      switch (command.name) {
+        case "play": if (video?.paused) void video.play().catch(() => undefined); break;
+        case "pause": video?.pause(); break;
+        case "play_pause": togglePlayPause(); break;
+        case "seek":
+          if (command.seconds == null) return refused("No position given.");
+          seekToPosition(Math.max(0, duration > 0 ? Math.min(command.seconds, duration) : command.seconds));
+          break;
+        case "stop": exitPlayer(); break;
+        case "play_next":
+          if (!upNext) return refused("There's no next episode.");
+          advanceToNext(0);
+          break;
+        case "select_audio_track": {
+          const chosen = audioTracks.find((track, i) => (track.index ?? i) === command.trackId);
+          if (!chosen) return refused("That audio track isn't available.");
+          selectAudio(chosen, command.trackId);
+          break;
+        }
+        case "select_subtitle_track": {
+          if (command.trackId == null) { selectSubtitle(); break; }
+          const chosen = subtitles.find(track => track.combined_index === command.trackId);
+          if (!chosen) return refused("That subtitle track isn't available.");
+          selectSubtitle(chosen);
+          break;
+        }
+        case "set_quality":
+          if (!command.value) return refused("No quality given.");
+          selectQuality({ label: command.value });
+          break;
+        case "set_muted": if (video && command.enabled != null) video.muted = command.enabled; break;
+        // The TV's volume can't be set by an app, so a level only mutes (0) or unmutes, as on Roku.
+        case "set_volume": if (video && command.volume != null) video.muted = command.volume <= 0; break;
+        default: return refused("Not available on this TV.");
+      }
+      return { ok: true as const };
+    }
+  };
 
   return <main className="player-shell" onMouseMove={() => revealHud()}>
     {subtitleCss ? <style>{subtitleCss}</style> : null}

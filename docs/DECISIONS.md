@@ -26,6 +26,7 @@ Deliberate differences from the Android TV app. Do not "fix" these to match Andr
 - The access token is kept in memory only and renewed from the refresh token on every launch, which adds one request before the first screen loads. Android stores it, encrypted. The refresh and profile tokens are encrypted on the TV in both clients.
 - Audio delay is 0 to 1000 ms. Android allows -1000 to 1000 ms; a WebAudio `DelayNode` cannot move audio earlier. Keep the limit unless a TV-safe way to advance audio is shown not to make sync worse.
 - The TV cannot browse the network for servers, because a web app has no mDNS. Phone pairing covers discovery (the phone finds the TV); manual entry and saved servers remain.
+- Phone remote control (SiloControl) uses the Roku app's design, not Android TV's: Hopper advertises `_silocast-roku._tcp` and takes the frames over plain TCP, through the bundled service, where Android TV and Apple TV advertise `_silocast._tcp` with TLS-PSK. The phone apps already dial Roku receivers this way, and the other TVs' pre-shared key is public, so TLS-PSK adds no protection on the local network. The phone gets a mute switch rather than a volume slider (`volume_mute_only`), because an app can't set the TV's volume, no speed control (`no_playback_speed`), because the TV ignores playback speed on Hopper's streams, and no aspect or subtitle timing controls. Decided 2026-11-17 (#155).
 - Episode items open within the Series screen, which selects the relevant season; standalone episode/season pages are not webOS destinations.
 
 ## Not planned
