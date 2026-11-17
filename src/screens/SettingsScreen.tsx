@@ -2,7 +2,7 @@ import { deviceCaptioningAppearance, getSubtitleMatchesDevice, setSubtitleMatche
 import { setTitleArtEnabled } from "../core/titleArt";
 import { setThemeMusicPreferences } from "../core/themeMusic";
 import { ProfileAvatar } from "../components/TopNav";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import QRCode from "qrcode";
 import { serverRegistry } from "../core/serverRegistry";
 import { clearDeviceSubtitleAppearance, clearScopedSetting, clearSetting, DEFAULT_SUBTITLE_APPEARANCE, getAccountRole, getEffectiveSettings, getMetadataAiAvailable, getSettingsContract, supportsTextOpacity, putProfileSubtitleAppearance, isClientLocal, putDeviceSubtitleAppearance, putScopedSetting, putSetting } from "../api/settings";
@@ -24,6 +24,9 @@ import { LoadingState } from "../components/LoadingState";
 import { TvButton } from "../components/TvButton";
 import type { Session } from "../types";
 import { LOCAL_SETTINGS_STORAGE } from "../core/playerSettings";
+import { allowedPhones, subscribeAllowedPhones } from "../core/allowedPhones";
+import { forgetRemotePhone } from "../control/hub";
+import { remoteControlAvailable } from "../platform/remoteControl";
 
 /** Hopper's own policy (docs/privacy.md, published with GitHub Pages). It links to Silo's for the server. */
 const PRIVACY_POLICY_URL = "https://wjbeckett.github.io/hopper-webos/privacy/";
@@ -37,7 +40,7 @@ const categories: Array<{ id: Category; label: string; blurb: string; pane: stri
   { id: "playback", label: "Playback", blurb: "Quality and episodes", pane: "Streaming quality and episode behavior for this TV." },
   { id: "subtitles", label: "Subtitles", blurb: "Language and appearance", pane: "Language, behavior, and on-screen appearance." },
   { id: "diagnostics", label: "Diagnostics", blurb: "Local debug log export", pane: "Review and export debug logs from this TV. Nothing is sent to Silo." },
-  { id: "server", label: "Server", blurb: "Connection and version", pane: "The Silo server this TV is connected to." }
+  { id: "server", label: "Server", blurb: "Connection, phones and version", pane: "The Silo server this TV is connected to, and the phones that can control it." }
 ];
 
 type KeyGroup = { title: string; keys: string[]; footer?: string; labels?: Record<string, string> };
@@ -339,6 +342,7 @@ export function SettingsScreen({
   }, [session]);
   const [debugLogging, setDebugLogging] = useState(isDebugLoggingEnabled);
   const [debugLogCount, setDebugLogCount] = useState(getClientLogCount);
+  const phones = useSyncExternalStore(subscribeAllowedPhones, allowedPhones);
   const [debugLogs, setDebugLogs] = useState(getClientLogEntries);
   const [showDebugLogs, setShowDebugLogs] = useState(false);
   const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
@@ -1054,6 +1058,34 @@ export function SettingsScreen({
     );
   }
 
+  /** The phones allowed to control this TV (#162); OK on one forgets it. */
+  function renderPhoneRemote() {
+    if (!remoteControlAvailable()) return null;
+    const forget = (deviceId: string, index: number) => {
+      forgetRemotePhone(deviceId);
+      // The row goes away: focus the one that takes its place, else the next control.
+      requestAnimationFrame(() => {
+        const next = document.querySelector<HTMLElement>(`[data-setting-key="phone-${index}"]`)
+          ?? document.querySelector<HTMLElement>(`[data-setting-key="phone-${index - 1}"]`)
+          ?? document.querySelector<HTMLElement>('[data-setting-key="privacy-policy"]');
+        next?.focus({ preventScroll: true });
+      });
+    };
+    return (
+      <section className="settings-group">
+        <h3>Phone Remote</h3>
+        {phones.length
+          ? phones.map((phone, index) => (
+            <button key={phone.deviceId} data-tv-focusable="true" data-setting-key={`phone-${index}`} className="option-row settings-row" onClick={() => forget(phone.deviceId, index)}>
+              <span>{phone.name}</span><strong>Forget</strong>
+            </button>
+          ))
+          : <div className="option-row settings-static"><span>No phones allowed yet</span></div>}
+        <p className="settings-footer">To control this TV from your phone, open Silo on a phone on this network and choose this TV. The first time, the TV asks whether to allow that phone. A phone you forget is asked about again next time.</p>
+      </section>
+    );
+  }
+
   let pane;
   if (category === "diagnostics") {
     pane = renderDiagnosticsPane();
@@ -1066,6 +1098,7 @@ export function SettingsScreen({
           {session.serverUrl && activeServer?.name !== session.serverUrl ? <div className="option-row settings-static"><span>Address</span><strong>{session.serverUrl}</strong></div> : null}
           <button data-tv-focusable="true" className="option-row settings-row" onClick={onChangeServer}><span>Manage Servers</span></button>
         </section>
+        {renderPhoneRemote()}
         <section className="settings-group">
           <h3>About</h3>
           <div className="option-row settings-static"><span>App Version</span><strong>{clientIdentity.version}{clientIdentity.commit ? ` (${clientIdentity.commit})` : ""}</strong></div>

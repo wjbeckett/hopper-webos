@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { serverIdOf, type Envelope } from "./protocol";
-import { ControlReceiver, type ReceiverConfig } from "./receiver";
+import { ControlReceiver, REFUSED_MS, type ReceiverConfig } from "./receiver";
 
 const ORIGIN = "https://silo.example.com";
 const config: ReceiverConfig = { origin: ORIGIN, serverName: "Home", serverIdentity: "dep-1", profile: { id: "p-alex", name: "Alex" } };
 
-function setup(overrides: Partial<ReceiverConfig> = {}) {
+/** Every phone is already allowed unless a test says which are. */
+function setup(overrides: Partial<ReceiverConfig> = {}, known: (deviceId: string) => boolean = () => true) {
+  const asks: string[] = [];
   const sent: Array<{ id: string; message: Envelope }> = [];
   const closed: Array<{ id: string; reason: string }> = [];
   const launches: string[] = [];
@@ -17,10 +19,13 @@ function setup(overrides: Partial<ReceiverConfig> = {}) {
     announce: name => notices.push(name),
     launch: (_id, request) => launches.push(request.playback.contentId),
     control: (_id, command) => commands.push(command.name),
-    changed: () => undefined
+    changed: () => undefined,
+    allowed: known,
+    ask: id => asks.push(id),
+    askEnded: id => { const at = asks.indexOf(id); if (at >= 0) asks.splice(at, 1); }
   }, { ...config, ...overrides }, () => "token-1");
   const of = (id: string, type: string) => sent.filter(entry => entry.id === id && entry.message.type === type).map(entry => entry.message);
-  return { receiver, sent, closed, launches, commands, notices, of };
+  return { receiver, sent, closed, launches, commands, notices, asks, of };
 }
 
 const phoneHello = (deviceId: string, server = serverIdOf(ORIGIN), identity?: string) => ({
@@ -151,5 +156,99 @@ describe("ControlReceiver", () => {
     t.receiver.connected("c1");
     t.receiver.message("c1", { type: "launch", launch: {} }, 0);
     expect(t.closed).toEqual([{ id: "c1", reason: "" }]);
+  });
+  describe("allowing a phone on the TV (#162)", () => {
+    const nobody = () => false;
+
+    it("holds a phone the TV doesn't know and asks the viewer", () => {
+      const t = setup({}, nobody);
+      t.receiver.connected("c1");
+      t.receiver.message("c1", phoneHello("a"), 0);
+      expect(t.receiver.authorizedCount()).toBe(0);
+      expect(t.asks).toEqual(["c1"]);
+      t.receiver.message("c1", { type: "control", v: 2, control: { name: "pause" } }, 0);
+      expect(t.commands).toEqual([]);
+      expect(t.of("c1", "error")).toMatchObject([{ error: { code: "unauthorized", message: "Press OK on the TV to allow this phone." } }]);
+      expect(t.asks).toEqual(["c1"]);
+    });
+
+    it("lets an allowed phone in, sends it the state and answers the offer it sent while waiting", () => {
+      const t = setup({}, nobody);
+      t.receiver.setState({ type: "state", v: 2 } as Envelope);
+      t.receiver.connected("c1");
+      t.receiver.message("c1", phoneHello("a"), 0);
+      t.receiver.message("c1", offer("p-alex"), 0);
+      expect(t.of("c1", "handoff_ready")).toEqual([]);
+      t.receiver.approve("c1");
+      expect(t.asks).toEqual([]);
+      expect(t.receiver.authorizedCount()).toBe(1);
+      expect(t.of("c1", "state")).toHaveLength(1);
+      expect(t.of("c1", "handoff_ready")).toHaveLength(1);
+      expect(t.notices).toEqual(["Phone a"]);
+      t.receiver.message("c1", launch, 0);
+      expect(t.launches).toEqual(["movie-1"]);
+    });
+
+    it("lets a phone the TV knows straight in", () => {
+      const t = setup({}, id => id === "a");
+      t.receiver.connected("c1");
+      t.receiver.message("c1", phoneHello("a"), 0);
+      expect(t.receiver.authorizedCount()).toBe(1);
+      expect(t.asks).toEqual([]);
+    });
+
+    it("doesn't ask about a phone on another server", () => {
+      const t = setup({}, nobody);
+      t.receiver.connected("c1");
+      t.receiver.message("c1", phoneHello("a", serverIdOf("https://other.example.com")), 0);
+      expect(t.asks).toEqual([]);
+    });
+
+    it("closes a refused phone and turns it away for a while without asking", () => {
+      const t = setup({}, nobody);
+      t.receiver.connected("c1");
+      t.receiver.message("c1", phoneHello("a"), 0);
+      t.receiver.message("c1", offer("p-alex"), 0);
+      t.receiver.refuse("c1", 1000);
+      expect(t.closed).toEqual([{ id: "c1", reason: "unauthorized" }]);
+      expect(t.of("c1", "handoff_cancel")).toHaveLength(1);
+      expect(t.asks).toEqual([]);
+      t.receiver.connected("c2");
+      t.receiver.message("c2", phoneHello("a"), 2000);
+      expect(t.asks).toEqual([]);
+      expect(t.closed.map(entry => entry.id)).toEqual(["c1", "c2"]);
+      t.receiver.connected("c3");
+      t.receiver.message("c3", phoneHello("a"), 1000 + REFUSED_MS + 1);
+      expect(t.asks).toEqual(["c3"]);
+    });
+
+    it("stops asking when the phone leaves", () => {
+      const t = setup({}, nobody);
+      t.receiver.connected("c1");
+      t.receiver.message("c1", phoneHello("a"), 0);
+      t.receiver.closed("c1");
+      expect(t.asks).toEqual([]);
+    });
+
+    it("waits to ask about a silent reconnect until the phone is used", () => {
+      const t = setup({}, nobody);
+      t.receiver.connected("c1");
+      t.receiver.message("c1", { ...phoneHello("a"), hello: { ...phoneHello("a").hello, passive: true } }, 0);
+      expect(t.asks).toEqual([]);
+      t.receiver.message("c1", { type: "presence", v: 2, presence: { passive: false } }, 0);
+      expect(t.asks).toEqual(["c1"]);
+    });
+
+    it("closes a forgotten phone", () => {
+      const t = setup();
+      t.receiver.connected("c1");
+      t.receiver.message("c1", phoneHello("a"), 0);
+      t.receiver.connected("c2");
+      t.receiver.message("c2", phoneHello("b"), 0);
+      t.receiver.revoke("a");
+      expect(t.closed).toEqual([{ id: "c1", reason: "unauthorized" }]);
+      t.receiver.revoke();
+      expect(t.receiver.authorizedCount()).toBe(0);
+    });
   });
 });

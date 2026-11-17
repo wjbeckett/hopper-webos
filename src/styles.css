@@ -246,6 +246,7 @@ textarea:hover:not(:focus) {
 
 /* Browsing while the server cannot be reached: the dialog, then this notice once dismissed. */
 .connection-lost-scrim { z-index: 90; }
+.phone-approval-scrim { z-index: 950; }
 .connection-lost-status { color: #ffd98a !important; }
 .connection-notice {
   position: fixed;
