@@ -79,9 +79,9 @@ Hopper is an independent, community-built client. It is not affiliated with or e
 
 - **Audiobooks** play in the video player. Multi-part books don't have one continuous timeline yet, and bookmarks are missing.
 - **TV models:** Hopper needs webOS 6 (2021 TVs) or later. Playback has been tested on one LG TV (webOS 22). Other webOS versions and codecs haven't been fully tested, and webOS 6 hasn't been tried on a TV yet.
+- **Phone remote:** a phone on a different profile than the one open on the TV can control playback but not start a title yet, and the phone can't open Hopper on the TV.
 - **Connection errors:** the connection-lost and signed-out screens have been tested in a desktop browser only, not yet on a TV.
 - **Audio delay** can only delay audio by 0 to 1000 ms. It can't move audio earlier.
-- **Phone remote:** a phone on a different profile than the one open on the TV can control playback but not start a title yet, and the phone can't open Hopper on the TV. It hasn't been tried with the phone apps on a TV yet.
 - **Watch Party** isn't available. It's experimental and switched off in the official Android TV app too.
 
 ## Contributing
