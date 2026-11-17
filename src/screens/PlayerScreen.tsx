@@ -224,7 +224,6 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const [hudPicker, setHudPicker] = useState<{ title: string; choices: Array<{ label: string; value: string }>; selected: string; returnKey: string; onSelect: (value: string) => void } | null>(null);
   const hudPickerRef = useRef(hudPicker);
   hudPickerRef.current = hudPicker;
-  const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [aspectMode, setAspectMode] = useState<"Fit" | "Zoom" | "Stretch">("Fit");
   const aspectLabel = (mode: "Fit" | "Zoom" | "Stretch") => mode === "Fit" ? "Letterbox" : mode === "Zoom" ? "Zoom (crop)" : "Stretch";
   const [sleepDeadline, setSleepDeadline] = useState<number | null>(null);
@@ -268,7 +267,6 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const [bufferedAhead, setBufferedAhead] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playing, setPlaying] = useState(false);
-  useEffect(() => { if (videoRef.current) videoRef.current.playbackRate = playbackSpeed; }, [playbackSpeed]);
   useEffect(() => {
     if (sleepDeadline == null) { setSleepRemaining(null); return; }
     const tick = () => {
@@ -2038,7 +2036,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const chapters = version?.chapters ?? [];
   const labelSeconds = scrubPreview ?? position;
   const remaining = Math.max(0, duration - labelSeconds);
-  const endsAt = remaining > 0 ? new Date(Date.now() + remaining / playbackSpeed * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null;
+  const endsAt = remaining > 0 ? new Date(Date.now() + remaining * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null;
   const playedFraction = duration > 0 ? Math.max(0, Math.min(1, labelSeconds / duration)) : 0;
   const bufferedFraction = duration > 0 ? Math.max(0, Math.min(1, (position + bufferedAhead) / duration)) : 0;
   const selectedSubtitle = plan?.selected_tracks.subtitle;
@@ -2254,14 +2252,12 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
             {playerStats.resolution ? <div className="player-hud-readonly"><span>Resolution</span><strong>{playerStats.resolution}</strong></div> : null}
             {typeof playerStats.totalFrames === "number" ? <div className="player-hud-readonly"><span>Decoded frames</span><strong>{playerStats.totalFrames.toLocaleString()}</strong></div> : null}
             {(playerStats.droppedFrames ?? 0) > 0 ? <div className="player-hud-readonly"><span>Dropped frames</span><strong>{playerStats.droppedFrames!.toLocaleString()}</strong></div> : null}
-            <div className="player-hud-readonly"><span>Playback speed</span><strong>{playbackSpeed === 1 ? "Normal" : `${playbackSpeed}×`}</strong></div>
           </div>
         </div> : null}
         {hudTab === "Video" ? <div className="player-hud-video-grid">
           <div><div className="player-hud-eyebrow">Playback</div>
             {detail && detail.versions.length > 1 ? <button data-tv-focusable="true" data-hud-row="version" className="option-row" onClick={() => presentHudPicker("Version", detail.versions.map(file => ({ label: versionLabel(file), value: String(file.file_id) })), String(version?.file_id ?? ""), "version", value => { const selected = detail.versions.find(file => String(file.file_id) === value); if (selected) void selectFileVersion(selected); })}><span>Version</span><small>{version ? versionLabel(version) : "Auto"}</small></button> : null}
             {qualities.length ? <button data-tv-focusable="true" data-hud-row="quality" className="option-row" onClick={() => presentHudPicker("Quality", [{ label: "Auto", value: "auto" }, ...qualities.map(quality => ({ label: quality.preserves_source ? `Original${quality.height ? ` · ${quality.height}p` : version?.resolution ? ` · ${version.resolution}` : ""}` : quality.label, value: quality.label }))], qualityRef.current, "quality", value => selectQuality({ label: value }))}><span>Quality</span><small>{qualityRef.current === "auto" ? "Auto" : qualityRef.current}</small></button> : null}
-            <button data-tv-focusable="true" data-hud-row="speed" className="option-row" onClick={() => presentHudPicker("Playback speed", [0.75, 1, 1.25, 1.5, 2].map(value => ({ label: value === 1 ? "Normal" : `${value}×`, value: String(value) })), String(playbackSpeed), "speed", value => setPlaybackSpeed(Number(value)))}><span>Speed</span><small>{playbackSpeed === 1 ? "Normal" : `${playbackSpeed}×`}</small></button>
             <button data-tv-focusable="true" data-hud-row="aspect" className="option-row" onClick={() => presentHudPicker("Aspect", [{ label: "Letterbox", value: "Fit" }, { label: "Zoom (crop)", value: "Zoom" }, { label: "Stretch", value: "Stretch" }], aspectMode, "aspect", value => setAspectMode(value as typeof aspectMode))}><span>Aspect</span><small>{aspectLabel(aspectMode)}</small></button>
           </div>
           <div><div className="player-hud-eyebrow">Output</div>

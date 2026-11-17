@@ -60,7 +60,7 @@ Hopper is an independent, community-built client. It is not affiliated with or e
 - MP4 files the TV can open (H.264 or HEVC with AAC) play directly, so the server only sends the file.
 - On a slow connection, quality lowers when playback keeps buffering (or asks first, per the "Lower quality when buffering" setting), with an option to restore it.
 - Subtitle appearance, sync and online search, plus AI subtitle translation where the server supports it.
-- Playback speed, sleep timer, audio delay, and HDR / Dolby Vision options.
+- Sleep timer, audio delay, and HDR / Dolby Vision options.
 - Dolby Digital and Dolby Digital Plus audio is sent to the TV untouched, so the TV can pass it to a soundbar or receiver. If the stream fails, playback starts again where it stopped, and the server converts the audio if it fails a second time.
 
 **Built for the TV**
@@ -80,6 +80,7 @@ Hopper is an independent, community-built client. It is not affiliated with or e
 - **TV models:** Hopper needs webOS 6 (2021 TVs) or later. Playback has been tested on one LG TV (webOS 22). Other webOS versions and codecs haven't been fully tested, and webOS 6 hasn't been tried on a TV yet.
 - **Connection errors:** the connection-lost and signed-out screens have been tested in a desktop browser only, not yet on a TV.
 - **Audio delay** can only delay audio by 0 to 1000 ms. It can't move audio earlier.
+- **Playback speed** isn't available. The TV ignores speed changes on streamed video, so Hopper doesn't offer it.
 - **Watch Party** isn't available. It's experimental and switched off in the official Android TV app too.
 
 ## Contributing

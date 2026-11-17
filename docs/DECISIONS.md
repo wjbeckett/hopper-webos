@@ -25,6 +25,7 @@ Deliberate differences from the Android TV app. Do not "fix" these to match Andr
 - The Magic Remote pointer is supported, because LG requires it: pointing at a control focuses it, and rows of cards get arrows at their edges while the pointer is over them. Android TV has no pointer.
 - The access token is kept in memory only and renewed from the refresh token on every launch, which adds one request before the first screen loads. Android stores it, encrypted. The refresh and profile tokens are encrypted on the TV in both clients.
 - Audio delay is 0 to 1000 ms. Android allows -1000 to 1000 ms; a WebAudio `DelayNode` cannot move audio earlier. Keep the limit unless a TV-safe way to advance audio is shown not to make sync worse.
+- No playback speed. Android TV offers it, but on webOS the TV ignores `playbackRate` for the MediaSource (HLS) streams Hopper plays; it works only for files played directly. Measured on a webOS 22 TV: 1.0× at every rate from 0.5 to 2 on HLS, with or without sound, and the set rate on a direct MP4. The maintainer chose to drop speed rather than offer it for direct play only. Decided 2026-11-17 (#159).
 - The TV cannot browse the network for servers, because a web app has no mDNS. Phone pairing covers discovery (the phone finds the TV); manual entry and saved servers remain.
 - Episode items open within the Series screen, which selects the relevant season; standalone episode/season pages are not webOS destinations.
 
