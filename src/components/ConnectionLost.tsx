@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { checkConnection, connectionDialogHeld, connectionStatus, subscribeConnection, subscribeDialogHold } from "../api/connection";
+import { phoneRequests, subscribePhoneRequests } from "../control/hub";
 import { focusTopNavigation } from "../navigation/spatial";
 import { TvButton } from "./TvButton";
 
@@ -21,13 +22,16 @@ export function ConnectionLost({ serverName }: { serverName: string }) {
   const dialog = useRef<HTMLDivElement>(null);
   const lost = status === "unreachable" && !held;
   const open = lost && !dismissed;
+  // The allow-a-phone question (#162) owns focus and keys while it is up; this dialog waits under it.
+  const phoneWaiting = useSyncExternalStore(subscribePhoneRequests, () => phoneRequests().length > 0);
+  const owning = open && !phoneWaiting;
 
   useEffect(() => {
     if (status === "reachable") { setDismissed(false); setStillDown(false); }
   }, [status]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!owning) return;
     returnFocus.current = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
     const onKeyDown = (event: KeyboardEvent) => {
       if (!isBack(event)) return;
@@ -56,7 +60,7 @@ export function ConnectionLost({ serverName }: { serverName: string }) {
         else if (!document.activeElement || document.activeElement === document.body) focusTopNavigation();
       });
     };
-  }, [open]);
+  }, [owning]);
 
   if (!lost) return null;
   if (!open) return <div className="connection-notice" role="status">Can't reach {serverName}. Trying again…</div>;

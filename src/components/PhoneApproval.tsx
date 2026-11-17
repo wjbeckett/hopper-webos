@@ -42,8 +42,10 @@ export function PhoneApproval() {
       const at = list.indexOf(document.activeElement as HTMLButtonElement);
       if (isBack(event)) answer("dismiss", true);
       else if (isEnter(event)) {
-        const target = list[at] ?? list[0];
+        // OK answers only from a button; anywhere else it just puts focus back on Allow.
+        const target = list[at];
         if (target) answer(target.dataset.answer === "allow" ? "allow" : "refuse", true);
+        else list[0]?.focus({ preventScroll: true });
       } else if (event.key === "ArrowLeft" || event.keyCode === 37) list[Math.max(0, at - 1)]?.focus({ preventScroll: true });
       else if (event.key === "ArrowRight" || event.keyCode === 39) list[Math.min(list.length - 1, at + 1)]?.focus({ preventScroll: true });
     };
