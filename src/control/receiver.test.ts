@@ -55,6 +55,20 @@ describe("ControlReceiver", () => {
     expect(t.of("c1", "error")).toMatchObject([{ error: { code: "unauthorized" } }]);
   });
 
+  it("refuses an offer from a phone on another server, leaving a ready phone ready", () => {
+    const t = setup();
+    t.receiver.connected("c1");
+    t.receiver.message("c1", phoneHello("a"), 0);
+    t.receiver.message("c1", offer("p-alex"), 0);
+    t.receiver.connected("c2");
+    t.receiver.message("c2", phoneHello("b", serverIdOf("https://other.example.com")), 0);
+    t.receiver.message("c2", offer("p-alex"), 0);
+    expect(t.of("c2", "handoff_ready")).toEqual([]);
+    expect(t.of("c2", "handoff_cancel")).toMatchObject([{ handoffCancel: { requestId: "r1", reason: "handoff_failed" } }]);
+    t.receiver.message("c1", launch, 0);
+    expect(t.launches).toEqual(["movie-1"]);
+  });
+
   it("refuses a hello without protocol 2 and closes", () => {
     const t = setup();
     t.receiver.connected("c1");

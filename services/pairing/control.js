@@ -22,15 +22,8 @@ var MAX_MISSED_PONGS = 3;
 /** a.b.c.d (or ::ffff:a.b.c.d) in a private, link-local or loopback IPv4 range (section 5.5). */
 function isLocalPeer(address) {
   var host = String(address || "").replace(/^::ffff:/i, "");
-  var parts = host.split(".");
-  if (parts.length !== 4) return false;
-  var octets = [];
-  for (var i = 0; i < 4; i++) {
-    if (!/^\d{1,3}$/.test(parts[i])) return false;
-    var value = Number(parts[i]);
-    if (value > 255) return false;
-    octets.push(value);
-  }
+  if (!net.isIPv4(host)) return false;
+  var octets = host.split(".").map(Number);
   var a = octets[0];
   var b = octets[1];
   if (a === 10 || a === 127) return true;
@@ -57,6 +50,9 @@ function createControl(options) {
   var hello = null;
   var connections = {};
   var nextId = 0;
+  // Bumped by every stop(): a start that was still listening or announcing when it ran is stale
+  // and closes what it opened, so a stop always wins over an earlier start.
+  var generation = 0;
 
   function emit(event) { options.emit(event); }
 
@@ -171,6 +167,7 @@ function createControl(options) {
   }
 
   function stop() {
+    generation += 1;
     Object.keys(connections).forEach(function (id) { closeConnection(connections[id], "tv_disconnected"); });
     if (timer) { clearInterval(timer); timer = null; }
     if (advertiser) { advertiser.stop(); advertiser = null; }
@@ -181,17 +178,23 @@ function createControl(options) {
     /** config: { hello (the TV's hello payload), instance, id, txt: ["key=value", …] } */
     start: function (config, done) {
       stop();
+      var mine = generation;
+      var stale = function () { return mine !== generation; };
       hello = config.hello;
       listen(FIRST_PORT, function (err, listening) {
         if (err) { done(err); return; }
+        if (stale()) { try { listening.close(); } catch (e) { /* closed */ } done(new Error("stopped")); return; }
         server = listening;
         var port = server.address().port;
         timer = setInterval(tick, 500);
-        advertiser = mdns.createAdvertiser({
+        var own = mdns.createAdvertiser({
           service: SERVICE, instance: config.instance, id: config.id, port: port, txt: config.txt,
           onError: function (e) { emit({ type: "error", message: "mdns: " + e.message }); }
         });
-        advertiser.start(function (e) {
+        advertiser = own;
+        own.start(function (e) {
+          // A stop() since then has already closed this server and advertiser.
+          if (stale()) { done(new Error("stopped")); return; }
           if (e) { stop(); done(e); return; }
           emit({ type: "listening", port: port });
           done(null, port);

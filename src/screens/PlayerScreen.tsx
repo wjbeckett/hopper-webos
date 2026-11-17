@@ -207,6 +207,9 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const closedSessions = useRef(new Set<string>());
   const stateRef = useRef<PlaybackState | undefined>(undefined);
   const remoteRef = useRef<RemotePlayer | null>(null);
+  // A track or quality change is on its way to Silo. A phone can send another before it lands, and
+  // that request would carry the old choice for the other track, so the remote waits for it.
+  const replanning = useRef(false);
   useEffect(() => registerRemotePlayer(item.Id, {
     snapshot: () => remoteRef.current!.snapshot(),
     command: command => remoteRef.current!.command(command)
@@ -1202,6 +1205,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   async function replan(operation: "track_change" | "quality_change", quality: string, audio?: { id: string; index?: number }, subtitle?: { id: string; index?: number }) {
     const active = stateRef.current;
     if (!active) return;
+    replanning.current = true;
     setBusy(true); setError("");
     const pick = operation === "quality_change";
     if (pick) bufferQuality.controller.onQualityPickSent();
@@ -1225,7 +1229,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       if (pick) bufferQuality.controller.onQualityPickRefused();
       setError(reason instanceof Error ? reason.message : "Silo could not change playback.");
     }
-    finally { setBusy(false); }
+    finally { setBusy(false); replanning.current = false; }
   }
 
   function selectAudio(track: AudioTrack, fallbackIndex?: number) {
@@ -2098,6 +2102,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     command: (command) => {
       const video = videoRef.current;
       const refused = (message: string) => ({ ok: false as const, code: "command_failed", message });
+      const switching = command.name === "select_audio_track" || command.name === "select_subtitle_track" || command.name === "set_quality";
+      if (switching && replanning.current) return refused("The TV is still switching. Try again in a moment.");
       switch (command.name) {
         case "play": if (video?.paused) void video.play().catch(() => undefined); break;
         case "pause": video?.pause(); break;

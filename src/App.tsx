@@ -201,15 +201,19 @@ export default function App() {
   }, [session]);
 
   // Phone remote control (#155): a Silo phone app on the same network can control playback and
-  // start titles while someone is signed in. Launches go to the profile open on the TV.
-  const remoteProfile = session?.profileId && profileHydrated ? { id: session.profileId, name: session.username } : null;
+  // start titles while someone is signed in. Launches go to the profile open on the TV, and none
+  // while the full-screen profile picker is showing.
+  const remoteProfile = session?.profileId && profileHydrated && !profileError ? { id: session.profileId, name: session.username } : null;
   const remoteProfileRef = useRef(remoteProfile);
   remoteProfileRef.current = remoteProfile;
   const remoteLaunchRef = useRef<(intent: LaunchIntent) => Promise<void>>(async () => undefined);
   remoteLaunchRef.current = async (intent) => {
     const current = sessionRef.current;
-    if (!current?.profileId) throw new Error("Choose a profile on the TV first.");
+    const profileId = remoteProfileRef.current?.id;
+    if (!current?.profileId || profileId !== current.profileId) throw new Error("Choose a profile on the TV first.");
     const item = await getCatalogItem(current, intent.contentId);
+    // The profile changed (or the picker opened) while the title loaded: it was for the old one.
+    if (remoteProfileRef.current?.id !== profileId || sessionRef.current?.profileId !== profileId) throw new Error("The profile on the TV changed. Try again.");
     const returnTo = item.Type === "Episode" && item.SeriesId
       ? { series: { Id: item.SeriesId, Name: item.SeriesName ?? "Series", Type: "Series" }, selectedEpisode: item }
       : undefined;

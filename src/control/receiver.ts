@@ -123,6 +123,12 @@ export class ControlReceiver {
           this.io.send(id, handoffCancel(decoded.payload.requestId, "version_unsupported", "Update Silo on both devices to continue."));
           return;
         }
+        // Hopper hands off only to the profile open on the TV, so a phone whose hello named another
+        // server has nothing to prepare here (Android TV and Roku accept it for a server switch).
+        if (!controller.authorized) {
+          this.io.send(id, handoffCancel(decoded.payload.requestId, "handoff_failed", `This TV plays from ${this.config.serverName}.`));
+          return;
+        }
         this.offer(controller, decoded.payload);
         return;
       case "handoff_cancel": return; // nothing waits on the server for the profile open on the TV

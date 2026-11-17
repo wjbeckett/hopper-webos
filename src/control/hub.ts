@@ -55,7 +55,7 @@ type Running = {
 };
 
 let running: Running | null = null;
-let player: { contentId: string; adapter: RemotePlayer } | null = null;
+let player: { contentId: string; adapter: RemotePlayer; at: number } | null = null;
 
 function randomToken() {
   const bytes = new Uint8Array(16);
@@ -98,7 +98,8 @@ function launchPending(state: Running) {
 function publishState(state: Running) {
   if (!state.receiver.authorizedCount()) return;
   if (player) {
-    if (state.launch && player.contentId === state.launch.contentId) state.launch = null;
+    // A launch is done when a player opened for it, not when the same title was already playing.
+    if (state.launch && player.contentId === state.launch.contentId && player.at >= state.launch.at) state.launch = null;
     state.lastIdle = "";
     state.receiver.setState(envelope("state", "state", stateBody(player.adapter.snapshot())));
     return;
@@ -134,11 +135,13 @@ function applyLaunch(state: Running, id: string, intent: LaunchIntent) {
     send(id, errorMessage("launch_pending", "A title is already starting on this TV."));
     return;
   }
-  state.launch = { contentId: intent.contentId, at: Date.now() };
+  const launch = { contentId: intent.contentId, at: Date.now() };
+  state.launch = launch;
   publishState(state);
   state.options.onLaunch(intent).catch(reason => {
     if (running !== state) return;
-    state.launch = null;
+    // Only this launch: a later one may have taken over after LAUNCH_WAIT_MS.
+    if (state.launch === launch) state.launch = null;
     send(id, errorMessage("launch_failed", reason instanceof Error ? reason.message : "The TV could not play that title."));
     publishState(state);
   });
@@ -223,7 +226,7 @@ export function stopRemoteControl() {
 
 /** PlayerScreen while it's open. Returns the function that unregisters it. */
 export function registerRemotePlayer(contentId: string, adapter: RemotePlayer): () => void {
-  const entry = { contentId, adapter };
+  const entry = { contentId, adapter, at: Date.now() };
   player = entry;
   const state = running;
   if (state?.started) void updateControlService({ txt: txt(state) });
