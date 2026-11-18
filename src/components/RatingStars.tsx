@@ -20,6 +20,8 @@ export function starsLabel(rating: number) {
   return Number.isInteger(stars) ? String(stars) : stars.toFixed(1);
 }
 
+const starsSpoken = (rating: number) => rating <= 0 ? "no rating" : `${starsLabel(rating)} ${rating === 2 ? "star" : "stars"}`;
+
 /** One step of Left (-1) or Right (+1), from no rating (0) to five stars (10). */
 export function stepRating(rating: number, direction: -1 | 1) {
   return Math.max(0, Math.min(10, rating + direction));
@@ -89,7 +91,7 @@ export function RatingStars({ session, itemId, rating: initial }: { session: Ses
         type="button"
         data-tv-focusable="true"
         className={`rating-stars${editing ? " editing" : ""}`}
-        aria-label={editing ? `Your rating: ${starsLabel(shown)} stars. Left and Right change it, OK saves.` : rating ? `Your rating: ${starsLabel(rating)} stars` : "Rate this title"}
+        aria-label={editing ? `Your rating: ${starsSpoken(shown)}. Left and Right change it, OK saves.` : rating ? `Your rating: ${starsSpoken(rating)}` : "Rate this title"}
         onBlur={() => setDraft(null)}
         onClick={event => {
           // The Magic Remote: a click on a star's half sets it. A click from OK has no position.

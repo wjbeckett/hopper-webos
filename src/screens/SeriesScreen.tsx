@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { placeRailItem, resetSlidingRail } from "../navigation/spatial";
 import { focusFromPointer } from "../navigation/pointer";
-import { backdropUrl, getCatalogItem, getEpisodes, requestDescriptionTranslation, getSeasons, getShuffleCapability, getSimilarItems, imageUrl, isFavorite, isInWatchlist, mediaLogoUrl, setFavorite, setNotInterested, setWatched, setWatchlist } from "../api/silo";
+import { backdropUrl, getCatalogItem, getEpisodes, requestDescriptionTranslation, getSeasons, getShuffleCapability, getSimilarItems, imageUrl, isFavorite, isInWatchlist, mediaLogoUrl, setFavorite, setWatched, setWatchlist } from "../api/silo";
 import { CastSection, FactsSection, TrailersSection, factsFor, useDetailExtras } from "../components/DetailSections";
 import { PlaybackOptionsDialog, PlaybackSummary, useWatchDetail } from "../components/PlaybackOptions";
 import { GearIcon, MoreIcon, PlayIcon, RestartIcon, WatchlistIcon, TranslateIcon } from "../components/icons";
@@ -14,7 +14,7 @@ import { ArtworkImage } from "../components/ArtworkImage";
 import type { PlaybackChoices, WatchDetail } from "../api/playback";
 import type { DetailPerson, DetailTrailer } from "../api/silo";
 import type { Session, SiloItem } from "../types";
-import { applyWatchedState, publishRailsChanged, publishWatchState } from "../core/watchState";
+import { applyWatchedState, publishWatchState } from "../core/watchState";
 import { RatingStars } from "../components/RatingStars";
 import { LoadingState } from "../components/LoadingState";
 import { ResumeProgress } from "../components/ResumeProgress";
@@ -205,20 +205,6 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, [moreOpen]);
-
-  /** Not interested (#179): the recommendation rows leave the series out once the server rebuilds them. */
-  async function toggleNotInterested() {
-    const next = !show.NotInterested;
-    closeMore();
-    setShow(current => ({ ...current, NotInterested: next }));
-    try {
-      await setNotInterested(session, series.Id, next);
-      publishRailsChanged();
-    } catch (cause) {
-      setShow(current => ({ ...current, NotInterested: !next }));
-      setError(cause instanceof Error ? cause.message : "Could not update recommendations.");
-    }
-  }
 
   function closeMore() {
     setMoreOpen(false);
@@ -420,12 +406,13 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
             {rating ? <span>{`★ ${rating.toFixed(1)}`}</span> : null}
             {target && resume > 0 ? <ResumeProgress position={resume} duration={(target.RunTimeTicks ?? 0) / 10_000_000} /> : null}
           </div>
-          {/* The series' own rating (#180): a fixed-height row, so the hero still never moves with focus. */}
-          <RatingStars session={session} itemId={series.Id} rating={show.UserRating} />
           {/* The slot keeps its height with no overview, so the buttons and the episode row never move. */}
           <div className="series-overview-slot">
             {synopsis ? <ExpandableOverview className="series-overview" preview={synopsis} text={overviewText} title={focusedEpisode?.Name ?? show.Name} /> : null}
           </div>
+          {/* The series' own rating (#180), below the overview: a fixed-height row, so the hero still never
+              moves with focus, and a stop in the hero's Up/Down chain (spatial.ts). */}
+          <RatingStars session={session} itemId={series.Id} rating={show.UserRating} />
           <div className="details-credit series-credit">{extras?.cast.length ? `Starring ${extras.cast.slice(0, 3).map(member => member.name).join(", ")}` : ""}</div>
           <PlaybackSummary detail={watchDetail} choices={choices} />
           <div className="details-actions">
@@ -543,12 +530,6 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
             {activeSeason && railEpisodes.length ? (
               <MoreRow onClick={() => void markWatched(activeSeason.Id, !seasonWatched)}>
                 {`Mark ${seasonLabel(activeSeason)} ${seasonWatched ? "Unwatched" : "Watched"}`}
-              </MoreRow>
-            ) : null}
-            {/* tvOS: Not Interested, then Show in Recommendations to clear it. Hidden where the server doesn't say (#179). */}
-            {show.NotInterested !== undefined ? (
-              <MoreRow onClick={() => void toggleNotInterested()}>
-                {show.NotInterested ? "Show in Recommendations" : "Not Interested"}
               </MoreRow>
             ) : null}
           </div>

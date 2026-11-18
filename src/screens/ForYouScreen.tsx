@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { getForYouRails } from "../api/silo";
 import { FeaturedRailsScreen } from "../components/FeaturedRailsScreen";
+import { RecommendationsContext } from "../components/RecommendationsContext";
 import { focusFirstContentCard } from "../navigation/spatial";
 import { useWatchStateRefresh } from "../core/watchState";
 import type { HomeRail, Session, SiloItem } from "../types";
@@ -49,6 +50,7 @@ export function ForYouScreen({
   if (loading) return <LoadingState label="Loading recommendations" />;
 
   return (
+    <RecommendationsContext.Provider value={true}>
     <FeaturedRailsScreen
       rails={rails}
       session={session}
@@ -59,5 +61,6 @@ export function ForYouScreen({
       emptyDescription="As you watch more, personalized picks will appear here."
       restoreKey={`for-you|${session.serverUrl}|${session.profileId ?? ""}`}
     />
+    </RecommendationsContext.Provider>
   );
 }
