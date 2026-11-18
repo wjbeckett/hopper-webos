@@ -6,9 +6,13 @@ import { focusFirstContentCard } from "../navigation/spatial";
 import type { Session, SiloCollection, SiloItem } from "../types";
 import { LoadingState } from "../components/LoadingState";
 
-export function CollectionsScreen({ session, onOpen }: {
+export function CollectionsScreen({ session, onOpen, initialCollection, onLeave }: {
   session: Session;
   onOpen: (item: SiloItem) => void;
+  /** Opened from a Home row of collections (#170): show this collection straight away. */
+  initialCollection?: SiloCollection;
+  /** Back from `initialCollection` returns to where it was opened, not to the Collections grid. */
+  onLeave?: () => void;
 }) {
   const [collections, setCollections] = useState<SiloCollection[]>([]);
   const [selected, setSelected] = useState<SiloCollection | null>(null);
@@ -45,6 +49,14 @@ export function CollectionsScreen({ session, onOpen }: {
     observer.observe(target);
     return () => observer.disconnect();
   }, [selected, cursor, loading, loadingMore, error, items]);
+
+  const openedInitial = useRef(false);
+  useEffect(() => {
+    if (!initialCollection || openedInitial.current) return;
+    openedInitial.current = true;
+    void openCollection(initialCollection);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCollection]);
 
   async function openCollection(collection: SiloCollection) {
     setSelected(collection);
@@ -99,7 +111,8 @@ export function CollectionsScreen({ session, onOpen }: {
     return (
       <main className="content-screen collection-screen" onKeyDownCapture={event => {
         if (["Escape", "Backspace", "Back", "GoBack", "BrowserBack"].includes(event.key) || event.keyCode === 461 || event.keyCode === 10009) {
-          setSelected(null);
+          if (onLeave && initialCollection && selected.id === initialCollection.id) onLeave();
+          else setSelected(null);
           event.preventDefault();
           event.stopPropagation();
         }
