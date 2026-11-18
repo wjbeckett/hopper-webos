@@ -32,6 +32,7 @@ Deliberate differences from the Android TV app. Do not "fix" these to match Andr
 - The profile menu keeps Switch Server where Android TV now has Change Account (saved servers and their accounts). Hopper signs in to one account per server; Change Account comes with several accounts per server (#181). Decided 2026-11-18 (#176).
 - Movie and series pages have a "Your rating" row below the overview, above the buttons: five stars with half stars, the server's 1 to 10 (silo-server #4398). One focus stop; OK starts rating, Left and Right move half a star, OK saves and Back cancels; the Magic Remote sets a half by clicking it. No official TV client rates titles yet, so this is Hopper's own until one does. Decided by the maintainer on 2026-11-18 (#180).
 - Not Interested is offered only in the card menu on For You and a library's Recommended, as a way to tune them. tvOS also offers it on title pages and other card menus. Decided by the maintainer on 2026-11-18 (#179).
+- The events socket's first connection after launch doesn't ask the screens to reload; only a reconnect catches up. Android TV refreshes Home on every `subscribed` frame, which in Hopper reloaded all of Home about 4.5 s after each launch. Home's 20 s refresh covers the moment before the first subscription. Measured on the TV, 2026-11-18 (#193).
 - Episode items open within the Series screen, which selects the relevant season; standalone episode/season pages are not webOS destinations.
 
 ## Not planned
