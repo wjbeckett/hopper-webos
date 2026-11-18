@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { TvButton } from "../components/TvButton";
 import {
   cancelMediaRequest,
@@ -42,6 +42,12 @@ export function RequestsScreen({ session }: { session: Session }) {
   /** The failed request the viewer asked to remove, waiting for the confirmation (#172). */
   const [removeCandidate, setRemoveCandidate] = useState<SiloMediaRequest | null>(null);
   const [removingId, setRemovingId] = useState("");
+  /** Bumped by every change this screen makes to the list, so an older re-read can't undo it. */
+  const listVersion = useRef(0);
+  /** The server and profile now shown; a re-read for another one is dropped. */
+  const scope = `${session.serverUrl}|${session.profileId ?? ""}`;
+  const scopeRef = useRef(scope);
+  scopeRef.current = scope;
   const [actionError, setActionError] = useState("");
 
   const visibleResults = useMemo(() => searchResults ?? [], [searchResults]);
@@ -138,6 +144,7 @@ export function RequestsScreen({ session }: { session: Session }) {
     setActionError("");
     try {
       const updated = await cancelMediaRequest(session, request.id);
+      listVersion.current += 1;
       setRequests(current => current.map(item => item.id === updated.id ? updated : item));
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : "Could not cancel this request.");
@@ -179,6 +186,7 @@ export function RequestsScreen({ session }: { session: Session }) {
     try {
       const result = await removeFailedRequest(session, request.id);
       if (result === "removed") {
+        listVersion.current += 1;
         setRequests(current => current.filter(item => item.id !== request.id));
         setNotice("Request removed");
         requestAnimationFrame(() => {
@@ -187,7 +195,11 @@ export function RequestsScreen({ session }: { session: Session }) {
         });
       } else {
         setActionError("This request changed since the list loaded, so nothing was removed.");
-        setRequests(await getMyRequests(session));
+        // Applied only if nothing changed the list meanwhile and the profile is still the same.
+        const version = listVersion.current;
+        const startedFor = scopeRef.current;
+        const fresh = await getMyRequests(session);
+        if (listVersion.current === version && scopeRef.current === startedFor) setRequests(fresh);
       }
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : "Could not remove this request.");
@@ -274,8 +286,8 @@ export function RequestsScreen({ session }: { session: Session }) {
                 })}>{request.title}</button>
                 <small>{request.year ?? request.mediaType} · {requestStateLabel(request.state, request.status)}</small>
               </div>
-              {request.outcome === "active" ? <button data-tv-focusable="true" className="tv-button secondary" disabled={cancelingId === request.id} onClick={() => void cancelRequest(request)}>{cancelingId === request.id ? "Cancelling…" : "Cancel request"}</button> : null}
-              {removeSupported && request.removable ? <button data-tv-focusable="true" data-request-remove={request.id} className="tv-button secondary" disabled={removingId !== ""} onClick={() => setRemoveCandidate(request)}>{removingId === request.id ? "Removing…" : "Remove request"}</button> : null}
+              {request.outcome === "active" ? <button data-tv-focusable="true" className="tv-button secondary" disabled={cancelingId === request.id || removingId !== ""} onClick={() => void cancelRequest(request)}>{cancelingId === request.id ? "Cancelling…" : "Cancel request"}</button> : null}
+              {removeSupported && request.removable ? <button data-tv-focusable="true" data-request-remove={request.id} className="tv-button secondary" disabled={removingId !== "" || cancelingId !== ""} onClick={() => setRemoveCandidate(request)}>{removingId === request.id ? "Removing…" : "Remove request"}</button> : null}
             </article>
           ))}
         </div>
