@@ -369,9 +369,51 @@ type NativeHomeLayout = {
   }>;
 };
 
-type NativeHomeSectionResponse = {
+export type NativeHomeSectionResponse = {
   items?: NativeItem[];
+  /** A row of collections (`collection_posters`, #170): its cards are here and `items` is empty. */
+  collections?: NativeSectionCollectionCard[];
 };
+
+export type NativeSectionCollectionCard = {
+  id?: string | number;
+  source?: string;
+  title?: string;
+  poster_url?: string;
+  poster_thumbhash?: string;
+  backdrop_url?: string;
+  backdrop_thumbhash?: string;
+  item_count?: number;
+  library_id?: string | number;
+};
+
+/**
+ * A row-of-collections card as a card item (#170, Android TV #979). A card this client can't read
+ * or open is left out: no id or title, an unknown source, or a server collection with no library.
+ * The hero shows its backdrop, or its poster when it has none.
+ */
+export function collectionCardItem(card: NativeSectionCollectionCard): SiloItem | null {
+  const id = card.id != null ? String(card.id) : "";
+  const source = card.source === "library" || card.source === "user" ? card.source : null;
+  const libraryId = card.library_id != null ? Number(card.library_id) : undefined;
+  if (!id || !card.title || !source || (source === "library" && !(libraryId && Number.isFinite(libraryId)))) return null;
+  return {
+    Id: id,
+    Name: card.title,
+    Type: "Collection",
+    PosterUrl: card.poster_url || undefined,
+    PosterThumbhash: card.poster_thumbhash,
+    BackdropUrl: card.backdrop_url || card.poster_url || undefined,
+    CollectionCard: { source, libraryId: source === "library" ? libraryId : undefined, itemCount: Math.max(0, card.item_count ?? 0) }
+  };
+}
+
+/** A section's cards: its titles, or the collections of a row of collections. */
+export function sectionCards(response: NativeHomeSectionResponse | undefined): SiloItem[] {
+  if (!response) return [];
+  if (response.collections?.length) return response.collections.map(collectionCardItem).filter((item): item is SiloItem => item != null);
+  return (response.items ?? []).map(toItem).filter(item => item.Id);
+}
 
 type NativeRecommendationRow = {
   type: string;
@@ -831,9 +873,7 @@ export async function getHomeRails(session: Session): Promise<HomeRail[]> {
 
   return sections.map((section, index) => {
     const result = results[index];
-    const nativeItems = result.status === "fulfilled"
-      ? result.value.items ?? []
-      : [];
+    const cards = result.status === "fulfilled" ? sectionCards(result.value) : [];
     const cardResult = cardResults[index];
     const small = new Map<string, string>();
     if (cardResult.status === "fulfilled" && cardResult.value) {
@@ -848,8 +888,7 @@ export async function getHomeRails(session: Session): Promise<HomeRail[]> {
       featured: section.featured,
       sectionId: String(section.id),
       libraryId: null,
-      items: nativeItems.map(toItem).filter((item) => item.Id)
-        .map((item) => small.has(item.Id) ? { ...item, CardBackdropUrl: small.get(item.Id) } : item)
+      items: cards.map((item) => small.has(item.Id) ? { ...item, CardBackdropUrl: small.get(item.Id) } : item)
     };
   }).filter((rail) => rail.items.length > 0);
 }
@@ -1134,14 +1173,14 @@ export async function getLibraryRails(session: Session, library: SiloLibrary): P
 
   return sections.map((section, index) => {
     const result = results[index];
-    const items = result.status === "fulfilled" ? result.value.items ?? [] : [];
+    const items = result.status === "fulfilled" ? sectionCards(result.value) : [];
     return {
       id: `${library.id}-${section.id}`,
       title: section.title ?? section.section_type ?? library.name,
       featured: section.featured,
       sectionId: String(section.id),
       libraryId: library.id,
-      items: items.map(toItem).filter((item) => item.Id)
+      items
     };
   }).filter((rail) => rail.items.length > 0);
 }
