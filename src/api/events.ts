@@ -21,6 +21,14 @@ export function connectEventsSocket(session: Session, onSignal: RealtimeSignal):
   let signalTimer: number | undefined;
   let closeTimer: number | undefined;
   let backoff = INITIAL_BACKOFF_MS;
+  /**
+   * A connection after the first is a reconnect: what changed while it was down is caught up by
+   * one signal (Android TV's HomeRealtimeEvent.Connected). The first connection is not (#193):
+   * the screens have just read everything, and a catch-up then reloaded Home about 4.5 s after
+   * every launch. Home's 20 s refresh, while it shows, covers the moment before it subscribes.
+   * A first attempt that fails (no ticket, no socket) counts too: the connection after it catches up.
+   */
+  let connectedBefore = false;
 
   const signal = () => {
     if (signalTimer !== undefined) return;
@@ -41,6 +49,8 @@ export function connectEventsSocket(session: Session, onSignal: RealtimeSignal):
 
   const scheduleRetry = () => {
     if (disposed) return;
+    // Anything that changed while there was no connection is caught up by the next one.
+    connectedBefore = true;
     retryTimer = window.setTimeout(() => {
       retryTimer = undefined;
       if (disposed) return;
@@ -75,11 +85,13 @@ export function connectEventsSocket(session: Session, onSignal: RealtimeSignal):
       scheduleRetry();
       return;
     }
+    const reconnect = connectedBefore;
     socket.onopen = () => {
       backoff = INITIAL_BACKOFF_MS;
+      connectedBefore = true;
       socket?.send(JSON.stringify({ type: "subscribe", channels: CHANNELS }));
       closeTimer = window.setTimeout(() => socket?.close(1000, "max-connection"), Math.max(1, ticket.max_connection_seconds) * 1000);
-      signal();
+      if (reconnect) signal();
     };
     socket.onmessage = (event) => {
       let frame: SocketFrame;
@@ -89,7 +101,7 @@ export function connectEventsSocket(session: Session, onSignal: RealtimeSignal):
         return;
       }
       if (frame.type === "subscribed" || frame.type === "snapshot") {
-        signal();
+        if (reconnect) signal();
         return;
       }
       if (frame.channel === "user_state" && frame.data?.profile_id && session.profileId
