@@ -275,11 +275,18 @@ type NativeItem = Record<string, unknown> & {
     release_date?: string;
     resolution?: string;
   };
-  overlay_summary?: {
-    resolution?: string;
-  };
   genres?: string[];
   content_rating?: string;
+  /** Technical badges of the best file (#175). */
+  overlay_summary?: {
+    resolution?: string; hdr?: string; audio?: string; audio_channels?: string; video_codec?: string; container?: string;
+    aspect_ratio?: string; release_type?: string; edition?: string; multi_audio?: boolean; multi_sub?: boolean;
+  };
+  rating_rt_critic?: number;
+  rating_rt_audience?: number;
+  original_language?: string;
+  studios?: string[];
+  networks?: string[];
   rating_imdb?: number;
   rating_tmdb?: number;
   logo_url?: string;
@@ -502,6 +509,25 @@ function toItem(item: NativeItem): SiloItem {
     ContentRating: item.content_rating,
     ImdbRating: item.rating_imdb,
     TmdbRating: item.rating_tmdb,
+    // What a poster's badges show (#175, Android OverlayDataExtractor).
+    Overlay: item.overlay_summary || item.rating_rt_critic != null || item.rating_rt_audience != null || item.original_language || item.studios?.length || item.networks?.length ? {
+      resolution: item.overlay_summary?.resolution,
+      hdr: item.overlay_summary?.hdr,
+      audio: item.overlay_summary?.audio,
+      audioChannels: item.overlay_summary?.audio_channels,
+      videoCodec: item.overlay_summary?.video_codec,
+      container: item.overlay_summary?.container,
+      aspectRatio: item.overlay_summary?.aspect_ratio,
+      releaseType: item.overlay_summary?.release_type,
+      edition: item.overlay_summary?.edition,
+      multiAudio: item.overlay_summary?.multi_audio,
+      multiSub: item.overlay_summary?.multi_sub,
+      ratingRtCritic: item.rating_rt_critic,
+      ratingRtAudience: item.rating_rt_audience,
+      originalLanguage: item.original_language,
+      studio: item.studios?.find(Boolean),
+      network: item.networks?.find(Boolean)
+    } : undefined,
     RuntimeMinutes: typeof runtimeSeconds === "number" ? Math.round(runtimeSeconds / 60) : undefined,
     RunTimeTicks: typeof runtimeSeconds === "number" ? runtimeSeconds * 10_000_000 : undefined,
     PosterUrl: item.poster_url ?? item.still_url,
