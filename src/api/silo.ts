@@ -367,7 +367,39 @@ type NativeHomeLayout = {
     featured?: boolean;
     item_limit?: number;
   }>;
+  /** With `include_items`: the first sections with their cards, as `/home/sections/{id}/items` answers them (#178). */
+  included_sections?: Array<NativeHomeSectionResponse & { id?: string | number }>;
 };
+
+/**
+ * What Home's layout can carry (`/home/capabilities`, #178): the first `includeItemsMax` rows'
+ * cards in the same answer, each capped at `rowItemLimitMax` cards. Cached per server; an older
+ * server without them gets the separate requests as before.
+ */
+const homeCapabilities = new Map<string, Promise<{ includeItemsMax: number; rowItemLimitMax: number }>>();
+function getHomeCapabilities(session: Session) {
+  const key = normalizeServerUrl(session.serverUrl);
+  let cached = homeCapabilities.get(key);
+  if (!cached) {
+    cached = requestV2<{ state?: string; include_items_max?: number; row_item_limit_max?: number }>(session, "/home/capabilities")
+      .then(caps => caps.state === "available"
+        ? { includeItemsMax: Math.max(0, caps.include_items_max ?? 0), rowItemLimitMax: Math.max(0, caps.row_item_limit_max ?? 0) }
+        : { includeItemsMax: 0, rowItemLimitMax: 0 })
+      .catch(() => ({ includeItemsMax: 0, rowItemLimitMax: 0 }));
+    homeCapabilities.set(key, cached);
+  }
+  return cached;
+}
+
+/** A Home row shows at most this many cards before Explore all (MediaRail's SECTION_ROW_MAX_ITEMS). */
+const HOME_ROW_CARDS = 20;
+
+/** Adds query parameters to a query string that may be empty or start with "?". */
+function withQuery(query: string, params: Array<[string, string | number]>) {
+  const extra = params.map(([name, value]) => `${name}=${encodeURIComponent(String(value))}`).join("&");
+  if (!extra) return query;
+  return query ? `${query}&${extra}` : `?${extra}`;
+}
 
 type NativeHomeSectionResponse = {
   items?: NativeItem[];
@@ -776,21 +808,35 @@ async function browseArtworkParams(session: Session): Promise<Array<[string, str
 }
 
 export async function getHomeRails(session: Session): Promise<HomeRail[]> {
-  const [layout, artwork] = await Promise.all([
-    requestV2<NativeHomeLayout>(session, "/home/layout"),
-    homeArtworkQuery(session)
-  ]);
+  const started = performance.now();
+  const [artwork, capabilities] = await Promise.all([homeArtworkQuery(session), getHomeCapabilities(session)]);
+  // #178: one request for the layout and the first rows' cards where the server can, each row
+  // capped at what it shows before Explore all. Rows it leaves out are read one by one, as before.
+  const rowLimit = capabilities.rowItemLimitMax > 0 ? Math.min(HOME_ROW_CARDS, capabilities.rowItemLimitMax) : 0;
+  const rowLimitParams: Array<[string, number]> = rowLimit ? [["item_limit", rowLimit]] : [];
+  const layoutQuery = capabilities.includeItemsMax > 0
+    ? withQuery(artwork, [["include_items", capabilities.includeItemsMax], ...rowLimitParams])
+    : "";
+  const layout = await requestV2<NativeHomeLayout>(session, `/home/layout${layoutQuery}`);
   const sections = layout.sections ?? [];
+  const included = new Map((layout.included_sections ?? []).filter(entry => entry.id != null).map(entry => [String(entry.id), entry]));
   const cardArtwork = await wideCardArtworkQuery(session);
+  const sectionQuery = withQuery(artwork, rowLimitParams);
 
   const results = await Promise.allSettled(
-    sections.map((section) =>
-      requestV2<NativeHomeSectionResponse>(
+    sections.map((section) => included.get(String(section.id))
+      ?? requestV2<NativeHomeSectionResponse>(
         session,
-        `/home/sections/${encodeURIComponent(String(section.id))}/items${artwork}`
+        `/home/sections/${encodeURIComponent(String(section.id))}/items${sectionQuery}`
       )
     )
   );
+  console.info("[Hopper] home rails", {
+    ms: Math.round(performance.now() - started),
+    sections: sections.length,
+    included: sections.filter(section => included.has(String(section.id))).length,
+    rowLimit
+  });
   // Wide rails draw 410px cards but share a URL sized for the 1230px hero: ask for a second,
   // card-sized copy so each card decodes a fraction of the pixels. Best effort.
   const cardResults = await Promise.allSettled(
