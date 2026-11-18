@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { getCatalogFilterOptions, getLibraryItemsPage, getShuffleCapability, imageUrl, libraryHasItems } from "../api/silo";
+import { getCatalogFilterOptions, getLibraryItemsPage, getRatingsCapability, getShuffleCapability, imageUrl, libraryHasItems } from "../api/silo";
 import type { CatalogFilterOptions, CatalogQueryGroup, CatalogScope } from "../api/silo";
 import { MediaCard } from "../components/MediaCard";
 import { browsePrefsKey, readBrowsePrefs, readPreserve, writeBrowsePrefs, writePreserve } from "../core/browsePrefs";
@@ -11,6 +11,7 @@ import type { Session, SiloItem, SiloLibrary } from "../types";
 import { LoadingState } from "../components/LoadingState";
 import { isTvDevice } from "../core/artwork";
 import { applyGridPaintWindow } from "../navigation/gridWindow";
+import { SORT_FIELDS, sortDirectionLabel, sortOptions, sortRelevance } from "../core/catalogSort";
 
 type BrowseSort = BrowseSortKey;
 type SortOrder = "asc" | "desc";
@@ -18,49 +19,31 @@ type BrowsePanel = "sort" | "filter" | null;
 type FilterSelection = Record<string, string[]>;
 type SortOption = BrowseSortOption;
 
-const videoSortOptions: SortOption[] = [
-  { id: "title", label: "Title", order: "asc" },
-  { id: "added_at", label: "Date Added", order: "desc" },
-  { id: "release_date", label: "Release Date", order: "desc" },
-  { id: "year", label: "Year", order: "desc" },
-  { id: "rating_imdb", label: "Rating", order: "desc" },
-  { id: "runtime", label: "Runtime", order: "desc" },
-  { id: "resolution", label: "Resolution", order: "desc" }
-];
-const audiobookSortOptions: SortOption[] = [
-  { id: "title", label: "Title", order: "asc" },
-  { id: "author", label: "Author", order: "asc" },
-  { id: "narrator", label: "Narrator", order: "asc" },
-  { id: "series", label: "Series", order: "asc" },
-  { id: "added_at", label: "Date Added", order: "desc" },
-  { id: "runtime", label: "Runtime", order: "desc" }
-];
-
 const shuffleLibraryTypes = ["movie", "movies", "series", "show", "shows", "tv", "mixed"];
 
 function isAudiobookLibrary(library: SiloLibrary) {
   return /audio.?book/i.test(library.type);
 }
 
-function getSortOptions(libraries: SiloLibrary[]): SortOption[] {
-  if (libraries.length && libraries.every(isAudiobookLibrary)) return audiobookSortOptions;
-  if (libraries.some(isAudiobookLibrary)) {
-    return [...videoSortOptions, ...audiobookSortOptions.filter(option => !videoSortOptions.some(video => video.id === option.id))];
-  }
-  return videoSortOptions;
+/** Sorts the TV can also order by itself, for merging several libraries' pages (`compareItems`). */
+const CLIENT_COMPARABLE = new Set(["title", "added_at", "release_date", "year", "content_rating", "runtime", "rating_imdb", "rating_tmdb", "resolution", "author", "narrator", "series"]);
+
+/**
+ * The sort list for these libraries (#174): the web's options, filtered by library type as on the
+ * web and Android TV. Several libraries are merged on the TV, so only sorts it can compare are
+ * offered then. The sort in use (`keep`) always stays listed.
+ */
+function getSortOptions(libraries: SiloLibrary[], mediaType: string | undefined, shownRatingSources: ReadonlySet<string> | null, keep?: string): SortOption[] {
+  const fields = sortOptions(sortRelevance(libraries.map(library => library.type), mediaType), { includePersonalized: true, shownRatingSources, keep });
+  return fields
+    .filter(field => libraries.length <= 1 || CLIENT_COMPARABLE.has(field.id) || field.id === keep)
+    .map(field => ({ id: field.id, label: field.label, order: field.order }));
 }
 
 function restoreBrowsePrefs(key: string | null, libraries: SiloLibrary[]) {
   const saved = readBrowsePrefs(key);
-  return saved && getSortOptions(libraries).some(option => option.id === saved.sort) ? saved : null;
-}
-
-function sortDirectionLabel(sort: BrowseSort, order: SortOrder) {
-  if (sort === "collection") return "Default";
-  if (["title", "author", "narrator", "series"].includes(sort)) return order === "asc" ? "A–Z" : "Z–A";
-  if (["release_date", "year", "added_at"].includes(sort)) return order === "asc" ? "Oldest" : "Newest";
-  if (sort === "runtime") return order === "asc" ? "Shortest" : "Longest";
-  return order === "asc" ? "Lowest" : "Highest";
+  // An RT sort is kept while the ratings capability loads; a field the server no longer has is dropped.
+  return saved && SORT_FIELDS.some(field => field.id === saved.sort) && (libraries.length <= 1 || CLIENT_COMPARABLE.has(saved.sort)) ? saved : null;
 }
 
 function buildFilterGroups(selection: FilterSelection): CatalogQueryGroup[] {
@@ -148,6 +131,8 @@ function compareItems(a: SiloItem, b: SiloItem, sort: BrowseSort, order: SortOrd
   else if (sort === "release_date") comparison = textCompare(a.ReleaseDate, b.ReleaseDate);
   else if (sort === "year") comparison = (a.ProductionYear ?? 0) - (b.ProductionYear ?? 0);
   else if (sort === "rating_imdb") comparison = (a.ImdbRating ?? a.TmdbRating ?? 0) - (b.ImdbRating ?? b.TmdbRating ?? 0);
+  else if (sort === "rating_tmdb") comparison = (a.TmdbRating ?? 0) - (b.TmdbRating ?? 0);
+  else if (sort === "content_rating") comparison = textCompare(a.ContentRating, b.ContentRating);
   else if (sort === "runtime") comparison = (a.RuntimeMinutes ?? 0) - (b.RuntimeMinutes ?? 0);
   else if (sort === "resolution") comparison = textCompare(a.Resolution, b.Resolution);
   else if (sort === "author") comparison = textCompare(a.Author, b.Author);
@@ -280,11 +265,17 @@ export function LibraryScreen({
   const retryRef = useRef<HTMLButtonElement>(null);
   const activeLibraries = selectableLibraries ? libraries.filter(library => selectedLibraryIds.includes(library.id)) : libraries;
   const accepts = (item: SiloItem) => !itemTypes?.length || itemTypes.includes(item.Type ?? "");
+  const [shownRatingSources, setShownRatingSources] = useState<ReadonlySet<string> | null>(null);
+  useEffect(() => {
+    let alive = true;
+    getRatingsCapability(session).then(capability => { if (alive) setShownRatingSources(new Set(capability.sources)); }).catch(() => { if (alive) setShownRatingSources(new Set()); });
+    return () => { alive = false; };
+  }, [session]);
   const availableSortOptions = useMemo(
     () => collection
-      ? [{ id: "collection" as const, label: "Collection Order", order: "asc" as const }, ...getSortOptions(activeLibraries)]
-      : getSortOptions(activeLibraries),
-    [activeLibraries, collection]
+      ? [{ id: "collection", label: "Collection Order", order: "asc" as const }, ...getSortOptions(activeLibraries, itemTypes?.length === 1 ? itemTypes[0] : undefined, shownRatingSources, sort)]
+      : getSortOptions(activeLibraries, itemTypes?.length === 1 ? itemTypes[0] : undefined, shownRatingSources, sort),
+    [activeLibraries, collection, itemTypes?.join(","), shownRatingSources, sort]
   );
   const catalogGroups = useMemo(() => buildFilterGroups(filters), [filters]);
   const requestGroups = useMemo(() => presetGroups?.length ? [...presetGroups, ...catalogGroups] : catalogGroups, [presetGroups, catalogGroups]);

@@ -1709,6 +1709,28 @@ export async function skipShuffle(session: Session, shuffleId: string, nextConte
   }));
 }
 
+/**
+ * The rating sources the server shows (`/capabilities/ratings`): imdb and tmdb, then any a
+ * metadata plugin adds and an administrator turned on (Rotten Tomatoes). Sorts by a source the
+ * server doesn't show are left out (#174). The answer is cached per server and profile.
+ */
+const ratingsCapabilities = new Map<string, Promise<{ sources: string[] }>>();
+export function getRatingsCapability(session: Session): Promise<{ sources: string[] }> {
+  const key = `${session.serverUrl}|${session.profileId ?? ""}`;
+  let cached = ratingsCapabilities.get(key);
+  if (!cached) {
+    cached = requestV2<{ state?: string; allowed?: boolean; sources?: Array<{ source?: string }> }>(session, "/capabilities/ratings")
+      .then(response => ({
+        sources: response.state === "available" && response.allowed !== false
+          ? (response.sources ?? []).map(entry => entry.source ?? "").filter(Boolean)
+          : []
+      }));
+    cached.catch(() => ratingsCapabilities.delete(key));
+    ratingsCapabilities.set(key, cached);
+  }
+  return cached;
+}
+
 export async function getShuffleCapability(session: Session): Promise<{ available: boolean; scopeKinds: string[] }> {
   const response = await requestV2<{ state?: string; allowed?: boolean; scope_kinds?: string[] }>(session, "/shuffles/capabilities");
   return {
