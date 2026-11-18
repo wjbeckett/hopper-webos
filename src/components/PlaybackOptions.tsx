@@ -210,19 +210,22 @@ export function choiceSummary(detail: WatchDetail | null, choices: PlaybackChoic
   };
 }
 
-export function useWatchDetail(session: Session, item: SiloItem | undefined) {
+/** `refresh`: a change reads the detail again (#165), keeping the current one on screen meanwhile. */
+export function useWatchDetail(session: Session, item: SiloItem | undefined, refresh = 0) {
   const [detail, setDetail] = useState<WatchDetail | null>(null);
   const id = item?.Id;
+  const shownId = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (!item) { setDetail(null); return; }
+    if (!item) { shownId.current = undefined; setDetail(null); return; }
     let alive = true;
-    setDetail(null);
+    if (shownId.current !== item.Id) setDetail(null);
+    shownId.current = item.Id;
     // Fresh read on open (resume position may have moved); the player then reuses this response.
     getWatchDetail(session, item, { fresh: true }).then(next => { if (alive) setDetail(next); }).catch(() => undefined);
     // Play is likely next: settle the installation id and load the HLS module now.
     prewarmPlayback(session);
     return () => { alive = false; };
-  }, [session, id]);
+  }, [session, id, refresh]);
   return detail;
 }
 

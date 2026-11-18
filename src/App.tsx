@@ -41,7 +41,7 @@ import { SettingsScreen } from "./screens/SettingsScreen";
 import { SectionBrowseScreen, type SectionBrowseArgs } from "./screens/SectionBrowseScreen";
 import type { AudiobookGroup } from "./api/silo";
 import { invalidateWatchDetail, type PlaybackChoices } from "./api/playback";
-import { applyResumeState, applyWatchedState, publishWatchState } from "./core/watchState";
+import { applyResumeState, applyServerUserData, applyWatchedState, publishPlaybackSettled, publishWatchState } from "./core/watchState";
 import { firstEpisodeOfSeason, nextEpisodeAfter } from "./core/episodeNavigation";
 import { publishRailsChanged } from "./core/watchState";
 import { connectEventsSocket } from "./api/events";
@@ -661,7 +661,28 @@ export default function App() {
     }
   }
 
-  function leavePlayer(current: Extract<DetailRoute, { name: "player" }>) {
+  /**
+   * After the player (#165): the page shows the exit position at once, then the server's answer
+   * once the player's stop has landed. The server can differ: a stop past the watched threshold
+   * marks the title watched, and one under the minimum resume share keeps the earlier point.
+   */
+  function settleAfterPlayer(current: Extract<DetailRoute, { name: "player" }>, stopped: Promise<void>) {
+    // A phone profile's playback belongs to that profile; the TV's pages don't show it.
+    if (current.borrowed) return;
+    const owner = sessionRef.current;
+    const item = current.item;
+    void stopped.then(async () => {
+      if (!owner || sessionRef.current !== owner) return;
+      try {
+        const fresh = await getCatalogItem(owner, item.Id);
+        if (sessionRef.current === owner) publishWatchState(applyServerUserData(item, fresh));
+      } catch { /* The page keeps the exit position, as Android TV does when the read fails. */ }
+      if (sessionRef.current === owner) publishPlaybackSettled([item.Id, ...(item.SeriesId ? [item.SeriesId] : [])]);
+    });
+  }
+
+  /** `shown`: the title as the page should show it now; `landOn`: the episode to return to. */
+  function leavePlayer(current: Extract<DetailRoute, { name: "player" }>, shown = current.item, landOn?: SiloItem) {
     // A phone profile's title may not be one the TV's profile can open: back to the TV's screen.
     if (current.borrowed) {
       setRoute({ name: "main" });
@@ -673,8 +694,8 @@ export default function App() {
       return;
     }
     setRoute(current.returnTo
-      ? { name: "series", item: current.returnTo.series, selectedEpisode: current.returnTo.selectedEpisode }
-      : { name: "details", item: current.item });
+      ? { name: "series", item: current.returnTo.series, selectedEpisode: landOn ?? shown }
+      : { name: "details", item: shown });
   }
 
   /**
@@ -821,13 +842,17 @@ export default function App() {
           const parentSeries = route.returnTo?.series ?? { Id: route.item.SeriesId ?? "", Name: route.item.SeriesName ?? "Series", Type: "Series" };
           setRoute({ name: "player", item: next, startPosition: 0, autoAdvanceCount, returnTo: { series: parentSeries, selectedEpisode: next }, borrowed });
         }}
-        onBack={(position) => {
-          publishOwn(applyResumeState(route.item, position));
-          leavePlayer(route);
+        onBack={(position, exit) => {
+          const shown = applyResumeState(route.item, position);
+          publishOwn(shown);
+          settleAfterPlayer(route, exit.stopped);
+          leavePlayer(route, shown, exit.landOn);
         }}
-        onEnded={route.shuffleId ? () => void advanceShuffleRoute(route.shuffleId!, route.item) : () => {
-          publishOwn(applyWatchedState(route.item, true));
-          leavePlayer(route);
+        onEnded={route.shuffleId ? () => void advanceShuffleRoute(route.shuffleId!, route.item) : (exit) => {
+          const shown = applyWatchedState(route.item, true);
+          publishOwn(shown);
+          settleAfterPlayer(route, exit.stopped);
+          leavePlayer(route, shown);
         }}
       />
       <PhoneApproval />
