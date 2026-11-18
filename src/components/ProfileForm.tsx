@@ -21,6 +21,8 @@ export type ProfileFormState = {
   selectedAvatarSeed: string | null;
   avatarBatch: number;
   access: AccessLimits;
+  /** Show the "Allow requests" switch: the server has it (#172). */
+  requestsSupported?: boolean;
   libraries: LibrariesState;
   pinEnabled: boolean;
   pin: string;
@@ -39,6 +41,7 @@ export type ProfileFormCallbacks = {
   onContentRatingSelected: (rating: string | null) => void;
   onLibraryRestrictionsToggled: (restricted: boolean) => void;
   onLibraryToggled: (id: number, allowed: boolean) => void;
+  onRequestsToggled?: (allowed: boolean) => void;
   onRetryLibraries: () => void;
   onPinToggled: (enabled: boolean) => void;
   onPinChanged: (value: string) => void;
@@ -290,6 +293,23 @@ export function ProfileForm({ state, callbacks }: { state: ProfileFormState; cal
             </div>
             {access.libraryRestrictionsEnabled ? <LibraryChoices state={state} callbacks={callbacks} /> : null}
           </section>
+
+          {state.requestsSupported ? (
+            <button
+              type="button"
+              data-tv-focusable="true"
+              role="switch"
+              aria-checked={access.requestsAllowed}
+              className="profile-form-switch"
+              onClick={() => callbacks.onRequestsToggled?.(!access.requestsAllowed)}
+            >
+              <span>
+                <strong>Allow requests</strong>
+                <small>Can request titles that aren't in the library</small>
+              </span>
+              <span className={`profile-form-toggle ${access.requestsAllowed ? "on" : ""}`} aria-hidden="true" />
+            </button>
+          ) : null}
 
           {state.error ? <div className="error" role="alert">{state.error}</div> : null}
           <button

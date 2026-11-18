@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import { TvButton } from "../components/TvButton";
 import {
   cancelMediaRequest,
+  removeFailedRequest,
   createMediaRequest,
   getMyRequests,
   getRequestDetail,
@@ -36,6 +38,10 @@ export function RequestsScreen({ session }: { session: Session }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [cancelingId, setCancelingId] = useState("");
+  const [removeSupported, setRemoveSupported] = useState(false);
+  /** The failed request the viewer asked to remove, waiting for the confirmation (#172). */
+  const [removeCandidate, setRemoveCandidate] = useState<SiloMediaRequest | null>(null);
+  const [removingId, setRemovingId] = useState("");
   const [actionError, setActionError] = useState("");
 
   const visibleResults = useMemo(() => searchResults ?? [], [searchResults]);
@@ -50,6 +56,7 @@ export function RequestsScreen({ session }: { session: Session }) {
         const permitted = status.requests_enabled && status.allowed === true && status.state === "available";
         setAvailable(permitted);
         setFollowSupported(status.follow_supported === true);
+        setRemoveSupported(status.remove_failed_supported === true);
         if (!permitted) return;
         const [discover, mine] = await Promise.all([getRequestsDiscover(session), getMyRequests(session)]);
         if (!alive) return;
@@ -139,6 +146,54 @@ export function RequestsScreen({ session }: { session: Session }) {
     }
   }
 
+  // The confirmation takes Back (keep the request) before the screen does.
+  useEffect(() => {
+    if (!removeCandidate) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (!["Escape", "Backspace", "Back", "GoBack", "BrowserBack"].includes(event.key) && event.keyCode !== 461 && event.keyCode !== 10009) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      keepRequest();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [removeCandidate]);
+
+  function keepRequest() {
+    const id = removeCandidate?.id;
+    setRemoveCandidate(null);
+    if (id) requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-request-remove="${CSS.escape(id)}"]`)?.focus());
+  }
+
+  /** Android TV and the web: removes a failed request that delivered nothing, after asking. */
+  async function removeRequest(request: SiloMediaRequest) {
+    setRemoveCandidate(null);
+    setRemovingId(request.id);
+    setActionError("");
+    setNotice("");
+    // Focus moves to the row that takes its place, not to the top bar.
+    const rows = Array.from(document.querySelectorAll<HTMLElement>(".request-row-title"));
+    const at = rows.findIndex(row => row.closest("[data-request-id]")?.getAttribute("data-request-id") === request.id);
+    try {
+      const result = await removeFailedRequest(session, request.id);
+      if (result === "removed") {
+        setRequests(current => current.filter(item => item.id !== request.id));
+        setNotice("Request removed");
+        requestAnimationFrame(() => {
+          const remaining = Array.from(document.querySelectorAll<HTMLElement>(".request-row-title"));
+          (remaining[Math.min(at, remaining.length - 1)] ?? remaining[0])?.focus();
+        });
+      } else {
+        setActionError("This request changed since the list loaded, so nothing was removed.");
+        setRequests(await getMyRequests(session));
+      }
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause.message : "Could not remove this request.");
+    } finally {
+      setRemovingId("");
+    }
+  }
+
   if (selected) {
     return (
       <main className="content-screen requests-screen" onKeyDownCapture={event => {
@@ -201,7 +256,7 @@ export function RequestsScreen({ session }: { session: Session }) {
       ) : tab === "mine" ? requests.length ? (
         <div className="request-list">
           {requests.map(request => (
-            <article key={request.id} className="request-row">
+            <article key={request.id} className="request-row" data-request-id={request.id}>
               <div>
                 <button className="request-row-title" data-tv-focusable="true" onClick={() => void openItem({
                   mediaType: request.mediaType,
@@ -218,6 +273,7 @@ export function RequestsScreen({ session }: { session: Session }) {
                 <small>{request.year ?? request.mediaType} · {requestStateLabel(request.state, request.status)}</small>
               </div>
               {request.outcome === "active" ? <button data-tv-focusable="true" className="tv-button secondary" disabled={cancelingId === request.id} onClick={() => void cancelRequest(request)}>{cancelingId === request.id ? "Cancelling…" : "Cancel request"}</button> : null}
+              {removeSupported && request.removable ? <button data-tv-focusable="true" data-request-remove={request.id} className="tv-button secondary" disabled={removingId === request.id} onClick={() => setRemoveCandidate(request)}>{removingId === request.id ? "Removing…" : "Remove request"}</button> : null}
             </article>
           ))}
         </div>
@@ -235,6 +291,18 @@ export function RequestsScreen({ session }: { session: Session }) {
           </section>
         ))
       )}
+      {removeCandidate ? (
+        <div className="details-more-scrim" data-modal="true" onClick={keepRequest}>
+          <div className="details-more settings-confirm" role="alertdialog" aria-label="Remove this request" onClick={event => event.stopPropagation()}>
+            <h2>Remove this request?</h2>
+            <p>{removeCandidate.title}</p>
+            <div className="settings-confirm-actions">
+              <TvButton className="secondary" autoFocus onClick={keepRequest}>Keep request</TvButton>
+              <TvButton className="destructive" onClick={() => void removeRequest(removeCandidate)}>Remove request</TvButton>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

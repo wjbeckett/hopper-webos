@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { deleteProfile, getHouseholdProfiles, profileErrorMessage, verifyProfilePin, type HouseholdManager } from "../api/silo";
 import { focusFirstContentCard } from "../navigation/spatial";
 import type { Session, SiloProfile } from "../types";
@@ -13,7 +13,9 @@ function householdPrimary(profiles: SiloProfile[]): SiloProfile | undefined {
 const isBackKey = (event: KeyboardEvent) =>
   ["Escape", "Backspace", "Back", "GoBack", "BrowserBack"].includes(event.key) || event.keyCode === 461 || event.keyCode === 10009;
 
-export function ProfileSelectionScreen({ session, onSelect, onChangeServer, onSignOut, onActiveProfileDeleted, fullScreen = false }: {
+export function ProfileSelectionScreen({ session, onSelect, onChangeServer, onSignOut, onActiveProfileDeleted, fullScreen = false, startAdding = false }: {
+  /** Opened from the profile menu's Add Profile (#176): go straight to adding one. */
+  startAdding?: boolean;
   /** The deleted profile was this device's selection; its token is now dead server-side. */
   onActiveProfileDeleted?: () => void;
   session: Session;
@@ -49,6 +51,13 @@ export function ProfileSelectionScreen({ session, onSelect, onChangeServer, onSi
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [session, reloadToken]);
+
+  const addingStarted = useRef(false);
+  useEffect(() => {
+    if (!startAdding || loading || addingStarted.current || !canManage) return;
+    addingStarted.current = true;
+    requestAddProfile();
+  }, [startAdding, loading, canManage]);
 
   useEffect(() => {
     if (loading || selected || editor) return;

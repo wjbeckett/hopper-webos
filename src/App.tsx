@@ -162,6 +162,8 @@ export default function App() {
   const [libraries, setLibraries] = useState<SiloLibrary[]>([]);
   const [librariesLoaded, setLibrariesLoaded] = useState(false);
   const [requestsAvailable, setRequestsAvailable] = useState<boolean | undefined>();
+  /** The profiles screen was opened from the profile menu's Add Profile (#176). */
+  const [addingProfile, setAddingProfile] = useState(false);
   const [profileError, setProfileError] = useState("");
   const [profileHydrated, setProfileHydrated] = useState(false);
   const [route, setRoute] = useState<DetailRoute>({ name: "main" });
@@ -908,11 +910,12 @@ export default function App() {
         onChangeServer={changeServer}
         onSignOut={signOut}
         onActiveProfileDeleted={clearDeletedProfile}
+        startAdding={addingProfile}
       />
     );
   }
   else if (section === "settings") {
-    body = <SettingsScreen session={session} onSignOut={signOut} onChangeServer={changeServer} onSwitchProfile={() => setSection("profiles")} />;
+    body = <SettingsScreen session={session} onSignOut={signOut} onChangeServer={changeServer} onSwitchProfile={() => { setAddingProfile(false); setSection("profiles"); }} />;
   } else if (section === "library") {
     body = <LibraryScreen key="all" session={session} libraries={libraries} selectableLibraries onOpen={openItem} onShuffle={startShuffle} />;
   }   else if (section === "calendar") body = <CalendarScreen session={session} onOpen={openItem} />;
@@ -1024,10 +1027,10 @@ export default function App() {
           setRoute({ name: "main" });
         }}
         onProfile={() => setSection("settings")}
-        onFavorites={() => { setSection("favorites"); setRoute({ name: "main" }); }}
-        onWatchlist={() => { setSection("watchlist"); setRoute({ name: "main" }); }}
+        onRequests={() => { setSection("requests"); setRoute({ name: "main" }); }}
         onHistory={() => { setSection("history"); setRoute({ name: "main" }); }}
-        onProfiles={() => { setSection("profiles"); setRoute({ name: "main" }); }}
+        onProfiles={() => { setAddingProfile(false); setSection("profiles"); setRoute({ name: "main" }); }}
+        onAddProfile={() => { setAddingProfile(true); setSection("profiles"); setRoute({ name: "main" }); }}
         onSignOut={signOut}
         onChangeServer={changeServer}
       />}
