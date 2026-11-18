@@ -142,6 +142,8 @@ export type SiloMediaRequest = {
   outcome: string;
   state?: string;
   createdAt: string;
+  /** Failed and delivered nothing: the requester may remove it (#172). */
+  removable?: boolean;
 };
 
 /** A movie box set (#171, silo-server #2784): a TMDB collection's movies in one library, in release order. */

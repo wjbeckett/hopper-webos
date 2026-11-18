@@ -68,9 +68,51 @@ async function jsonRequest<T>(
   return response.json() as Promise<T>;
 }
 
+/**
+ * A sign-in request's binding (#173; silo-server session binding, Android TV's
+ * PairingSessionBinding): `binding` goes on device/start and `secret` on every poll, so only
+ * the TV holding the secret can collect the tokens of a request the phone approved. Both are
+ * base64url without padding; `binding` is SHA-256 of the 32 secret bytes. Never logged.
+ */
+export type DeviceLoginBinding = { binding: string; secret: string };
+
+const base64Url = (bytes: Uint8Array) => {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+};
+
+/** The binding for these 32 secret bytes, or null where WebCrypto is missing (an insecure page). */
+export async function deviceLoginBindingOf(secret: Uint8Array): Promise<DeviceLoginBinding | null> {
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle || secret.length !== 32) return null;
+  const hash = new Uint8Array(await subtle.digest("SHA-256", secret as Uint8Array<ArrayBuffer>));
+  return { binding: base64Url(hash), secret: base64Url(secret) };
+}
+
+export async function newDeviceLoginBinding(): Promise<DeviceLoginBinding | null> {
+  if (!globalThis.crypto?.getRandomValues) return null;
+  return deviceLoginBindingOf(globalThis.crypto.getRandomValues(new Uint8Array(32))).catch(() => null);
+}
+
+/**
+ * The binding to use with this server, or null: only over HTTPS (over plain HTTP the attacker it
+ * defends against could read the secret) and only when the server checks it (`session_binding`).
+ * A capability that can't be read means no, as on Android TV.
+ */
+export async function bindingForServer(serverUrl: string, binding: DeviceLoginBinding | null): Promise<DeviceLoginBinding | null> {
+  if (!binding || !/^https:\/\//i.test(serverUrl.trim())) return null;
+  try {
+    return (await getDeviceLoginCapability(serverUrl)).session_binding === true ? binding : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function startDeviceLogin(
   serverUrl: string,
-  deviceName = "LG webOS TV"
+  deviceName = "LG webOS TV",
+  binding?: DeviceLoginBinding | null
 ): Promise<DeviceLoginStart> {
   return jsonRequest<DeviceLoginStart>(
     serverUrl,
@@ -79,7 +121,8 @@ export async function startDeviceLogin(
       method: "POST",
       body: JSON.stringify({
         device_name: deviceName,
-        device_platform: "webOS"
+        device_platform: "webOS",
+        ...(binding ? { binding: binding.binding } : {})
       })
     }
   );
@@ -139,14 +182,15 @@ export async function getOrStartDeviceLogin(
 
 export async function pollDeviceLogin(
   serverUrl: string,
-  deviceCode: string
+  deviceCode: string,
+  binding?: DeviceLoginBinding | null
 ): Promise<DeviceLoginPoll> {
   return jsonRequest<DeviceLoginPoll>(
     serverUrl,
     "/api/v2/auth/device/poll",
     {
       method: "POST",
-      body: JSON.stringify({ device_code: deviceCode })
+      body: JSON.stringify({ device_code: deviceCode, ...(binding ? { binding_secret: binding.secret } : {}) })
     }
   );
 }
@@ -190,6 +234,8 @@ export type DeviceLoginCapability = {
   allowed?: boolean;
   remote_playback_handoff?: boolean;
   protocol_versions?: number[];
+  /** device/start takes `binding` and device/poll requires its `binding_secret` (#173). */
+  session_binding?: boolean;
 };
 
 export type RemotePlaybackStart = DeviceLoginStart & { client_purpose?: string; temporary?: boolean };

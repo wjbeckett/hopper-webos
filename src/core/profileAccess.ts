@@ -12,9 +12,12 @@ export type AccessLimits = {
   maxContentRating: string | null;
   libraryRestrictionsEnabled: boolean;
   allowedLibraryIds: number[];
+  /** The profile may make and follow requests (#172, `requests_allowed`). */
+  requestsAllowed: boolean;
   /** Form-only flags: a choice made here, which Child then leaves alone. */
   ratingTouched: boolean;
   librariesTouched: boolean;
+  requestsTouched: boolean;
 };
 
 export const EMPTY_ACCESS: AccessLimits = {
@@ -22,8 +25,10 @@ export const EMPTY_ACCESS: AccessLimits = {
   maxContentRating: null,
   libraryRestrictionsEnabled: false,
   allowedLibraryIds: [],
+  requestsAllowed: true,
   ratingTouched: false,
-  librariesTouched: false
+  librariesTouched: false,
+  requestsTouched: false
 };
 
 export function withChild(access: AccessLimits, child: boolean): AccessLimits {
@@ -35,8 +40,14 @@ export function withChild(access: AccessLimits, child: boolean): AccessLimits {
     isChild: true,
     maxContentRating: fillRating ? DEFAULT_CHILD_CONTENT_RATING : access.maxContentRating,
     libraryRestrictionsEnabled: access.libraryRestrictionsEnabled || fillLibraries,
-    allowedLibraryIds: fillLibraries ? [] : access.allowedLibraryIds
+    allowedLibraryIds: fillLibraries ? [] : access.allowedLibraryIds,
+    // As on the web: a child profile starts blocked from requests unless the switch was set here.
+    requestsAllowed: access.requestsTouched ? access.requestsAllowed : false
   };
+}
+
+export function withRequests(access: AccessLimits, allowed: boolean): AccessLimits {
+  return { ...access, requestsAllowed: allowed, requestsTouched: true };
 }
 
 export function withLibrary(access: AccessLimits, id: number, allowed: boolean): AccessLimits {
@@ -63,8 +74,9 @@ export function needsLibrary(limits: AccessLimits, loaded: AccessLimits | null, 
 }
 
 /** POST body members for a new profile; create omits what it doesn't set. */
-export function createAccessFields(limits: AccessLimits): Record<string, unknown> {
+export function createAccessFields(limits: AccessLimits, requestsSupported = false): Record<string, unknown> {
   const fields: Record<string, unknown> = {};
+  if (requestsSupported && !limits.requestsAllowed) fields.requests_allowed = false;
   if (limits.isChild) fields.is_child = true;
   if (limits.maxContentRating) fields.max_content_rating = limits.maxContentRating;
   if (limits.libraryRestrictionsEnabled) {
@@ -79,8 +91,9 @@ export function createAccessFields(limits: AccessLimits): Record<string, unknown
  * when changed from what was loaded (null clears the rating). A changed
  * allowlist keeps only assignable libraries.
  */
-export function updateAccessFields(limits: AccessLimits, loaded: AccessLimits, assignable: number[] | null): Record<string, unknown> {
+export function updateAccessFields(limits: AccessLimits, loaded: AccessLimits, assignable: number[] | null, requestsSupported = false): Record<string, unknown> {
   const fields: Record<string, unknown> = { is_child: limits.isChild };
+  if (requestsSupported && limits.requestsAllowed !== loaded.requestsAllowed) fields.requests_allowed = limits.requestsAllowed;
   if (limits.maxContentRating !== loaded.maxContentRating) fields.max_content_rating = limits.maxContentRating;
   if (limits.libraryRestrictionsEnabled !== loaded.libraryRestrictionsEnabled) {
     fields.library_restrictions_enabled = limits.libraryRestrictionsEnabled;

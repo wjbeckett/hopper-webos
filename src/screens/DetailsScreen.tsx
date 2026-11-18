@@ -19,6 +19,8 @@ type Props = {
   session: Session;
   item: SiloItem;
   onPlay: (startPosition: number | undefined, choices: PlaybackChoices) => void;
+  /** A pick from the More Like This rail (#177). */
+  onOpenSimilar: (item: SiloItem) => void;
   onOpen: (item: SiloItem) => void;
   /** The box set row's Explore all: the box set's page (#171). */
   onOpenBoxSet: (boxSetId: string, libraryId: string, title: string) => void;
@@ -57,7 +59,7 @@ function typeLabel(type?: string) {
   return type ?? "";
 }
 
-export function DetailsScreen({ session, item, onPlay, onOpen, onOpenBoxSet, restoreCastIndex, onOpenPerson, onPlayExtra }: Props) {
+export function DetailsScreen({ session, item, onPlay, onOpenSimilar, onOpen, onOpenBoxSet, restoreCastIndex, onOpenPerson, onPlayExtra }: Props) {
   const [detail, setDetail] = useState(item);
   const [posterFailed, setPosterFailed] = useState(false);
   useEffect(() => setPosterFailed(false), [item.Id]);
@@ -342,7 +344,7 @@ export function DetailsScreen({ session, item, onPlay, onOpen, onOpenBoxSet, res
             slide
           />
         ) : null}
-        {similar.length ? <MediaRail rail={{ id: "similar", title: relatedTitle, items: similar }} session={session} onOpen={onOpen} slide /> : null}
+        {similar.length ? <MediaRail rail={{ id: "similar", title: relatedTitle, items: similar }} session={session} onOpen={onOpenSimilar} slide /> : null}
         <FactsSection facts={factsFor(extras)} />
       </div>
       {optionsOpen ? (
