@@ -1,10 +1,10 @@
 import { memo, useContext, useEffect, useRef, useState } from "react";
-import { RecommendationsContext } from "./RecommendationsContext";
 import { createPortal } from "react-dom";
 import { isFavorite, setFavorite, setNotInterested, setWatched } from "../api/silo";
 import { applyWatchedState, publishRailsChanged, publishWatchState, subscribeWatchState } from "../core/watchState";
 import { setWatchlist } from "../api/silo";
 import { ArtworkImage, defaultArtworkKindForType } from "./ArtworkImage";
+import { RecommendationsContext } from "./RecommendationsContext";
 import type { Session, SiloItem } from "../types";
 
 function WatchlistCardRow({ session, item, inWatchlist, onDone }: { session: Session; item: SiloItem; inWatchlist: boolean; onDone: () => void }) {
