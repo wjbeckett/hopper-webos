@@ -145,6 +145,9 @@ Fixes #<number>
 ## Release note
 <One line for the release notes, written for viewers: "New: …", "Changed: …" or "Fixed: …". "None" for changes viewers will not notice. scripts/release-notes.mjs reads it.>
 
+## Highlight
+<Only if this is worth leading the release with: one or two sentences for viewers. The release draft gathers these under Highlights. Delete this section otherwise.>
+
 ## Root cause
 <What was actually going wrong, with file references.>
 
