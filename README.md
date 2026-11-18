@@ -49,7 +49,7 @@ Hopper is an independent, community-built client. It is not affiliated with or e
 - Movies, TV, music and audiobook libraries, with sorting, filters, an A–Z jump bar, collections and shuffle. Music libraries can also be browsed by genre.
 - Details pages with cast and crew, trailers and extras, facts, related titles and theme music. When the server has AI translation set up, a description in another language can be translated, on Details and Series pages and, automatically, for episodes.
 - Series pages with season tabs, episode rails and spoiler protection for unwatched episodes.
-- Search, calendar, watchlist, favorites, history and media requests. Requests are in the profile menu, where you can also remove a request that failed; a household manager can turn requests off for one profile. Home and library pages show rows of collections when the server has them. Movie box sets show on a movie's page and in search, with a page of their own.
+- Search, calendar, watchlist, favorites, history and media requests. Requests are in the profile menu, where you can also remove a request that failed; a household manager can turn requests off for one profile. Home and library pages show rows of collections when the server has them. Rate movies and series with stars, and mark titles Not Interested from the For You and Recommended pages to tune your recommendations. Movie box sets show on a movie's page and in search, with a page of their own.
 - Hold OK on a card for quick actions: mark watched, favorite and watchlist.
 
 **Playback**

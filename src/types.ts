@@ -69,6 +69,10 @@ export type SiloItem = {
   LogoUrl?: string;
   /** A card for a collection on a row of collections (#170), not a title. */
   CollectionCard?: { source: "library" | "user"; libraryId?: number; itemCount: number };
+  /** The profile's own rating, 1 to 10 (#180); undefined when unrated. */
+  UserRating?: number;
+  /** Marked Not interested (#179); undefined where the server doesn't say. */
+  NotInterested?: boolean;
   /** A card for a movie box set (#171), not a title. */
   BoxSet?: { id: string; libraryId: string; movieCount: number; playedCount: number };
   UserData?: {

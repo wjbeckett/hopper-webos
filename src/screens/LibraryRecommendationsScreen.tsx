@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { getLibrariesRails } from "../api/silo";
 import { FeaturedRailsScreen } from "../components/FeaturedRailsScreen";
+import { RecommendationsContext } from "../components/RecommendationsContext";
 import { focusFirstContentCard } from "../navigation/spatial";
 import { useWatchStateRefresh } from "../core/watchState";
 import type { HomeRail, Session, SiloItem, SiloLibrary } from "../types";
@@ -55,6 +56,7 @@ export function LibraryRecommendationsScreen({
   if (loading) return <LoadingState label={`Loading ${title}...`} />;
 
   return (
+    <RecommendationsContext.Provider value={true}>
     <FeaturedRailsScreen
       rails={rails}
       session={session}
@@ -66,5 +68,6 @@ export function LibraryRecommendationsScreen({
       emptyDescription="There aren’t any picks for this library right now."
       restoreKey={`recommended|${session.serverUrl}|${session.profileId ?? ""}|${libraries.map(library => library.id).join(",")}`}
     />
+    </RecommendationsContext.Provider>
   );
 }

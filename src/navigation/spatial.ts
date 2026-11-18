@@ -283,7 +283,7 @@ function focusElement(element: HTMLElement) {
     }
     return;
   }
-  if (element.closest(".details-actions, .overview-button, .details-translate, .season-tabs")) {
+  if (element.closest(".details-actions, .overview-button, .details-translate, .rating-stars, .season-tabs")) {
     // The season buttons are a sliding row of their own; the page still goes back to the top.
     const seasons = element.closest<HTMLElement>(".season-tabs");
     if (seasons?.dataset.slide === "true") slideRailItem(seasons, element);
@@ -936,20 +936,27 @@ export function installSpatialNavigation() {
       return;
     }
 
-    // The overview is a focus stop above the buttons (Android TV: Up from the action row), with
-    // "Translate description" between them when the server offers it.
+    // The hero's stops above the buttons, top to bottom (Android TV: Up from the action row): the
+    // overview, "Translate description" when the server offers it, and the profile's star rating
+    // (#180). Up and Down walk this chain; Up from the buttons enters it at the bottom.
     const hero = current.closest<HTMLElement>(".details-shell, .series-screen");
-    const translate = hero?.querySelector<HTMLElement>(".details-translate") ?? null;
-    if (current.matches(".overview-button, .details-translate")) {
+    const heroStops = hero
+      ? [".overview-button", ".details-translate", ".rating-stars"]
+        .map(selector => hero.querySelector<HTMLElement>(`.details-content ${selector}, .series-copy ${selector}`))
+        .filter((stop): stop is HTMLElement => stop != null)
+      : [];
+    if (current.matches(".overview-button, .details-translate, .rating-stars")) {
+      const at = heroStops.indexOf(current);
       const target = direction === "down"
-        ? (current.matches(".overview-button") ? translate : null) ?? hero?.querySelector<HTMLElement>(".details-actions .tv-button:not([disabled])")
-        : direction === "up" && current.matches(".details-translate") ? hero?.querySelector<HTMLElement>(".overview-button") : null;
+        ? heroStops[at + 1] ?? hero?.querySelector<HTMLElement>(".details-actions .tv-button:not([disabled])")
+        : direction === "up" && at > 0 ? heroStops[at - 1] : null;
+      // Left and Right stay put, as before.
       if (target) focusElement(target);
       event.preventDefault();
       return;
     }
     const above = current.closest(".details-actions") && direction === "up"
-      ? translate ?? hero?.querySelector<HTMLElement>(".overview-button")
+      ? heroStops[heroStops.length - 1] ?? null
       : null;
     if (above) {
       focusElement(above);
