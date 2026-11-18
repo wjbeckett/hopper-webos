@@ -63,7 +63,9 @@ server is up to its operator. For the Silo server software, see
   asks whether to allow it. The TV keeps the name and identifier of each phone you allow, so it
   can let that phone in next time; Settings → Server lists them and forgets them. Because the
   connection isn't encrypted, a device that can watch your network traffic could copy an allowed
-  phone's identifier. Nothing about this is sent anywhere else.
+  phone's identifier. When a phone starts a title for its own profile, the TV asks your server
+  for a temporary sign-in to that profile, which the phone approves. It is kept in memory only,
+  used for that playback, and signed out when the player closes. Nothing about this is sent anywhere else.
 
 ## Diagnostics
 

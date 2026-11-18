@@ -210,7 +210,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   useEffect(() => registerRemotePlayer(item.Id, {
     snapshot: () => remoteRef.current!.snapshot(),
     command: command => remoteRef.current!.command(command)
-  }), [item.Id]);
+  }, session), [item.Id]);
   /** The source position a plan was asked to start at, until its stream first plays. */
   const startingAt = useRef<number | null>(null);
   const qualityRef = useRef("auto");

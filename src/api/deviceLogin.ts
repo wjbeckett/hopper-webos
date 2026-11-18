@@ -183,3 +183,62 @@ export function sessionFromApprovedDeviceLogin(
     username
   };
 }
+
+/** `GET /auth/device/capability`, as far as the phone-profile handoff needs it (#156). */
+export type DeviceLoginCapability = {
+  state?: string;
+  allowed?: boolean;
+  remote_playback_handoff?: boolean;
+  protocol_versions?: number[];
+};
+
+export type RemotePlaybackStart = DeviceLoginStart & { client_purpose?: string; temporary?: boolean };
+
+export function getDeviceLoginCapability(serverUrl: string) {
+  return jsonRequest<DeviceLoginCapability>(serverUrl, "/api/v2/auth/device/capability", { method: "GET" });
+}
+
+/**
+ * A temporary device login for a phone's profile (spec section 8.2, Android TV
+ * `startRemotePlaybackAt`). The phone approves it; nothing is saved.
+ */
+export function startRemotePlaybackLogin(serverUrl: string, deviceName: string) {
+  return jsonRequest<RemotePlaybackStart>(serverUrl, "/api/v2/auth/device/start", {
+    method: "POST",
+    body: JSON.stringify({ device_name: deviceName, device_platform: "webOS", client_purpose: "remote_playback", temporary: true })
+  });
+}
+
+/** Withdraws a device login this TV started. Best effort. */
+export async function cancelDeviceLogin(serverUrl: string, deviceCode: string) {
+  await jsonRequest<unknown>(serverUrl, "/api/v2/auth/device/cancel", { method: "POST", body: JSON.stringify({ device_code: deviceCode }) });
+}
+
+/** Ends a borrowed sign-in on the server (`POST /auth/logout` with its own tokens), once; an expired access token is renewed first. */
+export async function logoutTemporary(session: Session) {
+  const logout = (accessToken: string) => serverFetch(session.serverUrl, `${normalizeServerUrl(session.serverUrl)}/api/v2/auth/logout`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+      ...(session.profileId ? { "X-Profile-Id": session.profileId } : {}),
+      ...(session.profileToken ? { "X-Profile-Token": session.profileToken } : {})
+    }
+  });
+  let response = await logout(session.accessToken);
+  // The access token can run out during a long title with no API calls. Renew it once so the
+  // logout ends the server session instead of being turned away; nothing is stored.
+  if (response.status === 401 && session.refreshToken) {
+    const renewed = await serverFetch(session.serverUrl, `${normalizeServerUrl(session.serverUrl)}/api/v2/auth/refresh`, {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: session.refreshToken })
+    });
+    if (!renewed.ok) return; // Refused: the session has already ended on the server.
+    const tokens = await renewed.json() as { access_token?: string };
+    if (!tokens.access_token) return;
+    response = await logout(tokens.access_token);
+  }
+  if (!response.ok && response.status !== 401) throw new Error(`/auth/logout: ${response.status}`);
+}

@@ -12,7 +12,7 @@ export const PROTOCOL_VERSION = 2;
  * (`volume_mute_only`), and has no playback speed (`no_playback_speed`): webOS ignores
  * `playbackRate` on the MediaSource streams Hopper plays (measured on a webOS 22 TV).
  */
-export const TV_FEATURES = ["multi_controller", "close_reason", "resume_token", "presence", "volume_mute_only", "no_playback_speed"];
+export const TV_FEATURES = ["multi_controller", "close_reason", "resume_token", "replace_confirmation", "presence", "volume_mute_only", "no_playback_speed"];
 
 const COMMAND_NAMES = [
   "play", "pause", "play_pause", "seek", "stop", "select_audio_track", "select_subtitle_track",
@@ -29,6 +29,8 @@ export type HandoffOffer = {
   serverIdentity?: string; resumeToken?: string; replaceConfirmed?: boolean; replacingContentId?: string;
 };
 export type HandoffCancel = { requestId: string; reason: string; message?: string };
+/** What a phone needs to ask "Replace what Alex is watching?" (`replace_confirmation_required`). */
+export type NowPlayingSummary = { contentId?: string; title: string; subtitle?: string; profileName?: string; controllerName?: string };
 export type PlaybackRequest = {
   contentId: string; fileId?: number; audioTrackIndex?: number; subtitleTrackIndex?: number;
   startFromBeginning: boolean; resumePosition?: number; libraryId?: number; pinsVersion?: boolean;
@@ -152,6 +154,13 @@ export function handoffReady(requestId: string, serverId: string, profileId: str
 
 export const handoffCancel = (requestId: string, reason: string, message: string) =>
   envelope("handoff_cancel", "handoffCancel", { requestId, reason, message });
+
+/** Android TV's refusal of a handoff that would replace another profile's title; the phone asks, then resends. */
+export const replaceConfirmationRequired = (requestId: string, nowPlaying: NowPlayingSummary) =>
+  envelope("handoff_cancel", "handoffCancel", {
+    requestId, reason: "replace_confirmation_required",
+    message: `${nowPlaying.profileName || "Someone"} is watching ${nowPlaying.title} on this TV.`, nowPlaying
+  });
 
 // ---- Servers (section 6.2)
 

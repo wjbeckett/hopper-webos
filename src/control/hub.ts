@@ -3,7 +3,8 @@
  * connects it to the bundled service (the sockets) and to the player (state and commands).
  * App.tsx starts and configures it; PlayerScreen registers itself as the player.
  */
-import { getServerIdentity } from "../api/silo";
+import { cancelDeviceLogin, getDeviceLoginCapability, logoutTemporary, pollDeviceLogin, startRemotePlaybackLogin } from "../api/deviceLogin";
+import { getServerIdentity, settleTemporaryRefresh } from "../api/silo";
 import { allowPhone, forgetAllPhones, forgetPhone, isPhoneAllowed } from "../core/allowedPhones";
 import { serverRegistry } from "../core/serverRegistry";
 import { getDeviceId } from "../platform/device";
@@ -12,10 +13,11 @@ import {
   closeControlConnection, remoteControlAvailable, sendControlMessage, startControlService, stopControlService,
   subscribeControlEvents, updateControlService, type ControlServiceEvent
 } from "../platform/remoteControl";
-import type { Session } from "../types";
+import type { Session, TemporaryLane } from "../types";
+import { HandoffManager, type Identity } from "./handoff";
 import {
   envelope, errorMessage, idleState, launchIntent, loadingState, serverIdOf, stateBody, tvHello,
-  type ControlCommand, type Envelope, type LaunchIntent, type RemoteSnapshot
+  type ControlCommand, type Envelope, type LaunchIntent, type NowPlayingSummary, type RemoteSnapshot
 } from "./protocol";
 import { ControlReceiver, type ReceiverConfig } from "./receiver";
 
@@ -30,6 +32,9 @@ const ASK_TIMEOUT_MS = 2 * 60 * 1000;
 /** A phone waiting for the viewer to allow it (#162). */
 export type PhoneRequest = { id: string; deviceName: string };
 
+/** A launch for a phone's own profile (#156): the session to play with, and who it is for. */
+export type BorrowedPlayback = { session: Session; profileName: string; deviceName: string };
+
 export type CommandResult = { ok: true } | { ok: false; code: string; message: string };
 
 /** What PlayerScreen gives the remote: its state now, and a way to apply a command. */
@@ -42,8 +47,13 @@ export type RemoteControlOptions = {
   getSession(): Session | null;
   /** The profile open on the TV, or null on the profile picker. */
   profile: { id: string; name: string } | null;
-  /** Opens the player for a launch; rejects with a message the phone can show. */
-  onLaunch(intent: LaunchIntent): Promise<void>;
+  /**
+   * Opens the player for a launch; rejects with a message the phone can show. `borrowed`: play
+   * with the phone profile's borrowed sign-in (#156) instead of the TV's.
+   */
+  onLaunch(intent: LaunchIntent, borrowed?: BorrowedPlayback): Promise<void>;
+  /** A borrowed sign-in expired while its player was open: close that player. */
+  onBorrowedExpired(): void;
   /** A short notice on the TV ("<phone> connected"). */
   onNotice(text: string): void;
 };
@@ -51,6 +61,7 @@ export type RemoteControlOptions = {
 type Running = {
   options: RemoteControlOptions;
   receiver: ControlReceiver;
+  handoff: HandoffManager;
   config: ReceiverConfig;
   identity: { deviceName: string; deviceId: string; serverId: string; serverName: string; serverIdentity?: string };
   started: boolean;
@@ -61,7 +72,8 @@ type Running = {
 };
 
 let running: Running | null = null;
-let player: { contentId: string; adapter: RemotePlayer; at: number } | null = null;
+/** The open player, the profile it plays as, and its borrowed sign-in's lane if it has one (#156). */
+let player: { contentId: string; adapter: RemotePlayer; at: number; profileId?: string; lane?: TemporaryLane } | null = null;
 let requests: PhoneRequest[] = [];
 const requestTimers = new Map<string, number>();
 const requestListeners = new Set<() => void>();
@@ -198,21 +210,50 @@ function applyCommand(state: Running, id: string, command: ControlCommand) {
   publishState(state);
 }
 
-function applyLaunch(state: Running, id: string, intent: LaunchIntent) {
+function applyLaunch(state: Running, id: string, intent: LaunchIntent, borrowed: boolean) {
   if (launchPending(state)) {
     send(id, errorMessage("launch_pending", "A title is already starting on this TV."));
     return;
   }
+  let identity: Identity | null = null;
+  if (borrowed) {
+    identity = state.handoff.sessionFor(id);
+    if (!identity) {
+      send(id, errorMessage("handoff_required", "Prepare the phone profile before playing."));
+      return;
+    }
+    state.handoff.launching(identity);
+  }
   const launch = { contentId: intent.contentId, at: Date.now() };
   state.launch = launch;
   publishState(state);
-  state.options.onLaunch(intent).catch(reason => {
+  const playback = identity ? { session: identity.session, profileName: identity.profileName, deviceName: identity.deviceName } : undefined;
+  state.options.onLaunch(intent, playback).then(() => {
+    if (running !== state || !playback) return;
+    state.options.onNotice(`Playing as ${playback.profileName || "your profile"} · From ${playback.deviceName || "your phone"}`);
+  }, reason => {
     if (running !== state) return;
+    if (identity) state.handoff.launchFailed(identity);
     // Only this launch: a later one may have taken over after LAUNCH_WAIT_MS.
     if (state.launch === launch) state.launch = null;
     send(id, errorMessage("launch_failed", reason instanceof Error ? reason.message : "The TV could not play that title."));
     publishState(state);
   });
+}
+
+/** The title on screen if it plays as another profile than `profileId` (the replace confirmation). */
+function nowPlayingOther(state: Running, profileId: string): NowPlayingSummary | null {
+  if (!player || player.profileId === profileId) return null;
+  const snapshot = player.adapter.snapshot();
+  const identity = player.lane ? state.handoff.identityFor(player.lane) : null;
+  return {
+    contentId: snapshot.contentId || undefined,
+    title: snapshot.title || "a title",
+    subtitle: snapshot.subtitle || undefined,
+    // A borrowed player names only its own profile; one that sent none stays unnamed ("Someone").
+    profileName: (player.lane ? identity?.profileName : state.config.profile?.name) || undefined,
+    controllerName: identity?.deviceName || undefined
+  };
 }
 
 function updateTicking(state: Running) {
@@ -232,6 +273,7 @@ export function startRemoteControl(options: RemoteControlOptions): () => void {
   const state: Running = {
     options, config,
     receiver: null as unknown as ControlReceiver,
+    handoff: null as unknown as HandoffManager,
     identity: { deviceName: FALLBACK_NAME, deviceId: getDeviceId(), serverId: serverIdOf(origin), serverName },
     started: false, unsubscribe: () => undefined, timer: null, lastIdle: "", launch: null
   };
@@ -239,7 +281,10 @@ export function startRemoteControl(options: RemoteControlOptions): () => void {
     send,
     close: (id, reason) => { void closeControlConnection(id, reason); },
     announce: deviceName => { if (running === state) state.options.onNotice(`${deviceName || "A phone"} connected`); },
-    launch: (id, request) => applyLaunch(state, id, launchIntent(request.playback)),
+    launch: (id, request, borrowed) => applyLaunch(state, id, launchIntent(request.playback), borrowed),
+    handoff: (id, offer, phone) => state.handoff.offer(id, offer, phone),
+    handoffCancel: (id, requestId) => state.handoff.cancel(id, requestId),
+    playingOther: profileId => nowPlayingOther(state, profileId),
     control: (id, command) => applyCommand(state, id, command),
     changed: () => { state.lastIdle = ""; updateTicking(state); publishState(state); },
     allowed: isPhoneAllowed,
@@ -255,6 +300,25 @@ export function startRemoteControl(options: RemoteControlOptions): () => void {
     },
     askEnded: endRequest
   }, config, randomToken);
+  state.handoff = new HandoffManager({
+    serverUrl: session.serverUrl,
+    deviceName: () => state.identity.deviceName,
+    api: {
+      capability: getDeviceLoginCapability,
+      start: startRemotePlaybackLogin,
+      poll: pollDeviceLogin,
+      cancel: cancelDeviceLogin,
+      logout: logoutTemporary,
+      settle: settleTemporaryRefresh
+    },
+    send,
+    ready: (id, profileId) => state.receiver.markReady(id, profileId),
+    unready: (id, profileId) => state.receiver.unready(id, profileId),
+    closePlayer: () => { if (running === state) state.options.onBorrowedExpired(); },
+    randomToken,
+    now: () => Date.now(),
+    sleep: ms => new Promise(resolve => window.setTimeout(resolve, ms))
+  });
   running = state;
 
   void (async () => {
@@ -301,18 +365,26 @@ export function stopRemoteControl() {
   if (!state) return;
   if (state.timer != null) window.clearInterval(state.timer);
   clearRequests();
+  state.handoff.stop();
   state.unsubscribe();
   void stopControlService();
 }
 
-/** PlayerScreen while it's open. Returns the function that unregisters it. */
-export function registerRemotePlayer(contentId: string, adapter: RemotePlayer): () => void {
-  const entry = { contentId, adapter, at: Date.now() };
+/**
+ * PlayerScreen while it's open, with the session it plays with. Returns the function that
+ * unregisters it. A borrowed session (#156) is ended a moment after its last player closes.
+ */
+export function registerRemotePlayer(contentId: string, adapter: RemotePlayer, session?: Session): () => void {
+  const lane = session?.temporary;
+  const entry = { contentId, adapter, at: Date.now(), profileId: session?.profileId, lane };
+  const handoff = running?.handoff;
+  if (lane && handoff) handoff.playerOpened(lane);
   player = entry;
   const state = running;
   if (state?.started) void updateControlService({ txt: txt(state) });
   if (state) publishState(state);
   return () => {
+    if (lane && handoff) handoff.playerClosed(lane);
     if (player !== entry) return;
     player = null;
     const current = running;

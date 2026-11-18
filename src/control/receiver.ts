@@ -6,8 +6,8 @@
  * hello watchdog (services/pairing/control.js); the hub (hub.ts) carries out what this decides.
  */
 import {
-  decode, errorMessage, handoffCancel, handoffReady, PROTOCOL_VERSION, serverMatches,
-  type ControlCommand, type Envelope, type HandoffOffer, type LaunchRequest
+  decode, errorMessage, handoffCancel, handoffReady, PROTOCOL_VERSION, replaceConfirmationRequired, serverMatches,
+  type ControlCommand, type Envelope, type HandoffOffer, type LaunchRequest, type NowPlayingSummary
 } from "./protocol";
 
 /** tvOS's command budget, as on Roku: 20 a second, bursts of 40, and a notice at most once a second. */
@@ -57,8 +57,17 @@ export type ReceiverIo = {
   close(id: string, reason: string): void;
   /** A phone that isn't passive is now in control: the TV says so. */
   announce(deviceName: string): void;
-  /** A launch the receiver allowed; the hub opens the player and answers any failure. */
-  launch(id: string, request: LaunchRequest): void;
+  /**
+   * A launch the receiver allowed; the hub opens the player and answers any failure. `borrowed`:
+   * the phone was made ready for its own profile through a handoff (#156), not the TV's.
+   */
+  launch(id: string, request: LaunchRequest, borrowed: boolean): void;
+  /** An offer for a profile other than the TV's: the hub runs the server handoff (#156). */
+  handoff(id: string, offer: HandoffOffer, phone: { deviceId: string; deviceName: string; features: string[] }): void;
+  /** The phone cancelled an offer, or (no requestId) its connection closed. */
+  handoffCancel(id: string, requestId?: string): void;
+  /** The title on screen when it plays under a profile other than this one, else null. */
+  playingOther(profileId: string): NowPlayingSummary | null;
   /** A control command from an authorized phone. */
   control(id: string, command: ControlCommand): void;
   /** Who is connected changed (the `playing` TXT, state ticks). */
@@ -74,7 +83,7 @@ export type ReceiverIo = {
 export class ControlReceiver {
   private controllers = new Map<string, Controller>();
   /** The controller allowed to launch, and the profile it may launch as (`handoff_ready`). */
-  private ready = new Map<string, string>();
+  private ready = new Map<string, { profileId: string; borrowed: boolean }>();
   /** The last resume token issued, reused for the same profile. */
   private issued: { profileId: string; token: string } | null = null;
   private lastState: Envelope | null = null;
@@ -87,7 +96,8 @@ export class ControlReceiver {
   configure(config: ReceiverConfig) {
     const profileChanged = config.profile?.id !== this.config.profile?.id;
     this.config = config;
-    if (profileChanged) this.ready.clear();
+    // A phone ready for the TV's profile must ask again; one ready through a handoff keeps it.
+    if (profileChanged) for (const [id, entry] of [...this.ready]) if (!entry.borrowed) this.ready.delete(id);
     for (const controller of this.controllers.values()) {
       if (controller.saidHello && !controller.matched && this.matches(controller)) {
         controller.matched = true;
@@ -109,8 +119,22 @@ export class ControlReceiver {
     if (!controller) return;
     this.controllers.delete(id);
     this.ready.delete(id);
+    this.io.handoffCancel(id);
     if (controller.asking) { controller.asking = false; this.io.askEnded(id); }
     this.io.changed();
+  }
+
+  /** A handoff for the phone's own profile is done (#156): it may launch as that profile. */
+  markReady(id: string, profileId: string) {
+    if (!this.controllers.get(id)?.authorized) return;
+    this.ready.clear();
+    this.ready.set(id, { profileId, borrowed: true });
+  }
+
+  /** That borrowed sign-in ended. */
+  unready(id: string, profileId: string) {
+    const entry = this.ready.get(id);
+    if (entry?.borrowed && entry.profileId === profileId) this.ready.delete(id);
   }
 
   /** The viewer allowed the phone (the hub has remembered it). */
@@ -203,7 +227,7 @@ export class ControlReceiver {
         }
         this.offer(controller, decoded.payload);
         return;
-      case "handoff_cancel": return; // nothing waits on the server for the profile open on the TV
+      case "handoff_cancel": this.io.handoffCancel(id, decoded.payload.requestId); return;
       default: break;
     }
     if (!controller.authorized) {
@@ -296,7 +320,7 @@ export class ControlReceiver {
   /**
    * Section 8.1: a phone on the profile open on the TV needs no handoff; the TV answers
    * handoff_ready at once with `reused: true` and makes no server request, as Android TV and Roku
-   * do. Another profile needs the device-login handoff, which Hopper doesn't have yet (#156).
+   * do. Another profile goes to the hub for the device-login handoff (#156).
    */
   private offer(controller: Controller, offer: HandoffOffer) {
     const { requestId } = offer;
@@ -309,8 +333,19 @@ export class ControlReceiver {
       this.io.send(controller.id, handoffCancel(requestId, "handoff_failed", "Choose a profile on the TV first."));
       return;
     }
+    // Android TV: a handoff that would replace another profile's title asks the phone first, and
+    // the phone resends with `replaceConfirmed` for that title. Phones that can't ask keep
+    // newest-launch-wins.
+    if (controller.features.includes("replace_confirmation")) {
+      const nowPlaying = this.io.playingOther(offer.profileId);
+      const confirmed = offer.replaceConfirmed === true && (offer.replacingContentId || "") === (nowPlaying?.contentId || "");
+      if (nowPlaying && !confirmed) {
+        this.io.send(controller.id, replaceConfirmationRequired(requestId, nowPlaying));
+        return;
+      }
+    }
     if (offer.profileId !== profile.id) {
-      this.io.send(controller.id, handoffCancel(requestId, "handoff_failed", `This TV can play only for the profile open on it, ${profile.name}.`));
+      this.io.handoff(controller.id, offer, { deviceId: controller.deviceId, deviceName: controller.deviceName, features: controller.features });
       return;
     }
     let token: string | undefined;
@@ -320,14 +355,15 @@ export class ControlReceiver {
     }
     // Readiness is this controller's alone (tvOS completeHandoff).
     this.ready.clear();
-    this.ready.set(controller.id, profile.id);
+    this.ready.set(controller.id, { profileId: profile.id, borrowed: false });
     const expires = new Date(Date.now() + OWN_SESSION_MS).toISOString();
     this.io.send(controller.id, handoffReady(requestId, offer.serverId, profile.id, expires, true, token));
   }
 
   private launch(controller: Controller, request: LaunchRequest) {
     const profile = this.config.profile;
-    if (!profile || this.ready.get(controller.id) !== profile.id) {
+    const entry = this.ready.get(controller.id);
+    if (!entry || (!entry.borrowed && entry.profileId !== profile?.id)) {
       this.io.send(controller.id, errorMessage("handoff_required", "Prepare the phone profile before playing."));
       return;
     }
@@ -336,7 +372,7 @@ export class ControlReceiver {
       this.io.send(controller.id, errorMessage("server_mismatch", "This TV is connected to a different Silo server."));
       return;
     }
-    this.io.launch(controller.id, request);
+    this.io.launch(controller.id, request, entry.borrowed);
   }
 
   private allow(controller: Controller, now: number) {
