@@ -46,6 +46,7 @@ import { invalidateWatchDetail, type PlaybackChoices } from "./api/playback";
 import { applyResumeState, applyServerUserData, applyWatchedState, publishPlaybackSettled, publishWatchState } from "./core/watchState";
 import { firstEpisodeOfSeason, nextEpisodeAfter } from "./core/episodeNavigation";
 import { publishRailsChanged } from "./core/watchState";
+import { loadCardOverlays } from "./core/cardOverlayStore";
 import { connectEventsSocket } from "./api/events";
 import { configureRemoteControl, startRemoteControl, type BorrowedPlayback } from "./control/hub";
 import type { LaunchIntent } from "./control/protocol";
@@ -301,6 +302,11 @@ export default function App() {
       .catch((error) => { console.error("[Hopper] libraries", error); if (alive) setLibrariesLoaded(true); });
     return () => { alive = false; };
   }, [session, connectionEpoch]);
+
+  // Poster badges (#175): read once per server and profile; cards share the result.
+  useEffect(() => {
+    if (session?.profileId) loadCardOverlays(session);
+  }, [session?.serverUrl, session?.profileId]);
 
   useEffect(() => {
     if (!session?.profileId) return;

@@ -19,7 +19,7 @@ ROW=1 node scripts/tvbench/play.mjs  # Play to first frame, with video events an
 - `play.mjs` really plays the title for a few seconds, so it moves that title's resume position.
 - For a profile by function name, build with `npx vite build --minify false` before packaging.
 
-The scripts were rewritten for the repository from the ones used for the numbers below and have not been run on a TV in this form.
+The scripts were rewritten for the repository from the ones used for the numbers below. `home.mjs` and `layers.mjs` ran on the TV in this form on 2026-11-18 (Node 20 with `--experimental-websocket`), for the poster badges below; `play.mjs` has not.
 
 ## Home navigation
 
@@ -140,6 +140,20 @@ The same MP4 film (H.264, AAC, 1080p) over HLS (a server remux) and played direc
 | Long seek | 2 to 5 s (a replan when the target is before the stream's start, see "Playback start") | 0.35 s, 0.35 s, 0.77 s |
 
 Direct play starts no faster, but it seeks in under a second, and the server runs no packaging process for it.
+
+## Poster badges (#175)
+
+`home.mjs` on Home, two runs per build, 2026-11-18. Frames drawn per key press in the 700 ms after it (42 is every frame); "cold" is the first pass after launch, "warm" the second. Left and Right drew 38 to 40 frames in every build; only Down, which mounts a new row of cards, changed.
+
+| Build | Down, cold | Down, warm |
+| --- | --- | --- |
+| main, no badges | 22, 25 | 27, 28 |
+| Badges as first built: rounded, bordered, `overflow: hidden` for an ellipsis | 12, 13 | 19, 20 |
+| Rounded and bordered, no `overflow: hidden` (shipped) | 14, 16 | 20, 21 |
+| The same, each card's badges drawn 400 ms after it mounts | 15, 16 | 22, 23 |
+| Square, no border (an experiment) | 20 | 23 |
+
+`layers.mjs` found no layer for any badge: the cost is painting and rasterising them over the artwork as a row arrives. A rounded box that clips (`overflow: hidden`) cost the most and was dropped. The delay gained little and made badges pop in, so it was left out. Square badges with no border cost least, but they are not the look the server's presets describe. A profile can turn badges off (`ui.card_overlays_enabled`).
 
 ## Rules that came out of this
 

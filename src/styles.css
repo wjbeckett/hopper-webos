@@ -5601,3 +5601,81 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
   letter-spacing: .14em;
   color: var(--muted-foreground);
 }
+
+/*
+ * Poster badges (#175). Sizes follow the official apps' proportions (Android OverlayPresets, at
+ * the 185-unit reference card), in rem so the profile's text size reaches them, with text never
+ * under 1.25rem (20 px) at the default size. Static: no transitions, so no compositor layers.
+ */
+.card-badges {
+  --badge-size: 1;
+  --u: calc(0.125rem * var(--badge-size));
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.card-badge-stack {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(var(--u) * 4);
+  max-width: calc(100% - var(--u) * 16);
+}
+
+.card-badge-top-left { top: calc(var(--u) * 8); left: calc(var(--u) * 8); max-width: calc(100% - var(--u) * 16 - 44px); }
+.card-badge-bottom-left { bottom: calc(var(--u) * 8); left: calc(var(--u) * 8); }
+.card-badge-bottom-right { bottom: calc(var(--u) * 8); right: calc(var(--u) * 8); align-items: flex-end; }
+.card-badge-left-edge { top: 50%; left: calc(var(--u) * 8); transform: translateY(-50%); }
+.card-badge-right-edge { top: 50%; right: calc(var(--u) * 8); transform: translateY(-50%); align-items: flex-end; }
+
+.card-badge {
+  display: block;
+  padding: calc(var(--u) * 2) calc(var(--u) * 8);
+  border: 1px solid rgba(255, 255, 255, .15);
+  border-radius: 999px;
+  font-size: max(1.25rem, calc(var(--u) * 10));
+  font-weight: calc(600 + var(--font-weight-boost));
+  line-height: 1.15;
+  letter-spacing: .025em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.card-badges-minimal .card-badge {
+  padding: 0 calc(var(--u) * 4);
+  border: 0;
+  border-radius: calc(var(--u) * 8);
+  font-size: max(1.25rem, calc(var(--u) * 9));
+  letter-spacing: .1em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .85);
+}
+
+.card-badges-vibrant .card-badge {
+  border: 0;
+  border-radius: calc(var(--u) * 10);
+  font-weight: calc(700 + var(--font-weight-boost));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .25);
+}
+
+.card-badges-pill .card-badge {
+  padding: calc(var(--u) * 4) calc(var(--u) * 10);
+}
+
+.card-badges-square .card-badge {
+  padding: calc(var(--u) * 2) calc(var(--u) * 6);
+  border: 0;
+  border-left: calc(var(--u) * 2) solid transparent;
+  border-radius: calc(var(--u) * 8);
+  font-size: max(1.25rem, calc(var(--u) * 9));
+  font-weight: calc(700 + var(--font-weight-boost));
+  letter-spacing: .1em;
+}
+
+.card-badges-shape-pill .card-badge { border-radius: 999px; }
+.card-badges-shape-rounded .card-badge { border-radius: calc(var(--u) * 6); }
+.card-badges-shape-square .card-badge { border-radius: calc(var(--u) * 2); }
+.card-badges-plain .card-badge { text-transform: none; }
+.card-badges-shadow .card-badge { box-shadow: 0 2px 6px rgba(0, 0, 0, .35); }

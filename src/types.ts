@@ -75,6 +75,8 @@ export type SiloItem = {
   NotInterested?: boolean;
   /** A card for a movie box set (#171), not a title. */
   BoxSet?: { id: string; libraryId: string; movieCount: number; playedCount: number };
+  /** Badge data a poster can show (#175); ratings, year and runtime come from the fields above. */
+  Overlay?: Omit<import("./core/cardOverlays").OverlayData, "ratingImdb" | "ratingTmdb" | "contentRating" | "year" | "runtime">;
   UserData?: {
     Played?: boolean;
     PlaybackPositionTicks?: number;
