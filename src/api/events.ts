@@ -25,7 +25,8 @@ export function connectEventsSocket(session: Session, onSignal: RealtimeSignal):
    * A connection after the first is a reconnect: what changed while it was down is caught up by
    * one signal (Android TV's HomeRealtimeEvent.Connected). The first connection is not (#193):
    * the screens have just read everything, and a catch-up then reloaded Home about 4.5 s after
-   * every launch. The 20 s refresh while Home is open covers the moment before it subscribes.
+   * every launch. Home's 20 s refresh, while it shows, covers the moment before it subscribes.
+   * A first attempt that fails (no ticket, no socket) counts too: the connection after it catches up.
    */
   let connectedBefore = false;
 
@@ -48,6 +49,8 @@ export function connectEventsSocket(session: Session, onSignal: RealtimeSignal):
 
   const scheduleRetry = () => {
     if (disposed) return;
+    // Anything that changed while there was no connection is caught up by the next one.
+    connectedBefore = true;
     retryTimer = window.setTimeout(() => {
       retryTimer = undefined;
       if (disposed) return;

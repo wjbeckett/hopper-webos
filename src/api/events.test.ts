@@ -64,4 +64,17 @@ describe("the events socket (#193)", () => {
     expect(onSignal).toHaveBeenCalledTimes(1);
     stop();
   });
+
+  it("catches up after a first attempt that failed", async () => {
+    const onSignal = vi.fn();
+    const stop = connectEventsSocket(session, onSignal);
+    await flush();
+    FakeSocket.all[0].onclose?.();
+    vi.advanceTimersByTime(1_000);
+    await flush();
+    FakeSocket.all[1].onopen?.();
+    vi.advanceTimersByTime(2_000);
+    expect(onSignal).toHaveBeenCalledTimes(1);
+    stop();
+  });
 });
