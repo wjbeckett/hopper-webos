@@ -26,7 +26,8 @@ type Props = {
   initialEpisode?: SiloItem;
   onPlayEpisode: (episode: SiloItem, startPosition: number, choices?: PlaybackChoices) => void;
   onShuffle: (kind: string, id: string | number) => Promise<void>;
-  onOpen: (item: SiloItem) => void;
+  /** A pick from the More Like This rail (#177). */
+  onOpenSimilar: (item: SiloItem) => void;
   restoreCastIndex?: number;
   onOpenPerson: (person: DetailPerson, index: number) => void;
   onPlayExtra: (trailer: DetailTrailer) => void;
@@ -87,7 +88,7 @@ function resolveNextUp(episodes: SiloItem[]) {
   return episodes.find(isInProgress) ?? episodes.find(episode => !isWatched(episode)) ?? episodes[0];
 }
 
-export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, onShuffle, onOpen, restoreCastIndex, onOpenPerson, onPlayExtra }: Props) {
+export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, onShuffle, onOpenSimilar, restoreCastIndex, onOpenPerson, onPlayExtra }: Props) {
   const [show, setShow] = useState(series);
   const [seasons, setSeasons] = useState<SiloItem[]>([]);
   const [episodesBySeason, setEpisodesBySeason] = useState<Record<number, SiloItem[]>>({});
@@ -507,7 +508,7 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
         <div className="series-related">
           {extras ? <CastSection cast={extras.cast} restoreIndex={restoreCastIndex} onOpen={onOpenPerson} /> : null}
           {extras ? <TrailersSection trailers={extras.trailers} onPlayLocal={onPlayExtra} /> : null}
-          {similar.length ? <MediaRail rail={{ id: "similar", title: "Recommended Series", items: similar }} session={session} onOpen={onOpen} slide /> : null}
+          {similar.length ? <MediaRail rail={{ id: "similar", title: "Recommended Series", items: similar }} session={session} onOpen={onOpenSimilar} slide /> : null}
           <FactsSection facts={factsFor(extras)} />
         </div>
       </section>

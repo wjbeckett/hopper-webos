@@ -24,6 +24,7 @@ import { LibraryRecommendationsScreen } from "./screens/LibraryRecommendationsSc
 import { LoginScreen } from "./screens/LoginScreen";
 import { PersonScreen } from "./screens/PersonScreen";
 import { PlayerScreen } from "./screens/PlayerScreen";
+import { nextInChain } from "./navigation/similarChain";
 import { PersonalScreen } from "./screens/PersonalScreen";
 import { clearBackgrounded, markBackgrounded, requiresSelectionAfterBackground, requiresSelectionAtLaunch } from "./core/profileLaunch";
 import { ProfileSelectionScreen } from "./screens/ProfileSelectionScreen";
@@ -62,10 +63,13 @@ installClientLogCapture();
 type AuthRoute = "phone-setup" | "server-setup" | "first-run-setup" | "device-login" | "password-login" | "signup";
 type DetailRoute =
   | { name: "main" }
-  | { name: "details"; item: SiloItem; castIndex?: number }
-  | { name: "series"; item: SiloItem; selectedEpisode?: SiloItem; castIndex?: number }
+  | { name: "details"; item: SiloItem; castIndex?: number; chainStart?: TitleRoute }
+  | { name: "series"; item: SiloItem; selectedEpisode?: SiloItem; castIndex?: number; chainStart?: TitleRoute }
   | { name: "person"; personId?: string; personName: string; back: DetailRoute }
   | { name: "player"; item: SiloItem; startPosition?: number; autoAdvanceCount?: number; choices?: PlaybackChoices; returnTo?: { series: SiloItem; selectedEpisode: SiloItem }; shuffleId?: string; shuffleNext?: SiloItem; shuffleScope?: string; remoteLaunch?: number; borrowed?: BorrowedPlayback };
+
+/** A title's page. `chainStart`: the page a More Like This chain started from (#177). */
+type TitleRoute = Extract<DetailRoute, { name: "details" | "series" }>;
 
 type BrowseDetail =
   | { kind: "collection"; library: SiloLibrary; collection: SiloCollection }
@@ -491,6 +495,11 @@ export default function App() {
           event.preventDefault();
           return;
         }
+        if ((route.name === "details" || route.name === "series") && route.chainStart) {
+          setRoute(route.chainStart);
+          event.preventDefault();
+          return;
+        }
         if (route.name !== "main") {
           setRoute({ name: "main" });
           focusTopNavigation(activeNav);
@@ -601,16 +610,31 @@ export default function App() {
     setAuthRoute("server-setup");
   }
 
-  function openItem(item: SiloItem, options?: { episode?: SiloItem }) {
-    if (item.Type === "Series") setRoute({ name: "series", item, selectedEpisode: options?.episode });
-    else if (item.Type === "Episode" && item.SeriesId) {
-      setRoute({
+  function titleRoute(item: SiloItem, options?: { episode?: SiloItem }): TitleRoute {
+    if (item.Type === "Series") return { name: "series", item, selectedEpisode: options?.episode };
+    if (item.Type === "Episode" && item.SeriesId) {
+      return {
         name: "series",
         item: { Id: item.SeriesId, Name: item.SeriesName ?? "Series", Type: "Series" },
         selectedEpisode: item
-      });
+      };
     }
-    else setRoute({ name: "details", item });
+    return { name: "details", item };
+  }
+
+  function openItem(item: SiloItem, options?: { episode?: SiloItem }) {
+    setRoute(titleRoute(item, options));
+  }
+
+  /**
+   * A pick from a title page's More Like This rail (#177, Android TV #737, tvOS #959). The first
+   * pick opens a new page, so Back returns to the title it came from; later picks replace that
+   * page, so Back from any depth returns to the title the chain started from, and then to
+   * wherever that title was opened. Picking the starting title again goes back to it.
+   */
+  function openSimilar(from: TitleRoute, item: SiloItem) {
+    const next = nextInChain<TitleRoute>(from, titleRoute(item));
+    if (next) setRoute(next);
   }
 
   // Android openHomeSection / openLibrarySection: a library row on a mixed
@@ -888,7 +912,7 @@ export default function App() {
         onPlayExtra={playExtra}
         onPlayEpisode={(episode, startPosition, choices) => setRoute({ name: "player", item: episode, startPosition, choices, returnTo: { series: route.item, selectedEpisode: episode } })}
         onShuffle={startShuffle}
-        onOpen={openItem}
+        onOpenSimilar={item => openSimilar(route, item)}
       />
       {overlays}
       </>
@@ -906,7 +930,7 @@ export default function App() {
         onOpenPerson={(person, index) => setRoute({ name: "person", personId: person.personId, personName: person.name, back: { ...route, castIndex: index } })}
         onPlayExtra={playExtra}
         onPlay={(startPosition, choices) => setRoute({ name: "player", item: route.item, startPosition, choices })}
-        onOpen={openItem}
+        onOpenSimilar={item => openSimilar(route, item)}
       />
       {overlays}
       </>
