@@ -9,6 +9,7 @@ import { useMetadataAiOnView } from "./useMetadataAiOnView";
 import { DefaultArtwork } from "../components/ArtworkImage";
 import { claimAutoTranslation, hasMachineTranslatedOverview, releaseAutoTranslation, runDescriptionTranslation } from "../core/descriptionTranslation";
 import { ResumeProgress } from "../components/ResumeProgress";
+import { subscribePlaybackSettled, subscribeWatchState } from "../core/watchState";
 import type { PlaybackChoices } from "../api/playback";
 import type { DetailPerson, DetailTrailer } from "../api/silo";
 import type { Session, SiloBoxSet, SiloItem } from "../types";
@@ -71,7 +72,14 @@ export function DetailsScreen({ session, item, onPlay, onOpen, onOpenBoxSet, res
   useEffect(() => setPositionCleared(false), [item.Id]);
   const extras = useDetailExtras(session, item.Id);
   const spoilerPreferences = useEpisodeSpoilerPreferences(session);
-  const watchDetail = useWatchDetail(session, item.Type === "Movie" || item.Type === "Episode" ? item : undefined);
+  // After the player (#165): App publishes the server's user state once the stop lands, then
+  // says it has settled, and the resume point is read again from /watch.
+  const [settled, setSettled] = useState(0);
+  useEffect(() => subscribeWatchState(next => {
+    if (next.Id === item.Id) setDetail(current => current.Id === next.Id ? { ...current, UserData: next.UserData } : current);
+  }), [item.Id]);
+  useEffect(() => subscribePlaybackSettled(ids => { if (ids.includes(item.Id)) setSettled(count => count + 1); }), [item.Id]);
+  const watchDetail = useWatchDetail(session, item.Type === "Movie" || item.Type === "Episode" ? item : undefined, settled);
   const hasPlaybackSummary = item.Type === "Movie" || item.Type === "Episode";
   const [choices, setChoices] = useState<PlaybackChoices>({});
   const [optionsOpen, setOptionsOpen] = useState(false);

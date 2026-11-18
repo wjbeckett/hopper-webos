@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { placeRailItem, resetSlidingRail } from "../navigation/spatial";
 import { focusFromPointer } from "../navigation/pointer";
+import { subscribePlaybackSettled } from "../core/watchState";
 import { backdropUrl, getCatalogItem, getEpisodes, requestDescriptionTranslation, getSeasons, getShuffleCapability, getSimilarItems, imageUrl, isFavorite, isInWatchlist, mediaLogoUrl, setFavorite, setWatched, setWatchlist } from "../api/silo";
 import { CastSection, FactsSection, TrailersSection, factsFor, useDetailExtras } from "../components/DetailSections";
 import { PlaybackOptionsDialog, PlaybackSummary, useWatchDetail } from "../components/PlaybackOptions";
@@ -165,6 +166,24 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
     return () => { alive = false; };
   }, [session, series.Id, reload]);
 
+  // After the player (#165): once its stop lands, the seasons and episodes are read again so the
+  // rail shows the server's progress and watched marks (Android TV #954). Quietly: no loading
+  // state, so focus and the rail stay where they are.
+  const [settled, setSettled] = useState(0);
+  useEffect(() => subscribePlaybackSettled(ids => {
+    if (!ids.includes(series.Id)) return;
+    setSettled(count => count + 1);
+    getSeasons(session, series.Id)
+      .then(items => Promise.all(items.map(season =>
+        getEpisodes(session, series.Id, seasonNumber(season)).then(episodes => [seasonNumber(season), episodes] as const)
+      )).then(loaded => ({ items, loaded })))
+      .then(({ items, loaded }) => {
+        setSeasons(items);
+        setEpisodesBySeason(Object.fromEntries(loaded));
+      })
+      .catch(() => undefined);
+  }), [session, series.Id]);
+
   const allEpisodes = useMemo(
     () => seasons.flatMap(season => episodesBySeason[seasonNumber(season)] ?? []),
     [seasons, episodesBySeason]
@@ -230,7 +249,7 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
   const resume = resumePosition(target);
   // Android's form ("Resume S2:E3"). The time left is a ring in the facts row, as on Details.
   const playLabel = target ? `${resume > 0 ? "Resume" : "Play"} ${code(target)}` : "Play";
-  const watchDetail = useWatchDetail(session, target);
+  const watchDetail = useWatchDetail(session, target, settled);
   // Keep the last loaded detail on screen while the next episode's detail
   // resolves so the Options button and summary row hold their positions
   // instead of disappearing per episode change (Android retains the same way).
