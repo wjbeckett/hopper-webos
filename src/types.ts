@@ -67,6 +67,8 @@ export type SiloItem = {
   PosterIsEpisodeStill?: boolean;
   BackdropIsEpisodeStill?: boolean;
   LogoUrl?: string;
+  /** A card for a collection on a row of collections (#170), not a title. */
+  CollectionCard?: { source: "library" | "user"; libraryId?: number; itemCount: number };
   UserData?: {
     Played?: boolean;
     PlaybackPositionTicks?: number;

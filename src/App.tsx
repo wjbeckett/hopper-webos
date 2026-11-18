@@ -97,6 +97,11 @@ function effectiveServerUrl(url: string) {
   return import.meta.env.DEV ? DEV_SERVER_URL : url;
 }
 
+/** The top-bar section a library's pages live under. */
+function sectionForLibrary(library: SiloLibrary): AppSection | null {
+  return (["movies", "series", "audiobooks", "music"] as const).find(section => librariesForSection(section, [library]).length > 0) ?? null;
+}
+
 function librariesForSection(section: AppSection, libraries: SiloLibrary[]) {
   return libraries.filter((library) => {
     const type = library.type.replace(/[\s_-]/g, "").toLowerCase();
@@ -157,6 +162,10 @@ export default function App() {
   const [selectedSeriesLibraryId, setSelectedSeriesLibraryId] = useState<number | null>(null);
   const [libraryLanding, setLibraryLanding] = useState<LibraryLanding>("recommended");
   const [browseDetail, setBrowseDetail] = useState<BrowseDetail | null>(null);
+  /** Where a collection opened from a row of collections returns to on Back (#170). */
+  const [collectionReturn, setCollectionReturn] = useState<{ section: AppSection; landing: LibraryLanding; seriesLibraryId: number | null } | null>(null);
+  /** A personal collection opened from a row of collections, shown on the Collections screen (#170). */
+  const [personalCollection, setPersonalCollection] = useState<SiloCollection | null>(null);
   // A row's full page ("Explore all"), shown inside the shell so the top nav stays.
   const [sectionBrowse, setSectionBrowse] = useState<SectionBrowseArgs | null>(null);
   const [libraries, setLibraries] = useState<SiloLibrary[]>([]);
@@ -482,7 +491,7 @@ export default function App() {
           return;
         }
         if (route.name === "main" && browseDetail && !(activeElement instanceof HTMLElement && activeElement.closest(".tv-nav"))) {
-          setBrowseDetail(null);
+          if (!leaveOpenedCollection()) setBrowseDetail(null);
           event.preventDefault();
           return;
         }
@@ -602,6 +611,7 @@ export default function App() {
   }
 
   function openItem(item: SiloItem, options?: { episode?: SiloItem }) {
+    if (item.CollectionCard) { openCollectionCard(item); return; }
     if (item.Type === "Series") setRoute({ name: "series", item, selectedEpisode: options?.episode });
     else if (item.Type === "Episode" && item.SeriesId) {
       setRoute({
@@ -611,6 +621,45 @@ export default function App() {
       });
     }
     else setRoute({ name: "details", item });
+  }
+
+  /**
+   * A card from a row of collections (#170, Android TV #979): a server collection opens its page
+   * in its library; a personal one opens as on the Collections screen. Back returns to the row.
+   */
+  function openCollectionCard(item: SiloItem) {
+    const card = item.CollectionCard;
+    if (!card) return;
+    const back = { section, landing: libraryLanding, seriesLibraryId: selectedSeriesLibraryId };
+    if (card.source === "library") {
+      const library = libraries.find(candidate => candidate.id === card.libraryId);
+      const target = library ? sectionForLibrary(library) : null;
+      if (!library || !target) return;
+      if (target === "series") setSelectedSeriesLibraryId(library.id);
+      setSectionBrowse(null);
+      setLibraryLanding("collections");
+      setSection(target);
+      setBrowseDetail({ kind: "collection", library, collection: { id: item.Id, name: item.Name ?? "Collection", kind: "regular", posterUrl: item.PosterUrl } });
+    } else {
+      setBrowseDetail(null);
+      setPersonalCollection({ id: item.Id, name: item.Name ?? "Collection", kind: "user_collection", itemCount: card.itemCount, posterUrl: item.PosterUrl });
+      setSection("collections");
+    }
+    setCollectionReturn(back);
+    setRoute({ name: "main" });
+  }
+
+  /** Back from a collection a row of collections opened: to that row. False when none was. */
+  function leaveOpenedCollection() {
+    const back = collectionReturn;
+    if (!back) return false;
+    setCollectionReturn(null);
+    setBrowseDetail(null);
+    setPersonalCollection(null);
+    setLibraryLanding(back.landing);
+    setSelectedSeriesLibraryId(back.seriesLibraryId);
+    setSection(back.section);
+    return true;
   }
 
   // Android openHomeSection / openLibrarySection: a library row on a mixed
@@ -899,7 +948,7 @@ export default function App() {
     body = <PersonalScreen session={session} kind={section} onOpen={openItem} />;
   }
   else if (section === "history") body = <HistoryScreen session={session} onOpen={openItem} />;
-  else if (section === "collections") body = <CollectionsScreen session={session} onOpen={openItem} />;
+  else if (section === "collections") body = <CollectionsScreen key={personalCollection?.id ?? "collections"} session={session} onOpen={openItem} initialCollection={personalCollection ?? undefined} onLeave={() => { leaveOpenedCollection(); }} />;
   else if (section === "profiles") {
     body = (
       <ProfileSelectionScreen
@@ -1019,6 +1068,8 @@ export default function App() {
           }
           setLibraryLanding(landing);
           setBrowseDetail(null);
+          setCollectionReturn(null);
+          setPersonalCollection(null);
           setSectionBrowse(null);
           setSection(next);
           setRoute({ name: "main" });

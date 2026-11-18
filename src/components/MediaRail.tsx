@@ -50,10 +50,12 @@ export const MediaRail = memo(function MediaRail({
   const isContinueWatching = rail.title.toLocaleLowerCase().includes("continue watching");
   const landscape = Boolean(rail.featured || isContinueWatching);
   // Android offersExploreAll: non-featured rows with cards and a server section id.
-  const explorable = Boolean(onExplore && rail.sectionId && !rail.featured && rail.items.length > 0);
+  // A row of collections (#170) shows all its collections and has no full page (Android TV #979).
+  const collectionRow = rail.items.some(item => item.CollectionCard);
+  const explorable = Boolean(onExplore && rail.sectionId && !rail.featured && rail.items.length > 0 && !collectionRow);
   const items = useMemo(
-    () => (onExplore ? rail.items.slice(0, SECTION_ROW_MAX_ITEMS) : rail.items),
-    [onExplore, rail.items]
+    () => (onExplore && !collectionRow ? rail.items.slice(0, SECTION_ROW_MAX_ITEMS) : rail.items),
+    [onExplore, rail.items, collectionRow]
   );
   /** Position of the card that last had focus in this row; the rendered window follows it. */
   const [anchor, setAnchor] = useState(initialAnchor);
