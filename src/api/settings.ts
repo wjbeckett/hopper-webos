@@ -166,12 +166,14 @@ export function clearScopedSetting(session: Session, key: string, scope: CardSco
  * Card overlay settings (#175, Android TV's OverlayPrefsStore): whether badges are on (the
  * profile's `ui.card_overlays_enabled`, else the server's `enabled`) and the document to draw
  * (the profile's `ui.card_overlays` when the profile set it, else the server's `defaults`, else
- * the built-in defaults). A server without overlays reads as on with the built-in defaults.
+ * the built-in defaults). Rejects when either can't be read.
  */
 export async function getCardOverlaySettings(session: Session): Promise<{ enabled: boolean; profileValue: unknown; serverDefaults: unknown }> {
   const [config, effective] = await Promise.all([
-    requestV2<{ enabled?: boolean; defaults?: string }>(session, "/settings/overlay-config").catch(() => null),
-    getEffectiveSettings(session, ["ui.card_overlays", "ui.card_overlays_enabled"]).catch(() => new Map<string, SettingValue>())
+    // Either read failing fails the whole: drawing the built-in defaults instead could show badges
+    // a profile turned off. The caller tries again later.
+    requestV2<{ enabled?: boolean; defaults?: string }>(session, "/settings/overlay-config"),
+    getEffectiveSettings(session, ["ui.card_overlays", "ui.card_overlays_enabled"])
   ]);
   const fromProfile = (key: string) => {
     const entry = effective.get(key);
@@ -179,8 +181,8 @@ export async function getCardOverlaySettings(session: Session): Promise<{ enable
   };
   const profileEnabled = fromProfile("ui.card_overlays_enabled");
   return {
-    enabled: typeof profileEnabled === "boolean" ? profileEnabled : config?.enabled !== false,
+    enabled: typeof profileEnabled === "boolean" ? profileEnabled : config.enabled !== false,
     profileValue: fromProfile("ui.card_overlays"),
-    serverDefaults: config?.defaults
+    serverDefaults: config.defaults
   };
 }

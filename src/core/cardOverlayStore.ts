@@ -11,6 +11,7 @@ import { resolveOverlayPrefs, type CardOverlayPrefs } from "./cardOverlays";
 type State = { enabled: boolean; prefs: CardOverlayPrefs | null };
 let state: State = { enabled: false, prefs: null };
 let loadedFor = "";
+const RETRY_MS = 30_000;
 const listeners = new Set<() => void>();
 
 function set(next: State) {
@@ -26,7 +27,13 @@ export function loadCardOverlays(session: Session) {
   void getCardOverlaySettings(session).then(settings => {
     if (loadedFor !== key) return;
     set({ enabled: settings.enabled, prefs: resolveOverlayPrefs(settings.profileValue, settings.serverDefaults) });
-  }).catch(() => undefined);
+  }).catch(() => {
+    // Unreadable now (the server didn't answer): try again in a while, so badges don't stay off
+    // until the profile changes.
+    if (loadedFor !== key) return;
+    loadedFor = "";
+    window.setTimeout(() => { if (!loadedFor) loadCardOverlays(session); }, RETRY_MS);
+  });
 }
 
 export function useCardOverlays(): State {
