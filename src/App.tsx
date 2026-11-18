@@ -24,6 +24,7 @@ import { LibraryRecommendationsScreen } from "./screens/LibraryRecommendationsSc
 import { LoginScreen } from "./screens/LoginScreen";
 import { PersonScreen } from "./screens/PersonScreen";
 import { PlayerScreen } from "./screens/PlayerScreen";
+import { nextInChain } from "./navigation/similarChain";
 import { PersonalScreen } from "./screens/PersonalScreen";
 import { clearBackgrounded, markBackgrounded, requiresSelectionAfterBackground, requiresSelectionAtLaunch } from "./core/profileLaunch";
 import { ProfileSelectionScreen } from "./screens/ProfileSelectionScreen";
@@ -41,7 +42,7 @@ import { SettingsScreen } from "./screens/SettingsScreen";
 import { SectionBrowseScreen, type SectionBrowseArgs } from "./screens/SectionBrowseScreen";
 import type { AudiobookGroup } from "./api/silo";
 import { invalidateWatchDetail, type PlaybackChoices } from "./api/playback";
-import { applyResumeState, applyWatchedState, publishWatchState } from "./core/watchState";
+import { applyResumeState, applyServerUserData, applyWatchedState, publishPlaybackSettled, publishWatchState } from "./core/watchState";
 import { firstEpisodeOfSeason, nextEpisodeAfter } from "./core/episodeNavigation";
 import { publishRailsChanged } from "./core/watchState";
 import { connectEventsSocket } from "./api/events";
@@ -62,10 +63,13 @@ installClientLogCapture();
 type AuthRoute = "phone-setup" | "server-setup" | "first-run-setup" | "device-login" | "password-login" | "signup";
 type DetailRoute =
   | { name: "main" }
-  | { name: "details"; item: SiloItem; castIndex?: number }
-  | { name: "series"; item: SiloItem; selectedEpisode?: SiloItem; castIndex?: number }
+  | { name: "details"; item: SiloItem; castIndex?: number; chainStart?: TitleRoute }
+  | { name: "series"; item: SiloItem; selectedEpisode?: SiloItem; castIndex?: number; chainStart?: TitleRoute }
   | { name: "person"; personId?: string; personName: string; back: DetailRoute }
   | { name: "player"; item: SiloItem; startPosition?: number; autoAdvanceCount?: number; choices?: PlaybackChoices; returnTo?: { series: SiloItem; selectedEpisode: SiloItem }; shuffleId?: string; shuffleNext?: SiloItem; shuffleScope?: string; remoteLaunch?: number; borrowed?: BorrowedPlayback };
+
+/** A title's page. `chainStart`: the page a More Like This chain started from (#177). */
+type TitleRoute = Extract<DetailRoute, { name: "details" | "series" }>;
 
 type BrowseDetail =
   | { kind: "collection"; library: SiloLibrary; collection: SiloCollection }
@@ -171,6 +175,8 @@ export default function App() {
   const [libraries, setLibraries] = useState<SiloLibrary[]>([]);
   const [librariesLoaded, setLibrariesLoaded] = useState(false);
   const [requestsAvailable, setRequestsAvailable] = useState<boolean | undefined>();
+  /** The profiles screen was opened from the profile menu's Add Profile (#176). */
+  const [addingProfile, setAddingProfile] = useState(false);
   const [profileError, setProfileError] = useState("");
   const [profileHydrated, setProfileHydrated] = useState(false);
   const [route, setRoute] = useState<DetailRoute>({ name: "main" });
@@ -500,6 +506,11 @@ export default function App() {
           event.preventDefault();
           return;
         }
+        if ((route.name === "details" || route.name === "series") && route.chainStart) {
+          setRoute(route.chainStart);
+          event.preventDefault();
+          return;
+        }
         if (route.name !== "main") {
           setRoute({ name: "main" });
           focusTopNavigation(activeNav);
@@ -610,17 +621,32 @@ export default function App() {
     setAuthRoute("server-setup");
   }
 
-  function openItem(item: SiloItem, options?: { episode?: SiloItem }) {
-    if (item.CollectionCard) { openCollectionCard(item); return; }
-    if (item.Type === "Series") setRoute({ name: "series", item, selectedEpisode: options?.episode });
-    else if (item.Type === "Episode" && item.SeriesId) {
-      setRoute({
+  function titleRoute(item: SiloItem, options?: { episode?: SiloItem }): TitleRoute {
+    if (item.Type === "Series") return { name: "series", item, selectedEpisode: options?.episode };
+    if (item.Type === "Episode" && item.SeriesId) {
+      return {
         name: "series",
         item: { Id: item.SeriesId, Name: item.SeriesName ?? "Series", Type: "Series" },
         selectedEpisode: item
-      });
+      };
     }
-    else setRoute({ name: "details", item });
+    return { name: "details", item };
+  }
+
+  function openItem(item: SiloItem, options?: { episode?: SiloItem }) {
+    if (item.CollectionCard) { openCollectionCard(item); return; }
+    setRoute(titleRoute(item, options));
+  }
+
+  /**
+   * A pick from a title page's More Like This rail (#177, Android TV #737, tvOS #959). The first
+   * pick opens a new page, so Back returns to the title it came from; later picks replace that
+   * page, so Back from any depth returns to the title the chain started from, and then to
+   * wherever that title was opened. Picking the starting title again goes back to it.
+   */
+  function openSimilar(from: TitleRoute, item: SiloItem) {
+    const next = nextInChain<TitleRoute>(from, titleRoute(item));
+    if (next) setRoute(next);
   }
 
   /**
@@ -710,7 +736,28 @@ export default function App() {
     }
   }
 
-  function leavePlayer(current: Extract<DetailRoute, { name: "player" }>) {
+  /**
+   * After the player (#165): the page shows the exit position at once, then the server's answer
+   * once the player's stop has landed. The server can differ: a stop past the watched threshold
+   * marks the title watched, and one under the minimum resume share keeps the earlier point.
+   */
+  function settleAfterPlayer(current: Extract<DetailRoute, { name: "player" }>, stopped: Promise<void>) {
+    // A phone profile's playback belongs to that profile; the TV's pages don't show it.
+    if (current.borrowed) return;
+    const owner = sessionRef.current;
+    const item = current.item;
+    void stopped.then(async () => {
+      if (!owner || sessionRef.current !== owner) return;
+      try {
+        const fresh = await getCatalogItem(owner, item.Id);
+        if (sessionRef.current === owner) publishWatchState(applyServerUserData(item, fresh));
+      } catch { /* The page keeps the exit position, as Android TV does when the read fails. */ }
+      if (sessionRef.current === owner) publishPlaybackSettled([item.Id, ...(item.SeriesId ? [item.SeriesId] : [])]);
+    });
+  }
+
+  /** `shown`: the title as the page should show it now; `landOn`: the episode to return to. */
+  function leavePlayer(current: Extract<DetailRoute, { name: "player" }>, shown = current.item, landOn?: SiloItem) {
     // A phone profile's title may not be one the TV's profile can open: back to the TV's screen.
     if (current.borrowed) {
       setRoute({ name: "main" });
@@ -722,8 +769,8 @@ export default function App() {
       return;
     }
     setRoute(current.returnTo
-      ? { name: "series", item: current.returnTo.series, selectedEpisode: current.returnTo.selectedEpisode }
-      : { name: "details", item: current.item });
+      ? { name: "series", item: current.returnTo.series, selectedEpisode: landOn ?? shown }
+      : { name: "details", item: shown });
   }
 
   /**
@@ -870,13 +917,17 @@ export default function App() {
           const parentSeries = route.returnTo?.series ?? { Id: route.item.SeriesId ?? "", Name: route.item.SeriesName ?? "Series", Type: "Series" };
           setRoute({ name: "player", item: next, startPosition: 0, autoAdvanceCount, returnTo: { series: parentSeries, selectedEpisode: next }, borrowed });
         }}
-        onBack={(position) => {
-          publishOwn(applyResumeState(route.item, position));
-          leavePlayer(route);
+        onBack={(position, exit) => {
+          const shown = applyResumeState(route.item, position);
+          publishOwn(shown);
+          settleAfterPlayer(route, exit.stopped);
+          leavePlayer(route, shown, exit.landOn);
         }}
-        onEnded={route.shuffleId ? () => void advanceShuffleRoute(route.shuffleId!, route.item) : () => {
-          publishOwn(applyWatchedState(route.item, true));
-          leavePlayer(route);
+        onEnded={route.shuffleId ? () => void advanceShuffleRoute(route.shuffleId!, route.item) : (exit) => {
+          const shown = applyWatchedState(route.item, true);
+          publishOwn(shown);
+          settleAfterPlayer(route, exit.stopped);
+          leavePlayer(route, shown);
         }}
       />
       <PhoneApproval />
@@ -912,7 +963,7 @@ export default function App() {
         onPlayExtra={playExtra}
         onPlayEpisode={(episode, startPosition, choices) => setRoute({ name: "player", item: episode, startPosition, choices, returnTo: { series: route.item, selectedEpisode: episode } })}
         onShuffle={startShuffle}
-        onOpen={openItem}
+        onOpenSimilar={item => openSimilar(route, item)}
       />
       {overlays}
       </>
@@ -930,7 +981,7 @@ export default function App() {
         onOpenPerson={(person, index) => setRoute({ name: "person", personId: person.personId, personName: person.name, back: { ...route, castIndex: index } })}
         onPlayExtra={playExtra}
         onPlay={(startPosition, choices) => setRoute({ name: "player", item: route.item, startPosition, choices })}
-        onOpen={openItem}
+        onOpenSimilar={item => openSimilar(route, item)}
       />
       {overlays}
       </>
@@ -957,11 +1008,13 @@ export default function App() {
         onChangeServer={changeServer}
         onSignOut={signOut}
         onActiveProfileDeleted={clearDeletedProfile}
+        startAdding={addingProfile}
+        onAddingStarted={() => setAddingProfile(false)}
       />
     );
   }
   else if (section === "settings") {
-    body = <SettingsScreen session={session} onSignOut={signOut} onChangeServer={changeServer} onSwitchProfile={() => setSection("profiles")} />;
+    body = <SettingsScreen session={session} onSignOut={signOut} onChangeServer={changeServer} onSwitchProfile={() => { setAddingProfile(false); setSection("profiles"); }} />;
   } else if (section === "library") {
     body = <LibraryScreen key="all" session={session} libraries={libraries} selectableLibraries onOpen={openItem} onShuffle={startShuffle} />;
   }   else if (section === "calendar") body = <CalendarScreen session={session} onOpen={openItem} />;
@@ -1075,10 +1128,10 @@ export default function App() {
           setRoute({ name: "main" });
         }}
         onProfile={() => setSection("settings")}
-        onFavorites={() => { setSection("favorites"); setRoute({ name: "main" }); }}
-        onWatchlist={() => { setSection("watchlist"); setRoute({ name: "main" }); }}
+        onRequests={() => { setSection("requests"); setRoute({ name: "main" }); }}
         onHistory={() => { setSection("history"); setRoute({ name: "main" }); }}
-        onProfiles={() => { setSection("profiles"); setRoute({ name: "main" }); }}
+        onProfiles={() => { setAddingProfile(false); setSection("profiles"); setRoute({ name: "main" }); }}
+        onAddProfile={() => { setAddingProfile(true); setSection("profiles"); setRoute({ name: "main" }); }}
         onSignOut={signOut}
         onChangeServer={changeServer}
       />}

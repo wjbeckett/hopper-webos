@@ -9,6 +9,7 @@ import { useMetadataAiOnView } from "./useMetadataAiOnView";
 import { DefaultArtwork } from "../components/ArtworkImage";
 import { claimAutoTranslation, hasMachineTranslatedOverview, releaseAutoTranslation, runDescriptionTranslation } from "../core/descriptionTranslation";
 import { ResumeProgress } from "../components/ResumeProgress";
+import { subscribePlaybackSettled, subscribeWatchState } from "../core/watchState";
 import type { PlaybackChoices } from "../api/playback";
 import type { DetailPerson, DetailTrailer } from "../api/silo";
 import type { Session, SiloItem } from "../types";
@@ -18,7 +19,8 @@ type Props = {
   session: Session;
   item: SiloItem;
   onPlay: (startPosition: number | undefined, choices: PlaybackChoices) => void;
-  onOpen: (item: SiloItem) => void;
+  /** A pick from the More Like This rail (#177). */
+  onOpenSimilar: (item: SiloItem) => void;
   restoreCastIndex?: number;
   onOpenPerson: (person: DetailPerson, index: number) => void;
   onPlayExtra: (trailer: DetailTrailer) => void;
@@ -54,7 +56,7 @@ function typeLabel(type?: string) {
   return type ?? "";
 }
 
-export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex, onOpenPerson, onPlayExtra }: Props) {
+export function DetailsScreen({ session, item, onPlay, onOpenSimilar, restoreCastIndex, onOpenPerson, onPlayExtra }: Props) {
   const [detail, setDetail] = useState(item);
   const [posterFailed, setPosterFailed] = useState(false);
   useEffect(() => setPosterFailed(false), [item.Id]);
@@ -67,7 +69,14 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
   useEffect(() => setPositionCleared(false), [item.Id]);
   const extras = useDetailExtras(session, item.Id);
   const spoilerPreferences = useEpisodeSpoilerPreferences(session);
-  const watchDetail = useWatchDetail(session, item.Type === "Movie" || item.Type === "Episode" ? item : undefined);
+  // After the player (#165): App publishes the server's user state once the stop lands, then
+  // says it has settled, and the resume point is read again from /watch.
+  const [settled, setSettled] = useState(0);
+  useEffect(() => subscribeWatchState(next => {
+    if (next.Id === item.Id) setDetail(current => current.Id === next.Id ? { ...current, UserData: next.UserData } : current);
+  }), [item.Id]);
+  useEffect(() => subscribePlaybackSettled(ids => { if (ids.includes(item.Id)) setSettled(count => count + 1); }), [item.Id]);
+  const watchDetail = useWatchDetail(session, item.Type === "Movie" || item.Type === "Episode" ? item : undefined, settled);
   const hasPlaybackSummary = item.Type === "Movie" || item.Type === "Episode";
   const [choices, setChoices] = useState<PlaybackChoices>({});
   const [optionsOpen, setOptionsOpen] = useState(false);
@@ -318,7 +327,7 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
       <div className="details-related">
         {detail.Type !== "AudioBook" && extras ? <CastSection cast={extras.cast} restoreIndex={restoreCastIndex} onOpen={onOpenPerson} /> : null}
         {extras ? <TrailersSection trailers={extras.trailers} onPlayLocal={onPlayExtra} /> : null}
-        {similar.length ? <MediaRail rail={{ id: "similar", title: relatedTitle, items: similar }} session={session} onOpen={onOpen} slide /> : null}
+        {similar.length ? <MediaRail rail={{ id: "similar", title: relatedTitle, items: similar }} session={session} onOpen={onOpenSimilar} slide /> : null}
         <FactsSection facts={factsFor(extras)} />
       </div>
       {optionsOpen ? (

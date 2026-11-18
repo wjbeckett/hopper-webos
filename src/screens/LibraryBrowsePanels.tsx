@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { searchCatalogFacet } from "../api/silo";
 import type { CatalogFilterOptions, CatalogScope } from "../api/silo";
 import type { Session } from "../types";
+import { sortDirectionLabel } from "../core/catalogSort";
 
-export type BrowseSortKey = "title" | "added_at" | "release_date" | "year" | "rating_imdb" | "runtime" | "resolution" | "author" | "narrator" | "series" | "collection";
+/** A server sort field (`src/core/catalogSort.ts`), or a collection's own order. */
+export type BrowseSortKey = string;
 export type BrowseSortOption = {
   id: BrowseSortKey;
   label: string;
@@ -48,13 +50,7 @@ function sortedOptions(values: string[] | undefined) {
     .map(value => ({ value, label: value }));
 }
 
-function directionLabel(sort: BrowseSortKey, order: "asc" | "desc") {
-  if (sort === "collection") return "Default";
-  if (["title", "author", "narrator", "series"].includes(sort)) return order === "asc" ? "A–Z" : "Z–A";
-  if (["release_date", "year", "added_at"].includes(sort)) return order === "asc" ? "Oldest" : "Newest";
-  if (sort === "runtime") return order === "asc" ? "Shortest" : "Longest";
-  return order === "asc" ? "Lowest" : "Highest";
-}
+const directionLabel = sortDirectionLabel;
 
 export function LibraryBrowsePanels({
   sortOptions,

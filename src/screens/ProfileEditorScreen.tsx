@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   createProfile,
   getAssignableLibraries,
-  getEditableProfiles,
+  getEditableProfileList,
   profileErrorMessage,
   updateProfile,
   type EditableProfile,
@@ -18,6 +18,7 @@ import {
   hasProfileNamed,
   needsLibrary,
   updateAccessFields,
+  withRequests,
   withChild,
   withLibrary,
   type AccessLimits
@@ -41,6 +42,8 @@ export function ProfileEditorScreen({ session, manager, profileId, onDone, onCan
   const [selectedAvatarSeed, setSelectedAvatarSeed] = useState<string | null>(null);
   const [batch, setBatch] = useState(0);
   const [access, setAccess] = useState<AccessLimits>(EMPTY_ACCESS);
+  /** The server has the per-profile requests switch (#172, `requests_allowed_supported`). */
+  const [requestsSupported, setRequestsSupported] = useState(false);
   const [libraries, setLibraries] = useState<LibrariesState>({ kind: "loading" });
   const [pinEnabled, setPinEnabled] = useState(false);
   const [pin, setPin] = useState("");
@@ -61,9 +64,10 @@ export function ProfileEditorScreen({ session, manager, profileId, onDone, onCan
   useEffect(() => {
     let alive = true;
     loadLibraries();
-    getEditableProfiles(session)
-      .then(profiles => {
+    getEditableProfileList(session)
+      .then(({ profiles, requestsAllowedSupported }) => {
         if (!alive) return;
+        setRequestsSupported(requestsAllowedSupported);
         existing.current = profiles;
         if (!editing) return;
         const profile = profiles.find(candidate => candidate.id === profileId);
@@ -76,7 +80,8 @@ export function ProfileEditorScreen({ session, manager, profileId, onDone, onCan
           isChild: profile.isChild,
           maxContentRating: profile.maxContentRating,
           libraryRestrictionsEnabled: profile.libraryRestrictionsEnabled,
-          allowedLibraryIds: profile.allowedLibraryIds
+          allowedLibraryIds: profile.allowedLibraryIds,
+          requestsAllowed: profile.requestsAllowed
         };
         const preset = parseAvatarRef(profile.avatarEmoji);
         loadedHasPin.current = profile.hasPin;
@@ -111,13 +116,13 @@ export function ProfileEditorScreen({ session, manager, profileId, onDone, onCan
     try {
       if (editing && profileId) {
         // A new PIN sets it; turning off a stored PIN clears it (PATCH null); otherwise omit.
-        const patch: Record<string, unknown> = { name, ...updateAccessFields(access, loadedAccess.current, assignable) };
+        const patch: Record<string, unknown> = { name, ...updateAccessFields(access, loadedAccess.current, assignable, requestsSupported) };
         if (avatar) patch.avatar = avatar;
         if (pinEnabled && pin) patch.pin = pin;
         else if (!pinEnabled && loadedHasPin.current) patch.pin = null;
         await updateProfile(session, manager, profileId, patch);
       } else {
-        await createProfile(session, manager, { name, avatar, pin: pinEnabled ? pin : null, ...createAccessFields(access) });
+        await createProfile(session, manager, { name, avatar, pin: pinEnabled ? pin : null, ...createAccessFields(access, requestsSupported) });
       }
       onDone();
     } catch (cause) {
@@ -140,6 +145,7 @@ export function ProfileEditorScreen({ session, manager, profileId, onDone, onCan
         selectedAvatarSeed,
         avatarBatch: batch,
         access,
+        requestsSupported,
         libraries,
         pinEnabled,
         pin,
@@ -160,6 +166,7 @@ export function ProfileEditorScreen({ session, manager, profileId, onDone, onCan
           setError(null);
         },
         onLibraryToggled: (id, allowed) => { setAccess(current => withLibrary(current, id, allowed)); setError(null); },
+        onRequestsToggled: allowed => setAccess(current => withRequests(current, allowed)),
         onRetryLibraries: loadLibraries,
         onPinToggled: enabled => { setPinEnabled(enabled); if (!enabled) setPin(""); },
         onPinChanged: value => { setPin(value.replace(/\D/g, "").slice(0, 4)); setError(null); },
