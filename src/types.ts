@@ -73,6 +73,8 @@ export type SiloItem = {
   UserRating?: number;
   /** Marked Not interested (#179); undefined where the server doesn't say. */
   NotInterested?: boolean;
+  /** A card for a movie box set (#171), not a title. */
+  BoxSet?: { id: string; libraryId: string; movieCount: number; playedCount: number };
   UserData?: {
     Played?: boolean;
     PlaybackPositionTicks?: number;
@@ -148,6 +150,22 @@ export type SiloMediaRequest = {
   createdAt: string;
   /** Failed and delivered nothing: the requester may remove it (#172). */
   removable?: boolean;
+};
+
+/** A movie box set (#171, silo-server #2784): a TMDB collection's movies in one library, in release order. */
+export type SiloBoxSet = {
+  id: string;
+  libraryId: string;
+  title: string;
+  overview?: string;
+  posterUrl?: string;
+  posterThumbhash?: string;
+  backdropUrl?: string;
+  movieCount: number;
+  playedCount: number;
+  firstYear?: number;
+  lastYear?: number;
+  items: SiloItem[];
 };
 
 export type SiloLibrary = {

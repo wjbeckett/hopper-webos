@@ -25,6 +25,7 @@ import { LoginScreen } from "./screens/LoginScreen";
 import { PersonScreen } from "./screens/PersonScreen";
 import { PlayerScreen } from "./screens/PlayerScreen";
 import { nextInChain } from "./navigation/similarChain";
+import { BoxSetScreen } from "./screens/BoxSetScreen";
 import { PersonalScreen } from "./screens/PersonalScreen";
 import { clearBackgrounded, markBackgrounded, requiresSelectionAfterBackground, requiresSelectionAtLaunch } from "./core/profileLaunch";
 import { ProfileSelectionScreen } from "./screens/ProfileSelectionScreen";
@@ -63,10 +64,12 @@ installClientLogCapture();
 type AuthRoute = "phone-setup" | "server-setup" | "first-run-setup" | "device-login" | "password-login" | "signup";
 type DetailRoute =
   | { name: "main" }
-  | { name: "details"; item: SiloItem; castIndex?: number; chainStart?: TitleRoute }
+  | { name: "details"; item: SiloItem; castIndex?: number; chainStart?: TitleRoute; back?: DetailRoute }
+  /** A movie box set's page (#171); Back returns to `back`. */
+  | { name: "boxset"; boxSetId: string; libraryId: string; title?: string; back: DetailRoute }
   | { name: "series"; item: SiloItem; selectedEpisode?: SiloItem; castIndex?: number; chainStart?: TitleRoute }
   | { name: "person"; personId?: string; personName: string; back: DetailRoute }
-  | { name: "player"; item: SiloItem; startPosition?: number; autoAdvanceCount?: number; choices?: PlaybackChoices; returnTo?: { series: SiloItem; selectedEpisode: SiloItem }; shuffleId?: string; shuffleNext?: SiloItem; shuffleScope?: string; remoteLaunch?: number; borrowed?: BorrowedPlayback };
+  | { name: "player"; item: SiloItem; startPosition?: number; autoAdvanceCount?: number; choices?: PlaybackChoices; returnTo?: { series: SiloItem; selectedEpisode: SiloItem }; back?: DetailRoute; shuffleId?: string; shuffleNext?: SiloItem; shuffleScope?: string; remoteLaunch?: number; borrowed?: BorrowedPlayback };
 
 /** A title's page. `chainStart`: the page a More Like This chain started from (#177). */
 type TitleRoute = Extract<DetailRoute, { name: "details" | "series" }>;
@@ -81,6 +84,7 @@ const NAVIGATION_KEY = "silo-webos-navigation-v1";
 type SavedNavigation = { serverUrl: string; profileId: string; section: AppSection; route: DetailRoute };
 
 function safeBrowsingRoute(route: DetailRoute): DetailRoute {
+  if (route.name === "player" && route.back) return route.back;
   if (route.name === "player") {
     return route.returnTo
       ? { name: "series", item: route.returnTo.series, selectedEpisode: route.returnTo.selectedEpisode }
@@ -501,8 +505,8 @@ export default function App() {
           event.preventDefault();
           return;
         }
-        if (route.name === "person") {
-          setRoute(route.back);
+        if (route.name === "person" || route.name === "boxset" || (route.name === "details" && route.back)) {
+          setRoute(route.back!);
           event.preventDefault();
           return;
         }
@@ -635,6 +639,7 @@ export default function App() {
 
   function openItem(item: SiloItem, options?: { episode?: SiloItem }) {
     if (item.CollectionCard) { openCollectionCard(item); return; }
+    if (item.BoxSet) { openBoxSet(item.BoxSet.id, item.BoxSet.libraryId, item.Name); return; }
     setRoute(titleRoute(item, options));
   }
 
@@ -686,6 +691,11 @@ export default function App() {
     setSelectedSeriesLibraryId(back.seriesLibraryId);
     setSection(back.section);
     return true;
+  }
+
+  /** A movie box set's page (#171); Back returns to the screen it was opened from. */
+  function openBoxSet(boxSetId: string, libraryId: string, title?: string) {
+    setRoute(current => ({ name: "boxset", boxSetId, libraryId, title, back: current }));
   }
 
   // Android openHomeSection / openLibrarySection: a library row on a mixed
@@ -758,6 +768,11 @@ export default function App() {
 
   /** `shown`: the title as the page should show it now; `landOn`: the episode to return to. */
   function leavePlayer(current: Extract<DetailRoute, { name: "player" }>, shown = current.item, landOn?: SiloItem) {
+    // Played from a box set's page (#171): back to it, read again.
+    if (current.back && !current.borrowed) {
+      setRoute(current.back);
+      return;
+    }
     // A phone profile's title may not be one the TV's profile can open: back to the TV's screen.
     if (current.borrowed) {
       setRoute({ name: "main" });
@@ -970,6 +985,24 @@ export default function App() {
     );
   }
 
+  if (route.name === "boxset") {
+    const boxSetRoute = route;
+    return (
+      <>
+      <BoxSetScreen
+        key={`${route.boxSetId}-${connectionEpoch}`}
+        session={session}
+        boxSetId={route.boxSetId}
+        libraryId={route.libraryId}
+        title={route.title}
+        onOpen={item => setRoute({ name: "details", item, back: boxSetRoute })}
+        onPlay={(item, startPosition) => setRoute({ name: "player", item, startPosition, back: boxSetRoute })}
+      />
+      {overlays}
+      </>
+    );
+  }
+
   if (route.name === "details") {
     return (
       <>
@@ -980,8 +1013,10 @@ export default function App() {
         restoreCastIndex={route.castIndex}
         onOpenPerson={(person, index) => setRoute({ name: "person", personId: person.personId, personName: person.name, back: { ...route, castIndex: index } })}
         onPlayExtra={playExtra}
-        onPlay={(startPosition, choices) => setRoute({ name: "player", item: route.item, startPosition, choices })}
+        onPlay={(startPosition, choices) => setRoute({ name: "player", item: route.item, startPosition, choices, back: route.back ? route : undefined })}
         onOpenSimilar={item => openSimilar(route, item)}
+        onOpen={openItem}
+        onOpenBoxSet={(boxSetId, libraryId, title) => openBoxSet(boxSetId, libraryId, title)}
       />
       {overlays}
       </>

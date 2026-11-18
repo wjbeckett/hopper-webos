@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { imageUrl, searchItems } from "../api/silo";
+import { imageUrl, searchBoxSets, searchItems } from "../api/silo";
 import { MediaCard } from "../components/MediaCard";
 import { homeRailsKey } from "../core/homeRailsCache";
 import type { Session, SiloItem } from "../types";
@@ -60,8 +60,12 @@ export function SearchScreen({
       setLoading(true);
       setError("");
       try {
+        // Box sets come first (#171, Android TV #646). Asked for beside the titles; if they take
+        // more than 1.5 s once the titles are in, this search shows none rather than wait.
+        const boxSets = searchBoxSets(session, trimmed);
         const results = await searchItems(session, trimmed);
-        if (alive) { resultsQuery.current = trimmed; setItems(results); }
+        const sets = await Promise.race([boxSets, new Promise<SiloItem[]>(resolve => window.setTimeout(() => resolve([]), 1500))]);
+        if (alive) { resultsQuery.current = trimmed; setItems([...sets, ...results]); }
       } catch (cause) {
         if (alive) setError(cause instanceof Error ? cause.message : "Search failed.");
       } finally {

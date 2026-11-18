@@ -32,6 +32,8 @@ type Props = {
 function subtitle(item: SiloItem) {
   // A row of collections (#170): how many titles the collection holds.
   if (item.CollectionCard) return `${item.CollectionCard.itemCount} ${item.CollectionCard.itemCount === 1 ? "title" : "titles"}`;
+  // A movie box set (#171): what it is and how many films it holds.
+  if (item.BoxSet) return `Box Set · ${item.BoxSet.movieCount} ${item.BoxSet.movieCount === 1 ? "film" : "films"}`;
   if (item.Type === "Episode") {
     const season = item.ParentIndexNumber != null ? `S${String(item.ParentIndexNumber).padStart(2, "0")}` : "";
     const episode = item.IndexNumber != null ? `E${String(item.IndexNumber).padStart(2, "0")}` : "";
@@ -61,6 +63,8 @@ export const MediaCard = memo(function MediaCard({ session, item, image, onOpen,
       if (!cardRef.current || !cardRef.current.contains(event.target)) return;
       // Watched, favorite and watchlist are for titles, not collections.
       if (item.Type === "Collection") return;
+      // Watched, favorite and watchlist are for titles, not box sets.
+      if (item.Type === "BoxSet") return;
       setMenuOpen(true);
     };
     window.addEventListener("silo:open-card-menu", onOpenMenu);

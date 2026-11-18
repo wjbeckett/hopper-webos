@@ -5593,3 +5593,11 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
   font-size: 1.25rem;
   color: #ffb4a8;
 }
+
+/* A movie box set's page (#171): the movie page's hero with a BOX SET eyebrow. */
+.box-set-eyebrow {
+  font-size: 1.25rem;
+  font-weight: calc(700 + var(--font-weight-boost));
+  letter-spacing: .14em;
+  color: var(--muted-foreground);
+}
