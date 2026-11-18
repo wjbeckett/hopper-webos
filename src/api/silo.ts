@@ -1005,8 +1005,10 @@ export async function removeFailedRequest(session: Session, requestId: string): 
     await requestApi<void>(session, `/requests/${encodeURIComponent(requestId)}`, { method: "DELETE" }, "v2");
     return "removed";
   } catch (cause) {
-    // requestApi's errors read "<path>: <status> <text>".
-    const status = cause instanceof Error ? /: (\d{3}) /.exec(cause.message)?.[1] : undefined;
+    // requestApi's errors read "<path>: <status> <text>". Only this DELETE's own answer counts:
+    // a failed token refresh on the way reads "/auth/refresh: 404 …" and is not a removal.
+    const path = `/requests/${encodeURIComponent(requestId)}: `;
+    const status = cause instanceof Error && cause.message.startsWith(path) ? /^(\d{3}) /.exec(cause.message.slice(path.length))?.[1] : undefined;
     if (status === "404") return "removed";
     if (status === "409") return "conflict";
     throw cause;

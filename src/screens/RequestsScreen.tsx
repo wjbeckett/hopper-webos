@@ -168,6 +168,8 @@ export function RequestsScreen({ session }: { session: Session }) {
   /** Android TV and the web: removes a failed request that delivered nothing, after asking. */
   async function removeRequest(request: SiloMediaRequest) {
     setRemoveCandidate(null);
+    // One removal at a time, so a conflict's re-read can't bring back a request removed meanwhile.
+    if (removingId) return;
     setRemovingId(request.id);
     setActionError("");
     setNotice("");
@@ -273,7 +275,7 @@ export function RequestsScreen({ session }: { session: Session }) {
                 <small>{request.year ?? request.mediaType} · {requestStateLabel(request.state, request.status)}</small>
               </div>
               {request.outcome === "active" ? <button data-tv-focusable="true" className="tv-button secondary" disabled={cancelingId === request.id} onClick={() => void cancelRequest(request)}>{cancelingId === request.id ? "Cancelling…" : "Cancel request"}</button> : null}
-              {removeSupported && request.removable ? <button data-tv-focusable="true" data-request-remove={request.id} className="tv-button secondary" disabled={removingId === request.id} onClick={() => setRemoveCandidate(request)}>{removingId === request.id ? "Removing…" : "Remove request"}</button> : null}
+              {removeSupported && request.removable ? <button data-tv-focusable="true" data-request-remove={request.id} className="tv-button secondary" disabled={removingId !== ""} onClick={() => setRemoveCandidate(request)}>{removingId === request.id ? "Removing…" : "Remove request"}</button> : null}
             </article>
           ))}
         </div>

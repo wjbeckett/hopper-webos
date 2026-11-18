@@ -911,6 +911,7 @@ export default function App() {
         onSignOut={signOut}
         onActiveProfileDeleted={clearDeletedProfile}
         startAdding={addingProfile}
+        onAddingStarted={() => setAddingProfile(false)}
       />
     );
   }

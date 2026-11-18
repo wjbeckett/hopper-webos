@@ -13,9 +13,11 @@ function householdPrimary(profiles: SiloProfile[]): SiloProfile | undefined {
 const isBackKey = (event: KeyboardEvent) =>
   ["Escape", "Backspace", "Back", "GoBack", "BrowserBack"].includes(event.key) || event.keyCode === 461 || event.keyCode === 10009;
 
-export function ProfileSelectionScreen({ session, onSelect, onChangeServer, onSignOut, onActiveProfileDeleted, fullScreen = false, startAdding = false }: {
+export function ProfileSelectionScreen({ session, onSelect, onChangeServer, onSignOut, onActiveProfileDeleted, fullScreen = false, startAdding = false, onAddingStarted }: {
   /** Opened from the profile menu's Add Profile (#176): go straight to adding one. */
   startAdding?: boolean;
+  /** The add flow has started: the opener clears `startAdding`, so a remount doesn't start it again. */
+  onAddingStarted?: () => void;
   /** The deleted profile was this device's selection; its token is now dead server-side. */
   onActiveProfileDeleted?: () => void;
   session: Session;
@@ -57,6 +59,7 @@ export function ProfileSelectionScreen({ session, onSelect, onChangeServer, onSi
     if (!startAdding || loading || addingStarted.current || !canManage) return;
     addingStarted.current = true;
     requestAddProfile();
+    onAddingStarted?.();
   }, [startAdding, loading, canManage]);
 
   useEffect(() => {
