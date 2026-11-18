@@ -5525,3 +5525,71 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
   opacity: 1;
   transform: translate(-50%, 0);
 }
+
+/* The profile's own rating under a title's facts (#180). One focus stop; OK starts rating. */
+.rating-stars-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 2.5rem;
+  margin: 10px 0 2px;
+}
+
+.rating-stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 14px 4px 10px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted-foreground);
+  font: inherit;
+  font-size: 1.25rem;
+  font-weight: calc(500 + var(--font-weight-boost));
+  cursor: pointer;
+}
+
+.rating-stars:focus,
+.rating-stars:focus-visible {
+  outline: none;
+  border-color: var(--ring);
+  background: rgba(255, 255, 255, .12);
+  color: var(--foreground);
+}
+
+.rating-stars.editing {
+  border-color: var(--primary);
+  background: rgba(255, 255, 255, .18);
+}
+
+.rating-stars-glyphs {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.rating-star {
+  position: relative;
+  display: inline-block;
+  font-size: 1.625rem;
+  line-height: 1;
+  color: rgba(255, 255, 255, .28);
+}
+
+.rating-star::before {
+  content: "★";
+}
+
+.rating-star-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  color: #f5c84c;
+}
+
+.rating-stars-notice {
+  font-size: 1.25rem;
+  color: #ffb4a8;
+}

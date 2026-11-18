@@ -1,9 +1,10 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { isFavorite, setFavorite, setWatched } from "../api/silo";
-import { applyWatchedState, publishWatchState, subscribeWatchState } from "../core/watchState";
+import { isFavorite, setFavorite, setNotInterested, setWatched } from "../api/silo";
+import { applyWatchedState, publishRailsChanged, publishWatchState, subscribeWatchState } from "../core/watchState";
 import { setWatchlist } from "../api/silo";
 import { ArtworkImage, defaultArtworkKindForType } from "./ArtworkImage";
+import { RecommendationsContext } from "./RecommendationsContext";
 import type { Session, SiloItem } from "../types";
 
 function WatchlistCardRow({ session, item, inWatchlist, onDone }: { session: Session; item: SiloItem; inWatchlist: boolean; onDone: () => void }) {
@@ -98,6 +99,24 @@ export const MediaCard = memo(function MediaCard({ session, item, image, onOpen,
     requestAnimationFrame(() => cardRef.current?.focus({ preventScroll: true }));
   }
 
+  /**
+   * Not Interested (#179, tvOS #1214): on the recommendation pages only, for movies and series.
+   * The rows read again so the title leaves them once the server has rebuilt its recommendations.
+   */
+  const tunesRecommendations = useContext(RecommendationsContext) && (item.Type === "Movie" || item.Type === "Series");
+  async function toggleMenuNotInterested(next: boolean) {
+    setMenuOpen(false);
+    setLive(current => ({ ...current, NotInterested: next }));
+    try {
+      await setNotInterested(session, item.Id, next);
+      publishRailsChanged();
+    } catch (cause) {
+      setLive(current => ({ ...current, NotInterested: !next }));
+      console.error(cause);
+    }
+    requestAnimationFrame(() => cardRef.current?.focus({ preventScroll: true }));
+  }
+
   async function toggleMenuFavorite(next: boolean) {
     setMenuOpen(false);
     try {
@@ -153,6 +172,11 @@ export const MediaCard = memo(function MediaCard({ session, item, image, onOpen,
           </button>
           {live.UserData?.InWatchlist != null && item.Type !== "Episode" ? (
             <WatchlistCardRow session={session} item={live} inWatchlist={live.UserData.InWatchlist} onDone={() => { setMenuOpen(false); requestAnimationFrame(() => cardRef.current?.focus({ preventScroll: true })); }} />
+          ) : null}
+          {tunesRecommendations ? (
+            <button type="button" data-tv-focusable="true" className="browse-panel-row" onClick={() => void toggleMenuNotInterested(live.NotInterested !== true)}>
+              <span>{live.NotInterested ? "Show in Recommendations" : "Not Interested"}</span>
+            </button>
           ) : null}
         </div>
       </div>,

@@ -16,6 +16,7 @@ import type { PlaybackChoices, WatchDetail } from "../api/playback";
 import type { DetailPerson, DetailTrailer } from "../api/silo";
 import type { Session, SiloItem } from "../types";
 import { applyWatchedState, publishWatchState } from "../core/watchState";
+import { RatingStars } from "../components/RatingStars";
 import { LoadingState } from "../components/LoadingState";
 import { ResumeProgress } from "../components/ResumeProgress";
 import { hidesEpisodeImage, hidesEpisodeOverview, useEpisodeSpoilerPreferences } from "../core/episodeSpoilers";
@@ -429,6 +430,9 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
           <div className="series-overview-slot">
             {synopsis ? <ExpandableOverview className="series-overview" preview={synopsis} text={overviewText} title={focusedEpisode?.Name ?? show.Name} /> : null}
           </div>
+          {/* The series' own rating (#180), below the overview: a fixed-height row, so the hero still never
+              moves with focus, and a stop in the hero's Up/Down chain (spatial.ts). */}
+          <RatingStars session={session} itemId={series.Id} rating={show.UserRating} />
           <div className="details-credit series-credit">{extras?.cast.length ? `Starring ${extras.cast.slice(0, 3).map(member => member.name).join(", ")}` : ""}</div>
           <PlaybackSummary detail={watchDetail} choices={choices} />
           <div className="details-actions">

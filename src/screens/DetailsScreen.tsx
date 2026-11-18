@@ -9,6 +9,7 @@ import { useMetadataAiOnView } from "./useMetadataAiOnView";
 import { DefaultArtwork } from "../components/ArtworkImage";
 import { claimAutoTranslation, hasMachineTranslatedOverview, releaseAutoTranslation, runDescriptionTranslation } from "../core/descriptionTranslation";
 import { ResumeProgress } from "../components/ResumeProgress";
+import { RatingStars } from "../components/RatingStars";
 import { subscribePlaybackSettled, subscribeWatchState } from "../core/watchState";
 import type { PlaybackChoices } from "../api/playback";
 import type { DetailPerson, DetailTrailer } from "../api/silo";
@@ -290,6 +291,8 @@ export function DetailsScreen({ session, item, onPlay, onOpenSimilar, restoreCas
               : translation === "failed" ? "Translation failed — retry" : "Translate description"}
           </button>
         ) : null}
+        {/* Below the overview, above the buttons: a stop in the hero's Up/Down chain (spatial.ts). */}
+        {detail.Type === "Movie" ? <RatingStars session={session} itemId={detail.Id} rating={detail.UserRating} /> : null}
         {!audiobook && (detail.Author || detail.Narrator) ? (
           <div className="details-credit">{[detail.Author, detail.Narrator ? `Narrated by ${detail.Narrator}` : ""].filter(Boolean).join(" · ")}</div>
         ) : null}
