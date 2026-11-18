@@ -74,14 +74,14 @@ To review any pull request on demand through the read-only path: **Actions → P
 
 **Version.** Every build has its own version number: `<major>.<minor>.<commit count>`, for example 0.3.215. The build stamps it into the packaged app, where the TV's app details show it, and into Settings → Server, next to the commit hash. A release is named after the build it ships: Hopper 0.3.331, tag `v0.3.331`. To start a new release line (1.0 was the first LG Content Store submission), change `<major>.<minor>` in `package.json` in a PR; the third number takes care of itself. A hash ending in `+` means the build had uncommitted changes.
 
-**Release notes** come from the pull requests. Each PR's description has a **Release note** line written for viewers: "New: …", "Changed: …" or "Fixed: …", or "None" for changes they will not notice. `scripts/release-notes.mjs` collects the lines of every PR merged since the previous release into *New and improved*, *Fixed* and a collapsed *Behind the scenes*. Older PRs without the line are sorted by labels. There is no change log file: the releases are the record of what shipped.
+**Release notes** come from the pull requests. Each PR's description has a **Release note** line written for viewers: "New: …", "Changed: …" or "Fixed: …", or "None" for changes they will not notice. `scripts/release-notes.mjs` collects the lines of every PR merged since the previous release into *New and improved*, *Fixed* and a collapsed *Behind the scenes*. A PR whose change is worth leading the release with also has a **Highlight** section, one or two sentences for viewers; the script gathers those under *Highlights*. Older PRs without the line are sorted by labels. There is no change log file: the releases are the record of what shipped.
 
 **To cut a release:**
 
 1. **You:** make sure the `main` commit you want to ship has been tested on a TV.
 2. **You:** Actions → **Release** → **Run workflow**, on `main`. Tick **pre-release** only for a test build that is not going to the LG Content Store.
 3. **Automatic:** the workflow runs the tests, builds and packages the IPK (app plus pairing service), writes `SHA256SUMS`, and creates a **draft** release `v<version>` with both attached and the notes filled in. The run's summary links to the draft. It stops if that version already has a release or tag.
-4. **You:** open the draft, write two or three lines under **Highlights** for viewers, trim or reword any note, and **Publish**. Publishing creates the tag on the commit that was built.
+4. **You:** open the draft, trim **Highlights** to the two or three that matter most (or write them if no PR had one), trim or reword any note, and **Publish**. Publishing creates the tag on the commit that was built.
 5. **You:** update the README Availability table (GitHub Releases row: status and version) in a PR.
 
 To check a release before publishing, install the attached IPK on a TV: `ares-install --device <tv> com.hopperapp.hopper_<version>_all.ipk`. A draft can be deleted and the workflow run again.

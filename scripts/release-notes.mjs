@@ -9,6 +9,9 @@
 //   New: ... / Changed: ...   -> New and improved
 //   Fixed: ...                -> Fixed
 //   None                      -> Behind the scenes, under the pull request's title
+// A pull request whose change is worth leading the release with also has a "## Highlight"
+// section: one or two sentences for viewers, gathered under Highlights for the maintainer to
+// trim to the two or three that matter most. Without any, Highlights keeps its placeholder.
 // A pull request without one (older ones) is sorted by its labels and those of the issues it
 // closes or is part of: bug -> Fixed, enhancement or accessibility -> New and improved, a title
 // starting "Fix" -> Fixed, anything else -> Behind the scenes.
@@ -58,10 +61,19 @@ function releaseNote(body) {
   if (/^none\.?$/i.test(line)) return { kind: "none" };
   const typed = line.match(/^(new|changed|fixed)\s*:\s*(.+)$/i);
   if (!typed) return { kind: "new", text: line };
-  return { kind: typed[1].toLowerCase() === "fixed" ? "fixed" : "new", text: typed[2].trim() };
+  // "New: a title …" reads as "A title …" in the notes.
+  const text = typed[2].trim();
+  return { kind: typed[1].toLowerCase() === "fixed" ? "fixed" : "new", text: text.charAt(0).toUpperCase() + text.slice(1) };
 }
 
-const sections = { new: [], fixed: [], behind: [] };
+/** The body's "## Highlight" section as one paragraph, without HTML comments; null when absent or "None". */
+function highlight(body) {
+  const section = body.replace(/<!--[\s\S]*?-->/g, "").match(/^##\s*Highlight\s*$([\s\S]*?)(?=^##\s|(?![\s\S]))/im);
+  const text = section?.[1].split("\n").map(line => line.trim()).filter(Boolean).join(" ");
+  return text && !/^none\.?$/i.test(text) ? text : null;
+}
+
+const sections = { new: [], fixed: [], behind: [], highlights: [] };
 for (const number of numbers.sort((a, b) => a - b)) {
   let pr;
   try { pr = api(`repos/${repo}/pulls/${number}`); } catch { continue; }
@@ -71,6 +83,8 @@ for (const number of numbers.sort((a, b) => a - b)) {
   const title = pr.title.replace(/\s*\(#\d+(?:,\s*#\d+)*\)\s*$/, "").trim();
   const closes = [...new Set(linked)].map(n => `#${n}`).join(", ");
   const refs = `(#${number}${closes ? `; ${closes}` : ""})`;
+  const lead = highlight(pr.body ?? "");
+  if (lead) sections.highlights.push(`- ${lead} ${refs}`);
   const note = releaseNote(pr.body ?? "");
   if (note) {
     if (note.kind === "fixed") sections.fixed.push(`- ${note.text} ${refs}`);
@@ -87,7 +101,12 @@ for (const number of numbers.sort((a, b) => a - b)) {
 
 const ipk = args.ipk || `com.hopperapp.hopper_${version}_all.ipk`;
 const out = [];
-out.push("## Highlights", "", "<!-- Before publishing: two or three lines on what viewers will notice. Delete this comment. -->", "");
+out.push("## Highlights", "");
+if (sections.highlights.length) {
+  out.push("<!-- Before publishing: keep the two or three that matter most, drop the PR numbers if you like, and delete this comment. -->", "", ...sections.highlights, "");
+} else {
+  out.push("<!-- Before publishing: two or three lines on what viewers will notice. Delete this comment. -->", "");
+}
 if (sections.new.length) out.push("## New and improved", "", ...sections.new, "");
 if (sections.fixed.length) out.push("## Fixed", "", ...sections.fixed, "");
 if (sections.behind.length) out.push("<details><summary>Behind the scenes</summary>", "", ...sections.behind, "", "</details>", "");

@@ -7,6 +7,11 @@ Fixes #
 <!-- One line for the release notes, written for viewers: start with "New:", "Changed:" or "Fixed:".
      Write "None" for changes viewers will not notice (tests, docs, workflows, refactors). -->
 
+## Highlight
+<!-- Optional. If this is worth leading the release with, one or two sentences for viewers on
+     what they'll notice; the release draft gathers these under Highlights. Delete the heading
+     for everything else (most fixes and anything behind the scenes). -->
+
 ## What changed
 -
 
