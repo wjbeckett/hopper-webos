@@ -140,6 +140,8 @@ export type SiloMediaRequest = {
   outcome: string;
   state?: string;
   createdAt: string;
+  /** Failed and delivered nothing: the requester may remove it (#172). */
+  removable?: boolean;
 };
 
 export type SiloLibrary = {
