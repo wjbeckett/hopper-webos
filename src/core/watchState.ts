@@ -14,6 +14,21 @@ export function publishWatchState(item: SiloItem) {
   for (const listener of [...listeners]) listener({ ...item });
 }
 
+/**
+ * The player's stop for these titles has landed (#165): the server's resume point and watched
+ * state are final now, so pages showing them read them again.
+ */
+const settledListeners = new Set<(ids: string[]) => void>();
+
+export function publishPlaybackSettled(ids: string[]) {
+  for (const listener of [...settledListeners]) listener(ids);
+}
+
+export function subscribePlaybackSettled(listener: (ids: string[]) => void) {
+  settledListeners.add(listener);
+  return () => { settledListeners.delete(listener); };
+}
+
 export function publishRailsChanged() {
   for (const listener of [...refreshListeners]) listener();
 }
@@ -75,6 +90,11 @@ export function useWatchStateRefresh(refresh: () => unknown, debounceMs = 300, p
       if (pollRef.current !== undefined) window.clearInterval(pollRef.current);
     };
   }, [debounceMs, pollMs]);
+}
+
+/** The item with the server's user state, which replaces any local guess (none: not started). */
+export function applyServerUserData(item: SiloItem, fresh: SiloItem): SiloItem {
+  return { ...item, UserData: { IsFavorite: item.UserData?.IsFavorite, InWatchlist: item.UserData?.InWatchlist, Played: false, PlaybackPositionTicks: 0, PlayedPercentage: 0, ...fresh.UserData } };
 }
 
 export function applyWatchedState(item: SiloItem, watched: boolean): SiloItem {

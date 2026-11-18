@@ -196,7 +196,13 @@ function lgMediaKey(event: KeyboardEvent): LgMediaKey | undefined {
   return undefined;
 }
 
-export function PlayerScreen({ session, item, startPosition, choices, onBack, onEnded, resolveNextEpisode, onPlayNext, shuffle, onShuffleAdvance, autoAdvanceCount = 0 }: { session: Session; item: SiloItem; startPosition?: number; choices?: PlaybackChoices; onBack: (positionSeconds: number) => void; onEnded?: () => void; resolveNextEpisode?: () => Promise<SiloItem | null>; onPlayNext?: (next: SiloItem, autoAdvanceCount: number) => void; shuffle?: { id: string; scopeLabel?: string; next?: SiloItem }; onShuffleAdvance?: (autoAdvanceCount: number) => void; autoAdvanceCount?: number }) {
+/**
+ * How the player was left (#165): `stopped` settles once its final report and stop have landed,
+ * so the page behind it can read the server's answer; `landOn` is the episode to return to.
+ */
+export type PlayerExit = { stopped: Promise<void>; landOn?: SiloItem };
+
+export function PlayerScreen({ session, item, startPosition, choices, onBack, onEnded, resolveNextEpisode, onPlayNext, shuffle, onShuffleAdvance, autoAdvanceCount = 0 }: { session: Session; item: SiloItem; startPosition?: number; choices?: PlaybackChoices; onBack: (positionSeconds: number, exit: PlayerExit) => void; onEnded?: (exit: PlayerExit) => void; resolveNextEpisode?: () => Promise<SiloItem | null>; onPlayNext?: (next: SiloItem, autoAdvanceCount: number) => void; shuffle?: { id: string; scopeLabel?: string; next?: SiloItem }; onShuffleAdvance?: (autoAdvanceCount: number) => void; autoAdvanceCount?: number }) {
   useEffect(() => { interruptThemeMusic(); }, []);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -339,6 +345,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const [autoSkipCredits, setAutoSkipCredits] = useState(false);
   const [autoPlayNext, setAutoPlayNext] = useState(true);
   const [upNext, setUpNext] = useState<SiloItem | null>(null);
+  /** The title reached its credits or end (Up Next was offered by itself, not opened by hand). */
+  const reachedEnd = useRef(false);
   const [upNextCard, setUpNextCard] = useState<{ videoEnded: boolean } | null>(null);
   // A skip pill or Up Next outranks the buffering pill, which waits behind them.
   useEffect(() => { bufferQuality.controller.setOtherPillVisible(pill != null || upNextCard != null); }, [bufferQuality.controller, pill != null, upNextCard != null]);
@@ -602,25 +610,29 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     }
   };
 
-  const closePlayback = useCallback((keepalive = false) => {
+  /** Ends the session; resolves once the final report and the stop have landed (or failed). */
+  const closePlayback = useCallback((keepalive = false): Promise<void> => {
     const active = stateRef.current;
-    if (!active || closedSessions.current.has(active.plan.session_id)) return;
+    if (!active || closedSessions.current.has(active.plan.session_id)) return Promise.resolve();
     closedSessions.current.add(active.plan.session_id);
     // The playing plan ends here: a restart (same title) keeps the controller's per-title state.
     bufferQuality.controller.onNewAttempt();
     localStorage.removeItem(ACTIVE_PLAYBACK_KEY);
     const video = videoRef.current;
     const currentPosition = sourcePosition();
+    let stopped: Promise<void> = Promise.resolve();
     if (keepalive) {
       void stopPlaybackKeepalive(session, active.plan.session_id).catch(() => undefined);
     } else {
-      void reportProgress(session, active.plan.session_id, currentPosition, true)
+      stopped = reportProgress(session, active.plan.session_id, currentPosition, true)
         .catch(() => undefined)
-        .finally(() => stopPlayback(session, active.plan.session_id).catch(() => undefined));
+        .then(() => stopPlayback(session, active.plan.session_id))
+        .then(() => undefined, () => undefined);
     }
     video?.pause();
     hlsRef.current?.destroy();
     hlsRef.current = null;
+    return stopped;
   }, [session, sourcePosition, bufferQuality.controller]);
 
   useEffect(() => {
@@ -657,6 +669,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   }, [autoAdvanceCount, autoPlayNext]);
 
   const onApproachingEnd = useCallback((videoEnded: boolean) => {
+    reachedEnd.current = true;
     if (upNextHandled.current) {
       if (videoEnded) { setUpNextCard({ videoEnded: true }); setHud(false); }
       return;
@@ -675,8 +688,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       onApproachingEnd(true);
       return;
     }
-    closePlayback(false);
-    onEnded?.();
+    const stopped = closePlayback(false);
+    onEnded?.({ stopped });
   }, [resolveNextEpisode, item.Type, onApproachingEnd, closePlayback, onEnded]);
 
   const keepWatching = useCallback(() => {
@@ -750,6 +763,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     setUpNext(null);
     upNextHandled.current = false;
     upNextPendingEnd.current = null;
+    reachedEnd.current = false;
     applyShuffleNext(shuffle.next, shuffle.scopeLabel);
     getShuffle(session, shuffle.id).then(result => { if (alive) applyShuffleNext(result.next, result.scopeLabel); }).catch(() => undefined);
     return () => { alive = false; };
@@ -761,6 +775,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     setUpNext(null);
     upNextHandled.current = false;
     upNextPendingEnd.current = null;
+    reachedEnd.current = false;
     resolveNextEpisode().then(next => { if (alive) setUpNext(next); }).catch(() => undefined);
     return () => { alive = false; };
   }, [item.Id]);
@@ -1454,8 +1469,10 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     // The title's position, not the stream's clock: a resumed stream starts its clock near 0.
     // Read it before closing: destroying hls.js detaches the video, which can reset its clock.
     const position = sourcePosition();
-    closePlayback(false);
-    onBack(position);
+    const stopped = closePlayback(false);
+    // Android TV and tvOS: an episode that reached its credits or end returns to the episode Up
+    // Next offered; one left earlier returns to itself. Shuffle always returns to the one on screen.
+    onBack(position, { stopped, landOn: !shuffle && reachedEnd.current && upNext ? upNext : undefined });
   }
 
   /** Starts the stream again where it stopped, once the server answers. */
