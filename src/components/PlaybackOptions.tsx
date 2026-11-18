@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { saveAudioChoice, saveSubtitleChoice } from "../api/playback";
 import type { AudioTrack, FileVersion, PlaybackChoices, SubtitleTrack, WatchDetail } from "../api/playback";
-import { getWatchDetail, prewarmPlayback } from "../api/playback";
+import { catalogSubtitleUnplayable, getWatchDetail, prewarmPlayback } from "../api/playback";
 import type { Session, SiloItem } from "../types";
 import { LoadingState } from "./LoadingState";
 
@@ -302,11 +302,12 @@ export function PlaybackOptionsDialog({ session, detail, choices, onChange, onCl
   }
 
   let first = true;
-  const row = (selected: boolean, title: string, detailLine: string, onPick: () => void, key: string) => {
-    const ref = first ? firstRef : undefined;
-    first = false;
+  /** `disabled`: shown in its place but never focused or chosen (a subtitle the server can't show). */
+  const row = (selected: boolean, title: string, detailLine: string, onPick: () => void, key: string, disabled = false) => {
+    const ref = first && !disabled ? firstRef : undefined;
+    if (!disabled) first = false;
     return (
-      <button key={key} ref={ref} type="button" data-tv-focusable="true" className={`browse-panel-row ${selected ? "selected" : ""}`} onClick={onPick}>
+      <button key={key} ref={ref} type="button" data-tv-focusable="true" disabled={disabled} className={`browse-panel-row ${selected ? "selected" : ""}`} onClick={onPick}>
         <span className="browse-panel-check">{selected ? "✓" : ""}</span>
         <span className="browse-panel-row-copy">
           <span>{title}</span>
@@ -344,13 +345,18 @@ export function PlaybackOptionsDialog({ session, detail, choices, onChange, onCl
             <div className="browse-panel-section-heading">SUBTITLES</div>
             {row(choices.subtitleIndex == null && !choices.subtitleOff, "Auto", "Use your subtitle preferences", () => apply({ ...choices, subtitleIndex: undefined, subtitleOff: false }), "s-auto")}
             {row(Boolean(choices.subtitleOff), "Off", "Start without subtitles", () => apply({ ...choices, subtitleIndex: undefined, subtitleOff: true }), "s-off")}
-            {subtitleTracks.map((track, ordinal) => row(
-              choices.subtitleIndex === ordinal,
-              subtitleTitle(track, ordinal),
-              subtitleRowDetail(track),
-              () => apply({ ...choices, subtitleIndex: ordinal, subtitleOff: false }),
-              `s-${ordinal}`
-            ))}
+            {subtitleTracks.map((track, ordinal) => {
+              // Rows stay in place, so ordinals don't move; one the server can't show is never picked (#167).
+              const unplayable = catalogSubtitleUnplayable(track);
+              return row(
+                choices.subtitleIndex === ordinal,
+                subtitleTitle(track, ordinal),
+                unplayable ? "Unsupported format" : subtitleRowDetail(track),
+                () => { if (!unplayable) apply({ ...choices, subtitleIndex: ordinal, subtitleOff: false }); },
+                `s-${ordinal}`,
+                unplayable
+              );
+            })}
           </>
         )}
       </div>

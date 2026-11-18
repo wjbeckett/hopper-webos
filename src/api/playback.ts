@@ -21,8 +21,24 @@ export type WatchDetail = { content_id: string; title: string; overview?: string
 export type PlaybackFailure = { classification: string; message?: string; decoder_name?: string };
 export type PlaybackChoices = { fileId?: number; audioIndex?: number; subtitleIndex?: number; subtitleOff?: boolean };
 export type Quality = { label: string; height?: number; bitrate_kbps?: number; preserves_source: boolean };
-export type SubtitleInventory = { track_id: string; combined_index: number; source: string; codec?: string; language?: string; label?: string; forced: boolean; default: boolean; hearing_impaired: boolean; delivery: string; url?: string; sync_key?: string };
+export type SubtitleInventory = { track_id: string; combined_index: number; source: string; codec?: string; language?: string; label?: string; forced: boolean; default: boolean; hearing_impaired: boolean; delivery: string; url?: string; sync_key?: string; unplayable?: boolean };
 export type TrackIdentity = { id: string; index?: number };
+
+/**
+ * No route can show this track (#167, Android TV #776): the server says so (`unplayable`), or,
+ * on a server that doesn't send the flag, it's an embedded track stored with no codec (a format
+ * the server's probe didn't recognize). Only embedded tracks count: a downloaded or generated one
+ * can arrive without a codec and still play. Selecting such a track ends in
+ * `subtitle_codec_unsupported`.
+ */
+export function subtitleUnplayable(track: { unplayable?: boolean; source?: string; codec?: string }) {
+  return track.unplayable === true || (track.source?.trim().toLowerCase() === "embedded" && !track.codec?.trim());
+}
+
+/** The same for a title page's catalog track, which carries no flag of its own. */
+export function catalogSubtitleUnplayable(track: SubtitleTrack) {
+  return subtitleUnplayable({ source: track.external ? "external" : "embedded", codec: track.codec });
+}
 export type PlaybackPlan = {
   protocol_version: number; plan_id: string; plan_attempt_key: string; session_id: string; delivery: string;
   stream: { url: string; protocol: string; container?: string; mime_type?: string; headers?: Record<string, string> };
