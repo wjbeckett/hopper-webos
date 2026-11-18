@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { backdropUrl, getCatalogItem, getSimilarItems, requestDescriptionTranslation, imageUrl, isFavorite, isInWatchlist, mediaLogoUrl, setFavorite, setWatched, setWatchlist } from "../api/silo";
+import { backdropUrl, getCatalogItem, getSimilarItems, setNotInterested, requestDescriptionTranslation, imageUrl, isFavorite, isInWatchlist, mediaLogoUrl, setFavorite, setWatched, setWatchlist } from "../api/silo";
 import { CastSection, FactsSection, TrailersSection, factsFor, useDetailExtras } from "../components/DetailSections";
 import { PlaybackOptionsDialog, PlaybackSummary, useWatchDetail } from "../components/PlaybackOptions";
 import { GearIcon, MoreIcon, PlayIcon, RestartIcon, WatchlistIcon } from "../components/icons";
@@ -9,6 +9,8 @@ import { useMetadataAiOnView } from "./useMetadataAiOnView";
 import { DefaultArtwork } from "../components/ArtworkImage";
 import { claimAutoTranslation, hasMachineTranslatedOverview, releaseAutoTranslation, runDescriptionTranslation } from "../core/descriptionTranslation";
 import { ResumeProgress } from "../components/ResumeProgress";
+import { RatingStars } from "../components/RatingStars";
+import { publishRailsChanged } from "../core/watchState";
 import type { PlaybackChoices } from "../api/playback";
 import type { DetailPerson, DetailTrailer } from "../api/silo";
 import type { Session, SiloItem } from "../types";
@@ -169,6 +171,20 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
     return () => window.removeEventListener("keydown", onKey, true);
   }, [moreOpen]);
 
+  /** Not interested (#179): the recommendation rows leave the movie out once the server rebuilds them. */
+  async function toggleNotInterested() {
+    const next = !detail.NotInterested;
+    closeMore();
+    setDetail(current => ({ ...current, NotInterested: next }));
+    try {
+      await setNotInterested(session, detail.Id, next);
+      publishRailsChanged();
+    } catch (cause) {
+      setDetail(current => ({ ...current, NotInterested: !next }));
+      setActionError(cause instanceof Error ? cause.message : "Could not update recommendations.");
+    }
+  }
+
   function closeMore() {
     setMoreOpen(false);
     requestAnimationFrame(() => moreRef.current?.focus({ preventScroll: true }));
@@ -260,6 +276,7 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
           {facts.map(fact => <span key={fact}>{fact}</span>)}
           {canResume ? <ResumeProgress position={position} duration={duration} /> : null}
         </div> : null}
+        {detail.Type === "Movie" ? <RatingStars session={session} itemId={detail.Id} rating={detail.UserRating} /> : null}
         {!audiobook && extras?.tagline ? <div className="details-tokens">{extras.tagline}</div> : null}
         {audiobook ? <div className="audiobook-detail-metadata">{[detail.AudiobookAuthorNames ?? detail.Author, (detail.AudiobookNarratorNames ?? detail.Narrator) ? `Narrated by ${detail.AudiobookNarratorNames ?? detail.Narrator}` : "", audiobookDuration(detail)].filter(Boolean).join(" · ")}</div> : null}
         {audiobook && detail.Publisher ? <div className="audiobook-detail-publisher">{detail.Publisher}</div> : null}
@@ -340,6 +357,12 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
             <button type="button" data-tv-focusable="true" className="browse-panel-row" onClick={() => void toggleWatched()}>
               <span>{watched ? `Mark ${detail.Type === "Episode" ? "Episode" : detail.Type === "Movie" ? "Movie" : "Item"} Unwatched` : `Mark ${detail.Type === "Episode" ? "Episode" : detail.Type === "Movie" ? "Movie" : "Item"} Watched`}</span>
             </button>
+            {/* tvOS: movies and series only, and only where the server says (#179). */}
+            {detail.Type === "Movie" && detail.NotInterested !== undefined ? (
+              <button type="button" data-tv-focusable="true" className="browse-panel-row" onClick={() => void toggleNotInterested()}>
+                <span>{detail.NotInterested ? "Show in Recommendations" : "Not Interested"}</span>
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}

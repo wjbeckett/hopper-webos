@@ -67,6 +67,10 @@ export type SiloItem = {
   PosterIsEpisodeStill?: boolean;
   BackdropIsEpisodeStill?: boolean;
   LogoUrl?: string;
+  /** The profile's own rating, 1 to 10 (#180); undefined when unrated. */
+  UserRating?: number;
+  /** Marked Not interested (#179); undefined where the server doesn't say. */
+  NotInterested?: boolean;
   UserData?: {
     Played?: boolean;
     PlaybackPositionTicks?: number;

@@ -300,7 +300,11 @@ type NativeItem = Record<string, unknown> & {
     in_watchlist?: boolean;
     position_seconds?: number;
     progress_percent?: number;
+    /** Absent on a server without Not interested (#179). */
+    not_interested?: boolean;
   };
+  /** The profile's own rating, 1 to 10 (half stars); absent when unrated (#180). */
+  user_rating?: number;
 };
 
 type NativeList = NativeItem[] | { items?: NativeItem[]; total?: number; total_count?: number };
@@ -465,8 +469,28 @@ function toItem(item: NativeItem): SiloItem {
     PosterIsEpisodeStill: item.poster_is_episode_still ?? (item.poster_url ? undefined : item.still_is_episode_still),
     BackdropIsEpisodeStill: item.backdrop_is_episode_still,
     LogoUrl: item.logo_url,
+    UserRating: typeof item.user_rating === "number" ? item.user_rating : undefined,
+    NotInterested: typeof item.user_state?.not_interested === "boolean" ? item.user_state.not_interested : undefined,
     UserData: hasUserState ? userState : undefined
   };
+}
+
+/**
+ * Sets or clears the profile's own rating of a title (#180): 1 to 10, shown as five stars with
+ * half stars; 0 clears it.
+ */
+export async function setUserRating(session: Session, itemId: string, rating: number): Promise<void> {
+  const path = `/ratings/${encodeURIComponent(itemId)}`;
+  if (rating <= 0) await requestV2<void>(session, path, { method: "DELETE" });
+  else await requestV2<void>(session, path, { method: "PUT", body: JSON.stringify({ rating: Math.min(10, Math.round(rating)) }) });
+}
+
+/**
+ * Marks a movie or series Not interested for the profile, or clears the mark (#179): its
+ * recommendation and discovery rows leave it out after a rebuild that starts within seconds.
+ */
+export async function setNotInterested(session: Session, itemId: string, marked: boolean): Promise<void> {
+  await requestV2<void>(session, `/not-interested/${encodeURIComponent(itemId)}`, { method: marked ? "PUT" : "DELETE" });
 }
 
 function unpack(data: NativeList): ItemsResponse {
