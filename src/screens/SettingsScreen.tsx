@@ -5,6 +5,7 @@ import { ProfileAvatar } from "../components/TopNav";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import QRCode from "qrcode";
 import { serverRegistry } from "../core/serverRegistry";
+import { setCardOverlaysEnabled, useCardOverlays } from "../core/cardOverlayStore";
 import { clearDeviceSubtitleAppearance, clearScopedSetting, clearSetting, DEFAULT_SUBTITLE_APPEARANCE, getAccountRole, getEffectiveSettings, getMetadataAiAvailable, getSettingsContract, supportsTextOpacity, putProfileSubtitleAppearance, isClientLocal, putDeviceSubtitleAppearance, putScopedSetting, putSetting } from "../api/settings";
 import { SUBTITLE_APPEARANCE_CHOICES, settingsAppearanceChoices, subtitleChoiceLabel } from "../core/subtitleStyle";
 import type { SettingDefinition, SettingOption, SettingsContract, SubtitleAppearance } from "../api/settings";
@@ -322,6 +323,7 @@ export function SettingsScreen({
 }) {
   const [category, setCategory] = useState<Category>("general");
   const [contract, setContract] = useState<SettingsContract | null>(null);
+  const badges = useCardOverlays();
   const [values, setValues] = useState<Map<string, unknown>>(new Map());
   const [error, setError] = useState("");
   /** Why the settings contract and values could not be loaded. Only General, Playback and Subtitles need them. */
@@ -872,6 +874,19 @@ export function SettingsScreen({
     }
   }
 
+  /** Poster badges on or off for the profile (#175): `ui.card_overlays_enabled`, as on the web. */
+  async function toggleBadges(next: boolean) {
+    const definition = definitions.get("ui.card_overlays_enabled");
+    if (!definition) return;
+    setCardOverlaysEnabled(session, next);
+    try {
+      await putSetting(session, definition, next);
+    } catch (reason) {
+      setCardOverlaysEnabled(session, !next);
+      setError(reason instanceof Error ? reason.message : "Could not change poster badges.");
+    }
+  }
+
   function renderCardPresentation() {
     const definition = definitions.get("ui.card_presentation");
     return (
@@ -883,6 +898,12 @@ export function SettingsScreen({
             <button data-tv-focusable="true" data-setting-key="poster-device-only" className={`option-row settings-row settings-toggle${posterSource === "profile_device" ? " is-on" : ""}`} aria-pressed={posterSource === "profile_device"} onClick={() => void setPosterDeviceOnly(posterSource !== "profile_device")}><span>Only This Device</span><strong aria-hidden="true">{posterSource === "profile_device" ? "On" : "Off"}</strong></button>
             {posterSource === "profile_client" ? <button data-tv-focusable="true" className="option-row settings-row" onClick={() => void useProfilePosterDefault()}><span>Use Profile Default</span></button> : null}
             <p className="settings-footer">Poster size syncs with other TVs on this profile unless Only This Device is on.</p>
+            {definitions.has("ui.card_overlays_enabled") ? (
+              <>
+                {toggleRow("ui.card_overlays_enabled", "Poster Badges", badges.enabled, () => void toggleBadges(!badges.enabled))}
+                <p className="settings-footer">Resolution, HDR, audio and rating badges on posters, as set up on your Silo server. This applies on every device that uses this profile.</p>
+              </>
+            ) : null}
           </>
         )}
       </section>

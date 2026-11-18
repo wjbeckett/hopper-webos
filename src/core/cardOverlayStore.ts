@@ -36,6 +36,19 @@ export function loadCardOverlays(session: Session) {
   });
 }
 
+/**
+ * The profile turned badges on or off in Hopper's Settings (#175): cards follow at once. Turning
+ * them on before the document was read reads it now.
+ */
+export function setCardOverlaysEnabled(session: Session, enabled: boolean) {
+  if (enabled && !state.prefs) {
+    loadedFor = "";
+    loadCardOverlays(session);
+    return;
+  }
+  set({ ...state, enabled });
+}
+
 export function useCardOverlays(): State {
   return useSyncExternalStore(
     listener => { listeners.add(listener); return () => { listeners.delete(listener); }; },
