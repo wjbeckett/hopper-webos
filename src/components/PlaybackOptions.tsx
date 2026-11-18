@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { saveAudioChoice, saveSubtitleChoice } from "../api/playback";
 import type { AudioTrack, FileVersion, PlaybackChoices, SubtitleTrack, WatchDetail } from "../api/playback";
-import { getWatchDetail, prewarmPlayback } from "../api/playback";
+import { catalogSubtitleUnplayable, getWatchDetail, prewarmPlayback } from "../api/playback";
 import type { Session, SiloItem } from "../types";
 import { LoadingState } from "./LoadingState";
 
@@ -127,9 +127,12 @@ function subtitleRowDetail(track: SubtitleTrack) {
   ].filter(Boolean).join(" · ");
 }
 
+/**
+ * Each title-page subtitle row's selection index for `/playback/start` (Android's
+ * combinedSubtitleSelectionIndexes): externals count up from 0 in catalog order, then the embedded
+ * tracks. The catalog's own `index` is a different numbering and is never sent.
+ */
 export function combinedSubtitleIndexes(tracks: SubtitleTrack[]) {
-  const withIndex = tracks.filter(track => track.index != null);
-  if (withIndex.length === tracks.length && tracks.length > 0) return tracks.map(track => track.index!);
   const externalCount = tracks.filter(track => track.external).length;
   let externals = 0;
   let embedded = 0;
@@ -286,6 +289,7 @@ export function PlaybackOptionsDialog({ session, detail, choices, onChange, onCl
   const seriesKey = detail?.series_id ?? detail?.content_id;
   const audioTracks = active?.audio_tracks ?? [];
   const subtitleTracks = active?.subtitle_tracks ?? [];
+  const selectionIndexes = combinedSubtitleIndexes(subtitleTracks);
 
   function apply(next: PlaybackChoices) {
     if (seriesKey) {
@@ -296,20 +300,22 @@ export function PlaybackOptionsDialog({ session, detail, choices, onChange, onCl
       }
       if (next.subtitleIndex !== choices.subtitleIndex || next.subtitleOff !== choices.subtitleOff) {
         const tracks = target?.subtitle_tracks ?? [];
-        const at = next.subtitleIndex == null ? -1 : next.subtitleIndex;
-        const track = at >= 0 ? tracks[at] : undefined;
-        void saveSubtitleChoice(session, seriesKey, next.subtitleOff ? undefined : track, next.subtitleOff ? -1 : next.subtitleIndex == null ? -1 : at).catch(() => undefined);
+        // subtitleIndex is the selection index; the row it came from is found through it.
+        const row = next.subtitleIndex == null ? -1 : combinedSubtitleIndexes(tracks).indexOf(next.subtitleIndex);
+        const track = row >= 0 ? tracks[row] : undefined;
+        void saveSubtitleChoice(session, seriesKey, next.subtitleOff ? undefined : track, next.subtitleOff || next.subtitleIndex == null ? -1 : next.subtitleIndex).catch(() => undefined);
       }
     }
     onChange(next);
   }
 
   let first = true;
-  const row = (selected: boolean, title: string, detailLine: string, onPick: () => void, key: string) => {
-    const ref = first ? firstRef : undefined;
-    first = false;
+  /** `disabled`: shown in its place but never focused or chosen (a subtitle the server can't show). */
+  const row = (selected: boolean, title: string, detailLine: string, onPick: () => void, key: string, disabled = false) => {
+    const ref = first && !disabled ? firstRef : undefined;
+    if (!disabled) first = false;
     return (
-      <button key={key} ref={ref} type="button" data-tv-focusable="true" className={`browse-panel-row ${selected ? "selected" : ""}`} onClick={onPick}>
+      <button key={key} ref={ref} type="button" data-tv-focusable="true" disabled={disabled} className={`browse-panel-row ${selected ? "selected" : ""}`} onClick={onPick}>
         <span className="browse-panel-check">{selected ? "✓" : ""}</span>
         <span className="browse-panel-row-copy">
           <span>{title}</span>
@@ -347,13 +353,20 @@ export function PlaybackOptionsDialog({ session, detail, choices, onChange, onCl
             <div className="browse-panel-section-heading">SUBTITLES</div>
             {row(choices.subtitleIndex == null && !choices.subtitleOff, "Auto", "Use your subtitle preferences", () => apply({ ...choices, subtitleIndex: undefined, subtitleOff: false }), "s-auto")}
             {row(Boolean(choices.subtitleOff), "Off", "Start without subtitles", () => apply({ ...choices, subtitleIndex: undefined, subtitleOff: true }), "s-off")}
-            {subtitleTracks.map((track, ordinal) => row(
-              choices.subtitleIndex === ordinal,
-              subtitleTitle(track, ordinal),
-              subtitleRowDetail(track),
-              () => apply({ ...choices, subtitleIndex: ordinal, subtitleOff: false }),
-              `s-${ordinal}`
-            ))}
+            {subtitleTracks.map((track, ordinal) => {
+              // Rows stay in place; one the server can't show is never picked (#167). A row sends its
+              // selection index (externals first), not its place in the list.
+              const unplayable = catalogSubtitleUnplayable(track);
+              const selection = selectionIndexes[ordinal];
+              return row(
+                choices.subtitleIndex === selection,
+                subtitleTitle(track, ordinal),
+                unplayable ? "Unsupported format" : subtitleRowDetail(track),
+                () => { if (!unplayable) apply({ ...choices, subtitleIndex: selection, subtitleOff: false }); },
+                `s-${ordinal}`,
+                unplayable
+              );
+            })}
           </>
         )}
       </div>

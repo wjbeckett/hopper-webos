@@ -373,9 +373,51 @@ type NativeHomeLayout = {
   }>;
 };
 
-type NativeHomeSectionResponse = {
+export type NativeHomeSectionResponse = {
   items?: NativeItem[];
+  /** A row of collections (`collection_posters`, #170): its cards are here and `items` is empty. */
+  collections?: NativeSectionCollectionCard[];
 };
+
+export type NativeSectionCollectionCard = {
+  id?: string | number;
+  source?: string;
+  title?: string;
+  poster_url?: string;
+  poster_thumbhash?: string;
+  backdrop_url?: string;
+  backdrop_thumbhash?: string;
+  item_count?: number;
+  library_id?: string | number;
+};
+
+/**
+ * A row-of-collections card as a card item (#170, Android TV #979). A card this client can't read
+ * or open is left out: no id or title, an unknown source, or a server collection with no library.
+ * The hero shows its backdrop, or its poster when it has none.
+ */
+export function collectionCardItem(card: NativeSectionCollectionCard): SiloItem | null {
+  const id = card.id != null ? String(card.id) : "";
+  const source = card.source === "library" || card.source === "user" ? card.source : null;
+  const libraryId = card.library_id != null ? Number(card.library_id) : undefined;
+  if (!id || !card.title || !source || (source === "library" && !(libraryId && Number.isFinite(libraryId)))) return null;
+  return {
+    Id: id,
+    Name: card.title,
+    Type: "Collection",
+    PosterUrl: card.poster_url || undefined,
+    PosterThumbhash: card.poster_thumbhash,
+    BackdropUrl: card.backdrop_url || card.poster_url || undefined,
+    CollectionCard: { source, libraryId: source === "library" ? libraryId : undefined, itemCount: Math.max(0, card.item_count ?? 0) }
+  };
+}
+
+/** A section's cards: its titles, or the collections of a row of collections. */
+export function sectionCards(response: NativeHomeSectionResponse | undefined): SiloItem[] {
+  if (!response) return [];
+  if (response.collections?.length) return response.collections.map(collectionCardItem).filter((item): item is SiloItem => item != null);
+  return (response.items ?? []).map(toItem).filter(item => item.Id);
+}
 
 type NativeRecommendationRow = {
   type: string;
@@ -519,6 +561,15 @@ type NativeProfile = {
   is_primary?: boolean;
 };
 
+/**
+ * How many profiles the account has and may have (`max_profiles`, absent: no limit). The profile
+ * menu shows Switch Profile, Add Profile or neither from it (#176, Android TV #881).
+ */
+export async function getProfileLimits(session: Session): Promise<{ count: number; maxProfiles?: number }> {
+  const data = await requestApi<{ items?: unknown[]; max_profiles?: number }>(session, "/profiles", {}, "v2", false);
+  return { count: (data.items ?? []).length, maxProfiles: typeof data.max_profiles === "number" ? data.max_profiles : undefined };
+}
+
 export async function getProfiles(session: Session): Promise<SiloProfile[]> {
   const data = await requestV2<{ items?: NativeProfile[] }>(session, "/profiles");
   const profiles = data.items ?? [];
@@ -564,6 +615,8 @@ export type EditableProfile = SiloProfile & {
   subtitleMode: string | null;
   libraryRestrictionsEnabled: boolean;
   allowedLibraryIds: number[];
+  /** Whether the profile may make and follow requests (#172); true where the server has no switch. */
+  requestsAllowed: boolean;
 };
 
 export type AssignableLibrary = { id: number; name: string; type: string; sortOrder: number };
@@ -582,7 +635,13 @@ function managerHeaders(manager: HouseholdManager): Record<string, string> {
 }
 
 export async function getEditableProfiles(session: Session): Promise<EditableProfile[]> {
-  const data = await requestApi<{ items?: Array<NativeProfile & {
+  return (await getEditableProfileList(session)).profiles;
+}
+
+/** The household's profiles, and whether the server has the per-profile requests switch (#172). */
+export async function getEditableProfileList(session: Session): Promise<{ profiles: EditableProfile[]; requestsAllowedSupported: boolean }> {
+  const data = await requestApi<{ requests_allowed_supported?: boolean; items?: Array<NativeProfile & {
+    requests_allowed?: boolean;
     is_child?: boolean;
     max_content_rating?: string;
     quality_preference?: string;
@@ -590,13 +649,14 @@ export async function getEditableProfiles(session: Session): Promise<EditablePro
     library_restrictions_enabled?: boolean;
     allowed_library_ids?: Array<string | number>;
   }> }>(session, "/profiles", {}, "v2", false);
-  return (data.items ?? []).map(profile => ({
+  const profiles = (data.items ?? []).map(profile => ({
     id: String(profile.id),
     name: profile.name ?? "Profile",
     avatarEmoji: profile.avatar ?? profile.avatar_emoji,
     avatarUrl: profile.avatar_url,
     hasPin: Boolean(profile.has_pin),
     isPrimary: Boolean(profile.is_primary),
+    requestsAllowed: profile.requests_allowed !== false,
     isChild: Boolean(profile.is_child),
     maxContentRating: profile.max_content_rating || null,
     qualityPreference: profile.quality_preference || null,
@@ -604,6 +664,7 @@ export async function getEditableProfiles(session: Session): Promise<EditablePro
     libraryRestrictionsEnabled: Boolean(profile.library_restrictions_enabled),
     allowedLibraryIds: (profile.allowed_library_ids ?? []).map(Number).filter(id => Number.isFinite(id) && id > 0)
   }));
+  return { profiles, requestsAllowedSupported: data.requests_allowed_supported === true };
 }
 
 /** Android listAssignableLibraries: the account's libraries, read with no profile headers. */
@@ -836,9 +897,7 @@ export async function getHomeRails(session: Session): Promise<HomeRail[]> {
 
   return sections.map((section, index) => {
     const result = results[index];
-    const nativeItems = result.status === "fulfilled"
-      ? result.value.items ?? []
-      : [];
+    const cards = result.status === "fulfilled" ? sectionCards(result.value) : [];
     const cardResult = cardResults[index];
     const small = new Map<string, string>();
     if (cardResult.status === "fulfilled" && cardResult.value) {
@@ -853,8 +912,7 @@ export async function getHomeRails(session: Session): Promise<HomeRail[]> {
       featured: section.featured,
       sectionId: String(section.id),
       libraryId: null,
-      items: nativeItems.map(toItem).filter((item) => item.Id)
-        .map((item) => small.has(item.Id) ? { ...item, CardBackdropUrl: small.get(item.Id) } : item)
+      items: cards.map((item) => small.has(item.Id) ? { ...item, CardBackdropUrl: small.get(item.Id) } : item)
     };
   }).filter((rail) => rail.items.length > 0);
 }
@@ -947,6 +1005,7 @@ type NativeMediaRequest = {
   outcome: string;
   state?: string;
   created_at: string;
+  targets?: Array<{ status?: string }>;
 };
 
 function toRequestResult(item: NativeRequestResult): SiloRequestResult {
@@ -977,7 +1036,10 @@ function toMediaRequest(request: NativeMediaRequest): SiloMediaRequest {
     status: request.status,
     outcome: request.outcome,
     state: request.state,
-    createdAt: request.created_at
+    createdAt: request.created_at,
+    // The server's rule for removeFailedRequest (#172, Android's isRemovableFailure): failed, and
+    // no target delivered a copy before failing.
+    removable: request.outcome === "failed" && !(request.targets ?? []).some(target => target.status === "completed")
   };
 }
 
@@ -991,7 +1053,29 @@ export async function getRequestsFeatureStatus(session: Session) {
     allowed?: boolean;
     state?: string;
     follow_supported?: boolean;
+    /** The requester may delete their own failed request that delivered nothing (#172). */
+    remove_failed_supported?: boolean;
   }>(session, "/requests/status");
+}
+
+/**
+ * Removes one of the viewer's own failed requests (`DELETE /requests/{id}`, #172). "removed" also
+ * when it was already gone (404, removed on another device); "conflict" when the server refuses
+ * because it is no longer failed or delivered a copy (409).
+ */
+export async function removeFailedRequest(session: Session, requestId: string): Promise<"removed" | "conflict"> {
+  try {
+    await requestApi<void>(session, `/requests/${encodeURIComponent(requestId)}`, { method: "DELETE" }, "v2");
+    return "removed";
+  } catch (cause) {
+    // requestApi's errors read "<path>: <status> <text>". Only this DELETE's own answer counts:
+    // a failed token refresh on the way reads "/auth/refresh: 404 …" and is not a removal.
+    const path = `/requests/${encodeURIComponent(requestId)}: `;
+    const status = cause instanceof Error && cause.message.startsWith(path) ? /^(\d{3}) /.exec(cause.message.slice(path.length))?.[1] : undefined;
+    if (status === "404") return "removed";
+    if (status === "409") return "conflict";
+    throw cause;
+  }
 }
 
 export async function getRequestsDiscover(session: Session) {
@@ -1113,14 +1197,14 @@ export async function getLibraryRails(session: Session, library: SiloLibrary): P
 
   return sections.map((section, index) => {
     const result = results[index];
-    const items = result.status === "fulfilled" ? result.value.items ?? [] : [];
+    const items = result.status === "fulfilled" ? sectionCards(result.value) : [];
     return {
       id: `${library.id}-${section.id}`,
       title: section.title ?? section.section_type ?? library.name,
       featured: section.featured,
       sectionId: String(section.id),
       libraryId: library.id,
-      items: items.map(toItem).filter((item) => item.Id)
+      items
     };
   }).filter((rail) => rail.items.length > 0);
 }
@@ -1731,6 +1815,28 @@ export async function skipShuffle(session: Session, shuffleId: string, nextConte
     method: "POST",
     body: JSON.stringify({ next_content_id: nextContentId })
   }));
+}
+
+/**
+ * The rating sources the server shows (`/capabilities/ratings`): imdb and tmdb, then any a
+ * metadata plugin adds and an administrator turned on (Rotten Tomatoes). Sorts by a source the
+ * server doesn't show are left out (#174). The answer is cached per server and profile.
+ */
+const ratingsCapabilities = new Map<string, Promise<{ sources: string[] }>>();
+export function getRatingsCapability(session: Session): Promise<{ sources: string[] }> {
+  const key = `${session.serverUrl}|${session.profileId ?? ""}`;
+  let cached = ratingsCapabilities.get(key);
+  if (!cached) {
+    cached = requestV2<{ state?: string; allowed?: boolean; sources?: Array<{ source?: string }> }>(session, "/capabilities/ratings")
+      .then(response => ({
+        sources: response.state === "available" && response.allowed !== false
+          ? (response.sources ?? []).map(entry => entry.source ?? "").filter(Boolean)
+          : []
+      }));
+    cached.catch(() => ratingsCapabilities.delete(key));
+    ratingsCapabilities.set(key, cached);
+  }
+  return cached;
 }
 
 export async function getShuffleCapability(session: Session): Promise<{ available: boolean; scopeKinds: string[] }> {
