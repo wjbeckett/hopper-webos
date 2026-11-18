@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { backdropUrl, getCatalogItem, getSimilarItems, requestDescriptionTranslation, imageUrl, isFavorite, isInWatchlist, mediaLogoUrl, setFavorite, setWatched, setWatchlist } from "../api/silo";
+import { backdropUrl, getCatalogItem, getItemBoxSet, getSimilarItems, requestDescriptionTranslation, imageUrl, isFavorite, isInWatchlist, mediaLogoUrl, setFavorite, setWatched, setWatchlist } from "../api/silo";
 import { CastSection, FactsSection, TrailersSection, factsFor, useDetailExtras } from "../components/DetailSections";
 import { PlaybackOptionsDialog, PlaybackSummary, useWatchDetail } from "../components/PlaybackOptions";
 import { GearIcon, MoreIcon, PlayIcon, RestartIcon, WatchlistIcon } from "../components/icons";
@@ -11,7 +11,7 @@ import { claimAutoTranslation, hasMachineTranslatedOverview, releaseAutoTranslat
 import { ResumeProgress } from "../components/ResumeProgress";
 import type { PlaybackChoices } from "../api/playback";
 import type { DetailPerson, DetailTrailer } from "../api/silo";
-import type { Session, SiloItem } from "../types";
+import type { Session, SiloBoxSet, SiloItem } from "../types";
 import { hidesEpisodeImage, hidesEpisodeOverview, useEpisodeSpoilerPreferences } from "../core/episodeSpoilers";
 
 type Props = {
@@ -19,6 +19,8 @@ type Props = {
   item: SiloItem;
   onPlay: (startPosition: number | undefined, choices: PlaybackChoices) => void;
   onOpen: (item: SiloItem) => void;
+  /** The box set row's Explore all: the box set's page (#171). */
+  onOpenBoxSet: (boxSetId: string, libraryId: string, title: string) => void;
   restoreCastIndex?: number;
   onOpenPerson: (person: DetailPerson, index: number) => void;
   onPlayExtra: (trailer: DetailTrailer) => void;
@@ -54,7 +56,7 @@ function typeLabel(type?: string) {
   return type ?? "";
 }
 
-export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex, onOpenPerson, onPlayExtra }: Props) {
+export function DetailsScreen({ session, item, onPlay, onOpen, onOpenBoxSet, restoreCastIndex, onOpenPerson, onPlayExtra }: Props) {
   const [detail, setDetail] = useState(item);
   const [posterFailed, setPosterFailed] = useState(false);
   useEffect(() => setPosterFailed(false), [item.Id]);
@@ -62,6 +64,8 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
   const [watchlist, updateWatchlist] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [similar, setSimilar] = useState<SiloItem[]>([]);
+  /** The movie's box set (#171), shown as a row after Trailers. */
+  const [boxSet, setBoxSet] = useState<SiloBoxSet | null>(null);
   const [actionError, setActionError] = useState("");
   const [positionCleared, setPositionCleared] = useState(false);
   useEffect(() => setPositionCleared(false), [item.Id]);
@@ -144,6 +148,8 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
       })
       .catch(() => {});
     getSimilarItems(session, item.Id).then(items => { if (alive) setSimilar(items); }).catch(() => undefined);
+    setBoxSet(null);
+    if (item.Type === "Movie") getItemBoxSet(session, item.Id).then(next => { if (alive) setBoxSet(next); }).catch(() => undefined);
     return () => { alive = false; };
   }, [session, item]);
 
@@ -318,6 +324,16 @@ export function DetailsScreen({ session, item, onPlay, onOpen, restoreCastIndex,
       <div className="details-related">
         {detail.Type !== "AudioBook" && extras ? <CastSection cast={extras.cast} restoreIndex={restoreCastIndex} onOpen={onOpenPerson} /> : null}
         {extras ? <TrailersSection trailers={extras.trailers} onPlayLocal={onPlayExtra} /> : null}
+        {/* Android TV's order: Cast & Crew, Trailers, the box set, More Like This. Explore all opens the box set's page. */}
+        {boxSet && boxSet.items.length > 1 ? (
+          <MediaRail
+            rail={{ id: `boxset-${boxSet.id}`, title: boxSet.title, sectionId: `boxset-${boxSet.id}`, items: boxSet.items }}
+            session={session}
+            onOpen={onOpen}
+            onExplore={() => onOpenBoxSet(boxSet.id, boxSet.libraryId, boxSet.title)}
+            slide
+          />
+        ) : null}
         {similar.length ? <MediaRail rail={{ id: "similar", title: relatedTitle, items: similar }} session={session} onOpen={onOpen} slide /> : null}
         <FactsSection facts={factsFor(extras)} />
       </div>

@@ -1,6 +1,6 @@
 import { titleArtEnabled } from "../core/titleArt";
 import type { ThemeSelection } from "../core/themeMusic";
-import type { HomeRail, ItemsResponse, Session, TemporaryLane, SiloCalendarDay, SiloCalendarItem, SiloCollection, SiloItem, SiloLibrary, SiloMediaRequest, SiloProfile, SiloRequestResult } from "../types";
+import type { HomeRail, ItemsResponse, Session, TemporaryLane, SiloCalendarDay, SiloBoxSet, SiloCalendarItem, SiloCollection, SiloItem, SiloLibrary, SiloMediaRequest, SiloProfile, SiloRequestResult } from "../types";
 import { serverRegistry } from "../core/serverRegistry";
 import { getDeviceId } from "../platform/device";
 import { publishSessionExpired, serverFetch } from "./connection";
@@ -1483,6 +1483,76 @@ export async function searchItems(session: Session, query: string): Promise<Silo
 export async function getServerIdentity(session: Session): Promise<string> {
   const data = await requestV2<{ server_id?: string }>(session, "/system/identity");
   return typeof data.server_id === "string" ? data.server_id.trim() : "";
+}
+
+type NativeBoxSet = {
+  id?: string; library_id?: string | number; title?: string; overview?: string;
+  poster_url?: string; poster_thumbhash?: string; backdrop_url?: string;
+  movie_count?: number; played_count?: number; first_year?: number; last_year?: number;
+  items?: NativeItem[];
+};
+
+function toBoxSet(native: NativeBoxSet): SiloBoxSet | null {
+  if (!native.id || native.library_id == null || !native.title) return null;
+  return {
+    id: String(native.id),
+    libraryId: String(native.library_id),
+    title: native.title,
+    overview: native.overview || undefined,
+    posterUrl: native.poster_url || undefined,
+    posterThumbhash: native.poster_thumbhash,
+    backdropUrl: native.backdrop_url || undefined,
+    movieCount: native.movie_count ?? native.items?.length ?? 0,
+    playedCount: native.played_count ?? 0,
+    firstYear: native.first_year,
+    lastYear: native.last_year,
+    items: (native.items ?? []).map(toItem).filter(item => item.Id)
+  };
+}
+
+/** A box set as a card (search results): opens the box set's page. */
+export function boxSetCard(boxSet: Omit<SiloBoxSet, "items">): SiloItem {
+  return {
+    Id: `boxset:${boxSet.libraryId}:${boxSet.id}`,
+    Name: boxSet.title,
+    Type: "BoxSet",
+    PosterUrl: boxSet.posterUrl,
+    PosterThumbhash: boxSet.posterThumbhash,
+    BackdropUrl: boxSet.backdropUrl,
+    Overview: boxSet.overview,
+    BoxSet: { id: boxSet.id, libraryId: boxSet.libraryId, movieCount: boxSet.movieCount, playedCount: boxSet.playedCount }
+  };
+}
+
+/**
+ * The box set a movie's page shows (#171, `GET /catalog/items/{id}/box-set`), or null: the movie
+ * is in none, or the server has no box sets (an older one answers 404 here too).
+ */
+export async function getItemBoxSet(session: Session, itemId: string): Promise<SiloBoxSet | null> {
+  try {
+    const response = await requestV2<{ box_set?: NativeBoxSet }>(session, `/catalog/items/${encodeURIComponent(itemId)}/box-set`);
+    return response.box_set ? toBoxSet(response.box_set) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** One box set with its movies the viewer can see, in collection order (#171). */
+export async function getBoxSet(session: Session, boxSetId: string, libraryId: string): Promise<SiloBoxSet> {
+  const response = await requestV2<NativeBoxSet>(session, `/catalog/box-sets/${encodeURIComponent(boxSetId)}?library_id=${encodeURIComponent(libraryId)}`);
+  const boxSet = toBoxSet(response);
+  if (!boxSet) throw new Error("This box set isn't available.");
+  return boxSet;
+}
+
+/** Box sets matching a search, best first (#171); none on a server without them. */
+export async function searchBoxSets(session: Session, query: string): Promise<SiloItem[]> {
+  try {
+    const response = await requestV2<{ items?: NativeBoxSet[] }>(session, `/catalog/box-sets?q=${encodeURIComponent(query)}&limit=10`);
+    return (response.items ?? []).map(toBoxSet).filter((boxSet): boxSet is SiloBoxSet => boxSet != null).map(boxSetCard);
+  } catch {
+    return [];
+  }
 }
 
 export async function getCatalogItem(session: Session, contentId: string): Promise<SiloItem> {
