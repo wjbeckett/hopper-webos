@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { pollDeviceLogin, sessionFromApprovedDeviceLogin, startDeviceLogin } from "../api/deviceLogin";
+import { bindingForServer, newDeviceLoginBinding, pollDeviceLogin, sessionFromApprovedDeviceLogin, startDeviceLogin, type DeviceLoginBinding } from "../api/deviceLogin";
 import { TvButton } from "../components/TvButton";
 import { getDeviceId } from "../platform/device";
 import {
@@ -55,6 +55,8 @@ export function PhoneSetupScreen({
     let timer: number | undefined;
 
     const sleep = (ms: number) => new Promise<void>(resolve => { window.setTimeout(resolve, ms); });
+    // One binding per phone connection (#173, Android TV's PairingReceiver): a new phone gets a new one.
+    let sessionBinding: Promise<DeviceLoginBinding | null> | null = null;
 
     // One push at a time; a newer push (or a cancel) bumps attemptRef and
     // makes the older attempt stop quietly.
@@ -68,8 +70,12 @@ export function PhoneSetupScreen({
       let failure = "auth_failed";
       try {
         let started;
+        let binding: DeviceLoginBinding | null = null;
         try {
-          started = await startDeviceLogin(push.serverURL);
+          sessionBinding ??= newDeviceLoginBinding();
+          binding = await bindingForServer(push.serverURL, await sessionBinding);
+          if (!current()) return;
+          started = await startDeviceLogin(push.serverURL, undefined, binding);
         } catch {
           failure = "unreachable";
           throw new Error("Couldn't reach that server from this TV.");
@@ -90,7 +96,7 @@ export function PhoneSetupScreen({
           if (Date.now() >= expiresAt) { failure = "expired"; throw new Error("The code expired."); }
           await sleep(interval * 1000);
           if (!current()) return;
-          const result = await pollDeviceLogin(push.serverURL, started.device_code);
+          const result = await pollDeviceLogin(push.serverURL, started.device_code, binding);
           if (!current()) return;
           if (result.status === "approved") {
             const session = sessionFromApprovedDeviceLogin(push.serverURL, result);
@@ -133,6 +139,7 @@ export function PhoneSetupScreen({
               // The phone stopped or went away: drop the attempt and go back to waiting,
               // so a stale code and "finishing" state don't stay on screen.
               attemptRef.current += 1;
+              if (event.type === "disconnected") sessionBinding = null;
               setCode("");
               setAttemptActive(false);
               setStatus("Looking for your phone…");
