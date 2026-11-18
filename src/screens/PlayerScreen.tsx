@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { connectionStatus, holdConnectionDialog, NetworkError, onceReachable, reportNetworkFailure, subscribeConnection } from "../api/connection";
 import type Hls from "hls.js";
 import { pinFocusedRailItem } from "../navigation/spatial";
-import { allowDirectPlay, isDirectPlay, allowDolbyAudio, setBufferingQualityMode, bestVersionForDevice, getMarkers, isDolbyAudio, getTrickplay, getWatchDetail, playbackUrl, replanPlaybackV3, reportProgress, saveAudioPreference, saveSubtitlePreference, startPlaybackV3, stopPlayback, stopPlaybackKeepalive, type AudioTrack, type FileMarkers, type MarkerSegment, type PlaybackChoices, type PlaybackFailure, type PlaybackPlan, type Quality, type SubtitleInventory, type Trickplay, type WatchDetail } from "../api/playback";
+import { allowDirectPlay, isDirectPlay, allowDolbyAudio, setBufferingQualityMode, bestVersionForDevice, getMarkers, isDolbyAudio, getTrickplay, getWatchDetail, playbackUrl, replanPlaybackV3, reportProgress, saveAudioPreference, saveSubtitlePreference, startPlaybackV3, stopPlayback, stopPlaybackKeepalive, type AudioTrack, type FileMarkers, subtitleUnplayable, type PlaybackChoices, type PlaybackFailure, type PlaybackPlan, type Quality, type SubtitleInventory, type Trickplay, type WatchDetail } from "../api/playback";
 import { classifyPlaybackFailure } from "./playbackFailure";
 import type { HomeRail, Session, SiloItem } from "../types";
 import { getEffectiveSettings, putScopedSetting } from "../api/settings";
@@ -25,6 +25,7 @@ import { AiTranslateDialog, type AiSource } from "../components/AiTranslateDialo
 import { createAiTranslateStore, type AiTranslateStore } from "../core/aiTranslateJob";
 import { getAiStatus, type AiStatus } from "../api/subtitles";
 import { registerRemotePlayer, type RemotePlayer } from "../control/hub";
+import { markerRanges, rangeAt, rangeKey, upNextStart } from "../core/markerTimeline";
 import { createSubtitleSyncStore, delaySecondsLabel, FORBIDDEN_MESSAGE, timingActionsFor, timingValue, type SubtitleSyncStore, type SyncUiState } from "../core/subtitleSync";
 import { delayLabel, localAudioSyncMs, localDolbyVisionEnabled, localHdrEnabled, localPassOutThreshold, localResumeRewindSeconds, localSubtitleSyncMs, markerAction, resumePositionWithRewind, setLocalAudioSyncMs, setLocalDolbyVisionEnabled, setLocalHdrEnabled, setLocalSubtitleSyncMs } from "../core/playerSettings";
 
@@ -148,7 +149,8 @@ function formatClock(seconds: number) {
 type HudTab = "Info" | "Stats" | "Video" | "Audio" | "Subtitles" | "Chapters";
 type PlayerFileVersion = WatchDetail["versions"][number];
 type PillKind = "intro" | "credits" | "recap";
-type Pill = { kind: PillKind; key: string; label: string; secondsRemaining: number | null; undo?: boolean };
+/** A skip offer for one marker range (`start`..`end`); each occurrence has its own `key` (#166). */
+type Pill = { kind: PillKind; key: string; label: string; secondsRemaining: number | null; undo?: boolean; start: number; end: number };
 type UiSnapshot = { upNextOpen: boolean; hud: boolean; panel: "audio" | "subtitles" | "quality" | null; hudTab: HudTab; audioAvailable: boolean; subtitlesAvailable: boolean; scrubPreview: number | null; autoSeekRate: number; cleanSeek: { rate: number; preview: number } | null; pill: Pill | null; position: number; duration: number; playing: boolean };
 
 /** The player's transport glyphs: dark-disc buttons inverting to Paper on focus. */
@@ -345,6 +347,12 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const [autoSkipCredits, setAutoSkipCredits] = useState(false);
   const [autoPlayNext, setAutoPlayNext] = useState(true);
   const [upNext, setUpNext] = useState<SiloItem | null>(null);
+  /**
+   * Episodes auto-played in a row, for the still-watching prompt. The viewer's play/pause, skips
+   * and seeks reset it (#169, Android TV #876): someone who does those is plainly awake.
+   */
+  const advanceCount = useRef(autoAdvanceCount);
+  const noteViewerActivity = () => { advanceCount.current = 0; };
   /** The title reached its credits or end (Up Next was offered by itself, not opened by hand). */
   const reachedEnd = useRef(false);
   const [upNextCard, setUpNextCard] = useState<{ videoEnded: boolean } | null>(null);
@@ -658,7 +666,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     upNextHandled.current = true;
     upNextPendingEnd.current = null;
     const threshold = localPassOutThreshold();
-    const gated = threshold > 0 && autoAdvanceCount >= threshold;
+    const gated = threshold > 0 && advanceCount.current >= threshold;
     const counting = autoPlayNext && !gated;
     const initial = !counting ? null : videoEnded ? NEXT_UP_COUNTDOWN_SECONDS : Math.ceil(Math.max(0, ui.current.duration - ui.current.position));
     upNextStartedAtEnd.current = videoEnded;
@@ -666,7 +674,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     setUpNextCard({ videoEnded });
     setUpNextCountdown(initial == null ? null : { seconds: initial, total: Math.max(initial, 1) });
     setHud(false);
-  }, [autoAdvanceCount, autoPlayNext]);
+  }, [autoPlayNext]);
 
   const onApproachingEnd = useCallback((videoEnded: boolean) => {
     reachedEnd.current = true;
@@ -787,7 +795,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   useEffect(() => {
     const before = previousPosition.current;
     previousPosition.current = position;
-    const creditsStart = markers?.credits?.start_seconds;
+    const creditsStart = upNextStart(markerRanges(markers));
     if (creditsStart == null || scrubPreview != null) return;
     if (before < creditsStart && position >= creditsStart && position - before < 5) onApproachingEnd(false);
   }, [position]);
@@ -802,11 +810,11 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       const playbackEnded = upNextStartedAtEnd.current ? upNextWall.current <= 0 : upNextCard.videoEnded;
       if (playbackEnded) {
         window.clearInterval(timer);
-        advanceToNext(autoAdvanceCount + 1);
+        advanceToNext(advanceCount.current + 1);
       }
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [upNextCard?.videoEnded, upNextCountdown == null, upNext, autoAdvanceCount, advanceToNext]);
+  }, [upNextCard?.videoEnded, upNextCountdown == null, upNext, advanceToNext]);
 
   useEffect(() => {
     try {
@@ -948,7 +956,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   }, []);
 
   /** Seek the negotiated stream to a source-timeline position (re-anchors when the server demands it). */
-  const seekToPosition = useCallback((target: number) => {
+  /** `onFailed`: the server refused a re-anchoring seek, so the video stayed where it was. */
+  const seekToPosition = useCallback((target: number, onFailed?: () => void) => {
     const video = videoRef.current;
     const active = stateRef.current;
     if (!video || !active) return;
@@ -962,7 +971,10 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       setBusy(true);
       void replanPlaybackV3(session, active, "seek_reanchor", target, qualityRef.current, active.plan.selected_tracks)
         .then(next => { if (generation === seekGeneration.current) installPlan(next); })
-        .catch(reason => { if (generation === seekGeneration.current) setError(reason instanceof Error ? reason.message : "Silo could not seek to that position."); })
+        .catch(reason => {
+          onFailed?.();
+          if (generation === seekGeneration.current) setError(reason instanceof Error ? reason.message : "Silo could not seek to that position.");
+        })
         .finally(() => { if (generation === seekGeneration.current) setBusy(false); });
     } else {
       video.currentTime = Math.max(0, localTarget);
@@ -984,6 +996,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
 
   const commitScrub = useCallback(() => {
     const target = ui.current.scrubPreview;
+    if (target != null) noteViewerActivity();
     stopAutoSeek();
     pendingTapDirection.current = 0;
     setScrubPreview(null);
@@ -1047,12 +1060,14 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
 
   const commitCleanSeek = useCallback(() => {
     const held = ui.current.cleanSeek;
+    if (held) noteViewerActivity();
     stopCleanSeek();
     if (held) seekToPosition(held.preview);
   }, [seekToPosition, stopCleanSeek]);
 
   /** A quick skip: seek by the interval and surface the delta chip for 1.2s. */
   const performRelativeSeek = useCallback((deltaSeconds: number, reveal: boolean) => {
+    noteViewerActivity();
     const target = clampSeek(sourcePosition() + deltaSeconds, ui.current.duration);
     seekToPosition(target);
     nonceRef.current += 1;
@@ -1095,12 +1110,22 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   // to leave the range before re-offering.
   useEffect(() => {
     if (!playerSettingsLoaded || !markers || scrubPreview != null) return;
-    const kinds: PillKind[] = ["intro", "credits", "recap"];
-    const active = kinds.map(kind => ({ kind, segment: markers[kind] as MarkerSegment | null }))
-      .find(entry => entry.segment && position >= entry.segment.start_seconds && position < entry.segment.end_seconds);
-    const key = active ? `${active.kind}:${active.segment!.start_seconds}` : null;
-    const introKey = markers.intro ? `intro:${markers.intro.start_seconds}` : null;
-    if (pill?.undo && pill.key === introKey) return;
+    // Every occurrence of each kind (#166), each offered, skipped and dismissed on its own. Ranges
+    // that can't be offered (an ignored kind, resolved, or an expired intro offer) are left out
+    // first, so an overlapping one that can (a recap under an ignored intro) still is.
+    const eligible = markerRanges(markers).filter(candidate => {
+      const candidateKey = rangeKey(candidate);
+      return candidate.kind !== "preview"
+        && markerAction(candidate.kind as PillKind, introSkipMode, autoSkipCredits) !== "ignore"
+        && !resolvedMarkers.current.has(candidateKey)
+        && expiredMarkerKey.current !== candidateKey;
+    });
+    const range = rangeAt(eligible, position, ["intro", "credits", "recap"]);
+    const active = range ? { kind: range.kind as PillKind, segment: { start_seconds: range.start, end_seconds: range.end } } : undefined;
+    const key = range ? rangeKey(range) : null;
+    // The Watch Intro undo stays for its countdown after the skip has left the range, unless
+    // another occurrence starts meanwhile: that one takes over.
+    if (pill?.undo && (!key || key === pill.key)) return;
     if (pill && key === pill.key) return;
     if (!active || !key || resolvedMarkers.current.has(key) || expiredMarkerKey.current === key) {
       setPill(null);
@@ -1111,7 +1136,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         autoSkippedMarkers.current.add(key);
         seekToPosition(active.segment!.end_seconds);
       }
-      if (active.kind === "intro") setPill({ kind: "intro", key, label: "Watch Intro", secondsRemaining: INTRO_PROMPT_SECONDS, undo: true });
+      if (active.kind === "intro") setPill({ kind: "intro", key, label: "Watch Intro", secondsRemaining: INTRO_PROMPT_SECONDS, undo: true, start: active.segment.start_seconds, end: active.segment.end_seconds });
       else setPill(null);
     } else if (active.kind === "credits" && autoSkipCredits) {
       if (!autoSkippedMarkers.current.has(key)) {
@@ -1120,24 +1145,23 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       }
       setPill(null);
     } else if (active.kind === "intro") {
-      setPill({ kind: "intro", key, label: "Skip Intro", secondsRemaining: INTRO_PROMPT_SECONDS });
+      setPill({ kind: "intro", key, label: "Skip Intro", secondsRemaining: INTRO_PROMPT_SECONDS, start: active.segment.start_seconds, end: active.segment.end_seconds });
     } else {
-      setPill({ kind: active.kind, key, label: active.kind === "credits" ? "Skip Credits" : "Skip Recap", secondsRemaining: null });
+      setPill({ kind: active.kind, key, label: active.kind === "credits" ? "Skip Credits" : "Skip Recap", secondsRemaining: null, start: active.segment.start_seconds, end: active.segment.end_seconds });
     }
-    if (expiredMarkerKey.current && expiredMarkerKey.current !== introKey) expiredMarkerKey.current = null;
+    // An expired intro offer isn't made again (Android's expired marker); other intros still are.
+    if (expiredMarkerKey.current && !expiredMarkerKey.current.startsWith("intro:")) expiredMarkerKey.current = null;
   }, [markers, position, scrubPreview, playerSettingsLoaded, introSkipMode, autoSkipCredits, seekToPosition, pill?.key, pill?.undo]);
-
-  const markersRef = useRef(markers);
-  markersRef.current = markers;
 
   function selectPill() {
     const current = ui.current.pill;
-    const activeMarkers = markersRef.current;
-    if (!current || !activeMarkers) return;
-    const segment = activeMarkers[current.kind];
+    if (!current) return;
+    noteViewerActivity();
     resolvedMarkers.current.add(current.key);
     setPill(null);
-    if (segment) seekToPosition(current.undo ? segment.start_seconds : segment.end_seconds);
+    // Each pill skips to the end of its own range (or, for the undo, back to its start). A skip the
+    // server refuses leaves the occurrence offerable again.
+    seekToPosition(current.undo ? current.start : current.end, () => resolvedMarkers.current.delete(current.key));
   }
 
   function dismissPill() {
@@ -1383,6 +1407,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   function togglePlayPause() {
     const video = videoRef.current;
     if (!video) return;
+    noteViewerActivity();
     if (video.paused) void video.play().catch(() => undefined);
     else video.pause();
   }
@@ -1902,7 +1927,21 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
           return;
         }
         if (onPill) {
+          // Android TV #928, tvOS #1175: Skip Intro takes focus when it appears, which is when
+          // viewers seek, so Left and Right step through the title as on the timeline. Focus
+          // stays on the pill while its range lasts.
           event.preventDefault(); event.stopPropagation();
+          if (event.repeat) return;
+          const delta = direction < 0 ? -skipRef.current.back : skipRef.current.forward;
+          const target = clampSeek(sourcePosition() + delta, ui.current.duration);
+          setTapPreview(target);
+          if (tapPreviewTimer.current) window.clearTimeout(tapPreviewTimer.current);
+          tapPreviewTimer.current = window.setTimeout(() => setTapPreview(null), 1500);
+          performRelativeSeek(delta, false);
+          // A seek out of the pill's range takes the pill away: the timeline takes focus, so the
+          // next Left or Right seeks again.
+          const pillNow = ui.current.pill;
+          if (pillNow && (target < pillNow.start || target >= pillNow.end)) scrubberRef.current?.focus();
           return;
         }
         return;
@@ -2064,9 +2103,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const edges = [0, ...chapterBounds, 1];
   const denseGaps = chapterBounds.length > 0 && edges.some((edge, index) => index > 0 && (edge - edges[index - 1]) * trackEstimateWidth < 16);
   const segments: Array<[number, number]> = denseGaps ? [[0, 1]] : edges.slice(0, -1).map((edge, index) => [edge, edges[index + 1]] as [number, number]);
-  const bandRanges = (["intro", "recap", "credits", "preview"] as const)
-    .map(kind => ({ kind, segment: (markers?.[kind] ?? null) as MarkerSegment | null }))
-    .filter((entry): entry is { kind: typeof entry.kind; segment: MarkerSegment } => entry.segment != null && entry.segment.end_seconds > entry.segment.start_seconds);
+  // Every range is marked on the timeline (Android TV #933, #934).
+  const bandRanges = markerRanges(markers).map(range => ({ kind: range.kind, key: rangeKey(range), segment: { start_seconds: range.start, end_seconds: range.end } }));
 
   // Phone remote control (#155): what the phone sees, and its commands, through the same paths as
   // the remote's own presses. Audio tracks are numbered by the server's index and subtitles by
@@ -2104,11 +2142,12 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       const switching = command.name === "select_audio_track" || command.name === "select_subtitle_track" || command.name === "set_quality";
       if (switching && replanning.current) return refused("The TV is still switching. Try again in a moment.");
       switch (command.name) {
-        case "play": if (video?.paused) void video.play().catch(() => undefined); break;
-        case "pause": video?.pause(); break;
+        case "play": noteViewerActivity(); if (video?.paused) void video.play().catch(() => undefined); break;
+        case "pause": noteViewerActivity(); video?.pause(); break;
         case "play_pause": togglePlayPause(); break;
         case "seek":
           if (command.seconds == null) return refused("No position given.");
+          noteViewerActivity();
           seekToPosition(Math.max(0, duration > 0 ? Math.min(command.seconds, duration) : command.seconds));
           break;
         case "stop": exitPlayer(); break;
@@ -2125,6 +2164,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
         case "select_subtitle_track": {
           if (command.trackId == null) { selectSubtitle(); break; }
           const chosen = subtitles.find(track => track.combined_index === command.trackId);
+          if (chosen && subtitleUnplayable(chosen)) return refused("The TV can't show that subtitle format.");
           if (!chosen) return refused("That subtitle track isn't available.");
           selectSubtitle(chosen);
           break;
@@ -2200,11 +2240,11 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
               const innerLeft = index === 0 ? 0 : 2;
               const innerRight = index === segments.length - 1 ? 0 : 2;
               return <div key={index} className="scrub-segment" style={{ left: `calc(${start * 100}% + ${innerLeft}px)`, width: `calc(${span * 100}% - ${innerLeft + innerRight}px)` }}>
-                {bandRanges.map(({ kind, segment }) => {
+                {bandRanges.map(({ kind, key, segment }) => {
                   const bandStart = Math.max(segment.start_seconds / (duration || 1), start);
                   const bandEnd = Math.min(segment.end_seconds / (duration || 1), end);
                   if (bandEnd <= bandStart) return null;
-                  return <i key={kind} className="scrub-band" style={{ left: `${local(bandStart) * 100}%`, width: `${(local(bandEnd) - local(bandStart)) * 100}%`, background: BAND_COLORS[kind] }} />;
+                  return <i key={key} className="scrub-band" style={{ left: `${local(bandStart) * 100}%`, width: `${(local(bandEnd) - local(bandStart)) * 100}%`, background: BAND_COLORS[kind] }} />;
                 })}
                 <b className="scrub-buffered" style={{ width: `${local(bufferedFraction) * 100}%` }} />
                 <b className="scrub-fill" style={{ width: `${local(playedFraction) * 100}%` }} />
@@ -2370,7 +2410,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
             <div className="player-hud-readonly"><span>Container</span><strong>{plan?.stream.container?.toUpperCase() || version?.container?.toUpperCase() || "—"}</strong></div>
           </div>
         </div> : null}
-        {hudTab === "Subtitles" ? <div className="player-hud-list"><div className="player-hud-eyebrow">Subtitles</div>{!styleView ? <><button data-tv-focusable="true" data-hud-row={!activeSubtitle ? "subtitle-track" : undefined} data-subtitle-row="off" className="option-row" onClick={() => selectSubtitle()}><span>Off</span>{!activeSubtitle ? <small>Current</small> : null}</button>{subtitles.map(track => <button data-tv-focusable="true" data-hud-row={activeSubtitle?.track_id === track.track_id ? "subtitle-track" : undefined} data-subtitle-row={track.track_id} className="option-row" key={track.track_id} onClick={() => selectSubtitle(track)}><span>{subtitleName(track)}</span><small>{activeSubtitle?.track_id === track.track_id ? "Current" : subtitleDetail(track)}</small></button>)}{appearance ? <button data-tv-focusable="true" data-style-entry className="option-row" onClick={() => openStyleView("list")}><span>Appearance</span><small>{subtitleChoiceLabel("fontSize", appearance.fontSize)} · {subtitleChoiceLabel("position", appearance.position)}</small></button> : null}<button data-tv-focusable="true" data-timing-entry className="option-row" disabled={!hasSidecarSubtitle && !timingActions} onClick={() => { setStyleView("timing"); requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-timing-first]")?.focus()); }}><span>Timing</span><small>{timingActions && (timingActions.busy || timingActions.inProgress) ? "Working..." : hasSidecarSubtitle ? delaySecondsLabel(subtitleDelayMs) : timingActions ? timingValue(timingActions) : "Unavailable"}</small></button>{version?.file_id != null ? <><div className="player-hud-eyebrow">Find more</div><button data-tv-focusable="true" data-hud-row="subtitle-search" className="option-row" onClick={() => void openSubtitleSearch()}><span>Search online</span></button>{aiStatus && (aiStatus.enabled || aiStatus.transcribe_enabled) ? <button data-tv-focusable="true" data-hud-row="subtitle-ai" className="option-row" onClick={() => void openAiTranslate()}><span>Translate with AI</span></button> : null}</> : null}</> : styleView === "timing" ? <><div className="player-hud-eyebrow">Timing</div><button data-tv-focusable="true" data-timing-first={hasSidecarSubtitle ? "" : undefined} data-hud-row="subtitle-delay" className="option-row" disabled={!hasSidecarSubtitle} onClick={() => presentHudPicker("Subtitle delay", delayChoices(-2000, 2000, 100), String(subtitleDelayMs), "subtitle-delay", value => changeSubtitleDelay(Number(value)))}><span>Delay</span><small>{hasSidecarSubtitle ? delayLabel(subtitleDelayMs) : "Unavailable for burned-in subtitles"}</small></button>{timingActions ? <>
+        {hudTab === "Subtitles" ? <div className="player-hud-list"><div className="player-hud-eyebrow">Subtitles</div>{!styleView ? <><button data-tv-focusable="true" data-hud-row={!activeSubtitle ? "subtitle-track" : undefined} data-subtitle-row="off" className="option-row" onClick={() => selectSubtitle()}><span>Off</span>{!activeSubtitle ? <small>Current</small> : null}</button>{subtitles.map(track => { const unplayable = subtitleUnplayable(track); return <button data-tv-focusable="true" data-hud-row={activeSubtitle?.track_id === track.track_id ? "subtitle-track" : undefined} data-subtitle-row={track.track_id} className="option-row" key={track.track_id} disabled={unplayable && activeSubtitle?.track_id !== track.track_id} onClick={() => { if (!unplayable) selectSubtitle(track); }}><span>{subtitleName(track)}</span><small>{activeSubtitle?.track_id === track.track_id ? (unplayable ? "Current · Unsupported format" : "Current") : unplayable ? "Unsupported format" : subtitleDetail(track)}</small></button>; })}{appearance ? <button data-tv-focusable="true" data-style-entry className="option-row" onClick={() => openStyleView("list")}><span>Appearance</span><small>{subtitleChoiceLabel("fontSize", appearance.fontSize)} · {subtitleChoiceLabel("position", appearance.position)}</small></button> : null}<button data-tv-focusable="true" data-timing-entry className="option-row" disabled={!hasSidecarSubtitle && !timingActions} onClick={() => { setStyleView("timing"); requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-timing-first]")?.focus()); }}><span>Timing</span><small>{timingActions && (timingActions.busy || timingActions.inProgress) ? "Working..." : hasSidecarSubtitle ? delaySecondsLabel(subtitleDelayMs) : timingActions ? timingValue(timingActions) : "Unavailable"}</small></button>{version?.file_id != null ? <><div className="player-hud-eyebrow">Find more</div><button data-tv-focusable="true" data-hud-row="subtitle-search" className="option-row" onClick={() => void openSubtitleSearch()}><span>Search online</span></button>{aiStatus && (aiStatus.enabled || aiStatus.transcribe_enabled) ? <button data-tv-focusable="true" data-hud-row="subtitle-ai" className="option-row" onClick={() => void openAiTranslate()}><span>Translate with AI</span></button> : null}</> : null}</> : styleView === "timing" ? <><div className="player-hud-eyebrow">Timing</div><button data-tv-focusable="true" data-timing-first={hasSidecarSubtitle ? "" : undefined} data-hud-row="subtitle-delay" className="option-row" disabled={!hasSidecarSubtitle} onClick={() => presentHudPicker("Subtitle delay", delayChoices(-2000, 2000, 100), String(subtitleDelayMs), "subtitle-delay", value => changeSubtitleDelay(Number(value)))}><span>Delay</span><small>{hasSidecarSubtitle ? delayLabel(subtitleDelayMs) : "Unavailable for burned-in subtitles"}</small></button>{timingActions ? <>
           <button data-tv-focusable="true" data-timing-first={hasSidecarSubtitle ? undefined : ""} data-hud-row="subtitle-sync" className="option-row" onClick={() => { if (!timingActions.forbidden && !timingActions.busy && !timingActions.inProgress && timingActions.canSync) void syncStore.current?.requestSync(timingActions.key); }}><span>Sync to audio</span><small>{timingValue(timingActions)}</small></button>
           {timingActions.canReset ? <button data-tv-focusable="true" data-hud-row="subtitle-reset" className="option-row" onClick={() => { if (!timingActions.forbidden && !timingActions.busy && !timingActions.inProgress) void syncStore.current?.resetTiming(timingActions.key); }}><span>Reset timing</span></button> : null}
           {timingActions.inProgress && timingActions.percent != null ? <div className="player-hud-sync"><div className="ai-translate-bar"><div style={{ width: `${timingActions.percent}%` }} /></div>{timingActions.phaseLabel ? <p className="player-hud-note">{timingActions.phaseLabel}</p> : null}</div> : null}
