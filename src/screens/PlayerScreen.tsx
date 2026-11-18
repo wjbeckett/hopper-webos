@@ -956,7 +956,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   }, []);
 
   /** Seek the negotiated stream to a source-timeline position (re-anchors when the server demands it). */
-  const seekToPosition = useCallback((target: number) => {
+  /** `onFailed`: the server refused a re-anchoring seek, so the video stayed where it was. */
+  const seekToPosition = useCallback((target: number, onFailed?: () => void) => {
     const video = videoRef.current;
     const active = stateRef.current;
     if (!video || !active) return;
@@ -970,7 +971,10 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
       setBusy(true);
       void replanPlaybackV3(session, active, "seek_reanchor", target, qualityRef.current, active.plan.selected_tracks)
         .then(next => { if (generation === seekGeneration.current) installPlan(next); })
-        .catch(reason => { if (generation === seekGeneration.current) setError(reason instanceof Error ? reason.message : "Silo could not seek to that position."); })
+        .catch(reason => {
+          onFailed?.();
+          if (generation === seekGeneration.current) setError(reason instanceof Error ? reason.message : "Silo could not seek to that position.");
+        })
         .finally(() => { if (generation === seekGeneration.current) setBusy(false); });
     } else {
       video.currentTime = Math.max(0, localTarget);
@@ -1106,12 +1110,22 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   // to leave the range before re-offering.
   useEffect(() => {
     if (!playerSettingsLoaded || !markers || scrubPreview != null) return;
-    // Every occurrence of each kind (#166), each offered, skipped and dismissed on its own.
-    const range = rangeAt(markerRanges(markers), position, ["intro", "credits", "recap"]);
+    // Every occurrence of each kind (#166), each offered, skipped and dismissed on its own. Ranges
+    // that can't be offered (an ignored kind, resolved, or an expired intro offer) are left out
+    // first, so an overlapping one that can (a recap under an ignored intro) still is.
+    const eligible = markerRanges(markers).filter(candidate => {
+      const candidateKey = rangeKey(candidate);
+      return candidate.kind !== "preview"
+        && markerAction(candidate.kind as PillKind, introSkipMode, autoSkipCredits) !== "ignore"
+        && !resolvedMarkers.current.has(candidateKey)
+        && expiredMarkerKey.current !== candidateKey;
+    });
+    const range = rangeAt(eligible, position, ["intro", "credits", "recap"]);
     const active = range ? { kind: range.kind as PillKind, segment: { start_seconds: range.start, end_seconds: range.end } } : undefined;
     const key = range ? rangeKey(range) : null;
-    // The Watch Intro undo stays for its countdown after the skip has left the range.
-    if (pill?.undo) return;
+    // The Watch Intro undo stays for its countdown after the skip has left the range, unless
+    // another occurrence starts meanwhile: that one takes over.
+    if (pill?.undo && (!key || key === pill.key)) return;
     if (pill && key === pill.key) return;
     if (!active || !key || resolvedMarkers.current.has(key) || expiredMarkerKey.current === key) {
       setPill(null);
@@ -1145,8 +1159,9 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     noteViewerActivity();
     resolvedMarkers.current.add(current.key);
     setPill(null);
-    // Each pill skips to the end of its own range (or, for the undo, back to its start).
-    seekToPosition(current.undo ? current.start : current.end);
+    // Each pill skips to the end of its own range (or, for the undo, back to its start). A skip the
+    // server refuses leaves the occurrence offerable again.
+    seekToPosition(current.undo ? current.start : current.end, () => resolvedMarkers.current.delete(current.key));
   }
 
   function dismissPill() {
@@ -1918,10 +1933,15 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
           event.preventDefault(); event.stopPropagation();
           if (event.repeat) return;
           const delta = direction < 0 ? -skipRef.current.back : skipRef.current.forward;
-          setTapPreview(clampSeek(sourcePosition() + delta, ui.current.duration));
+          const target = clampSeek(sourcePosition() + delta, ui.current.duration);
+          setTapPreview(target);
           if (tapPreviewTimer.current) window.clearTimeout(tapPreviewTimer.current);
           tapPreviewTimer.current = window.setTimeout(() => setTapPreview(null), 1500);
           performRelativeSeek(delta, false);
+          // A seek out of the pill's range takes the pill away: the timeline takes focus, so the
+          // next Left or Right seeks again.
+          const pillNow = ui.current.pill;
+          if (pillNow && (target < pillNow.start || target >= pillNow.end)) scrubberRef.current?.focus();
           return;
         }
         return;
@@ -2084,7 +2104,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
   const denseGaps = chapterBounds.length > 0 && edges.some((edge, index) => index > 0 && (edge - edges[index - 1]) * trackEstimateWidth < 16);
   const segments: Array<[number, number]> = denseGaps ? [[0, 1]] : edges.slice(0, -1).map((edge, index) => [edge, edges[index + 1]] as [number, number]);
   // Every range is marked on the timeline (Android TV #933, #934).
-  const bandRanges = markerRanges(markers).map(range => ({ kind: range.kind, segment: { start_seconds: range.start, end_seconds: range.end } }));
+  const bandRanges = markerRanges(markers).map(range => ({ kind: range.kind, key: rangeKey(range), segment: { start_seconds: range.start, end_seconds: range.end } }));
 
   // Phone remote control (#155): what the phone sees, and its commands, through the same paths as
   // the remote's own presses. Audio tracks are numbered by the server's index and subtitles by
@@ -2220,11 +2240,11 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
               const innerLeft = index === 0 ? 0 : 2;
               const innerRight = index === segments.length - 1 ? 0 : 2;
               return <div key={index} className="scrub-segment" style={{ left: `calc(${start * 100}% + ${innerLeft}px)`, width: `calc(${span * 100}% - ${innerLeft + innerRight}px)` }}>
-                {bandRanges.map(({ kind, segment }) => {
+                {bandRanges.map(({ kind, key, segment }) => {
                   const bandStart = Math.max(segment.start_seconds / (duration || 1), start);
                   const bandEnd = Math.min(segment.end_seconds / (duration || 1), end);
                   if (bandEnd <= bandStart) return null;
-                  return <i key={`${kind}:${segment.start_seconds}`} className="scrub-band" style={{ left: `${local(bandStart) * 100}%`, width: `${(local(bandEnd) - local(bandStart)) * 100}%`, background: BAND_COLORS[kind] }} />;
+                  return <i key={key} className="scrub-band" style={{ left: `${local(bandStart) * 100}%`, width: `${(local(bandEnd) - local(bandStart)) * 100}%`, background: BAND_COLORS[kind] }} />;
                 })}
                 <b className="scrub-buffered" style={{ width: `${local(bufferedFraction) * 100}%` }} />
                 <b className="scrub-fill" style={{ width: `${local(playedFraction) * 100}%` }} />
@@ -2390,7 +2410,7 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
             <div className="player-hud-readonly"><span>Container</span><strong>{plan?.stream.container?.toUpperCase() || version?.container?.toUpperCase() || "—"}</strong></div>
           </div>
         </div> : null}
-        {hudTab === "Subtitles" ? <div className="player-hud-list"><div className="player-hud-eyebrow">Subtitles</div>{!styleView ? <><button data-tv-focusable="true" data-hud-row={!activeSubtitle ? "subtitle-track" : undefined} data-subtitle-row="off" className="option-row" onClick={() => selectSubtitle()}><span>Off</span>{!activeSubtitle ? <small>Current</small> : null}</button>{subtitles.map(track => { const unplayable = subtitleUnplayable(track); return <button data-tv-focusable="true" data-hud-row={activeSubtitle?.track_id === track.track_id ? "subtitle-track" : undefined} data-subtitle-row={track.track_id} className="option-row" key={track.track_id} disabled={unplayable && activeSubtitle?.track_id !== track.track_id} onClick={() => { if (!unplayable) selectSubtitle(track); }}><span>{subtitleName(track)}</span><small>{activeSubtitle?.track_id === track.track_id ? "Current" : unplayable ? "Unsupported format" : subtitleDetail(track)}</small></button>; })}{appearance ? <button data-tv-focusable="true" data-style-entry className="option-row" onClick={() => openStyleView("list")}><span>Appearance</span><small>{subtitleChoiceLabel("fontSize", appearance.fontSize)} · {subtitleChoiceLabel("position", appearance.position)}</small></button> : null}<button data-tv-focusable="true" data-timing-entry className="option-row" disabled={!hasSidecarSubtitle && !timingActions} onClick={() => { setStyleView("timing"); requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-timing-first]")?.focus()); }}><span>Timing</span><small>{timingActions && (timingActions.busy || timingActions.inProgress) ? "Working..." : hasSidecarSubtitle ? delaySecondsLabel(subtitleDelayMs) : timingActions ? timingValue(timingActions) : "Unavailable"}</small></button>{version?.file_id != null ? <><div className="player-hud-eyebrow">Find more</div><button data-tv-focusable="true" data-hud-row="subtitle-search" className="option-row" onClick={() => void openSubtitleSearch()}><span>Search online</span></button>{aiStatus && (aiStatus.enabled || aiStatus.transcribe_enabled) ? <button data-tv-focusable="true" data-hud-row="subtitle-ai" className="option-row" onClick={() => void openAiTranslate()}><span>Translate with AI</span></button> : null}</> : null}</> : styleView === "timing" ? <><div className="player-hud-eyebrow">Timing</div><button data-tv-focusable="true" data-timing-first={hasSidecarSubtitle ? "" : undefined} data-hud-row="subtitle-delay" className="option-row" disabled={!hasSidecarSubtitle} onClick={() => presentHudPicker("Subtitle delay", delayChoices(-2000, 2000, 100), String(subtitleDelayMs), "subtitle-delay", value => changeSubtitleDelay(Number(value)))}><span>Delay</span><small>{hasSidecarSubtitle ? delayLabel(subtitleDelayMs) : "Unavailable for burned-in subtitles"}</small></button>{timingActions ? <>
+        {hudTab === "Subtitles" ? <div className="player-hud-list"><div className="player-hud-eyebrow">Subtitles</div>{!styleView ? <><button data-tv-focusable="true" data-hud-row={!activeSubtitle ? "subtitle-track" : undefined} data-subtitle-row="off" className="option-row" onClick={() => selectSubtitle()}><span>Off</span>{!activeSubtitle ? <small>Current</small> : null}</button>{subtitles.map(track => { const unplayable = subtitleUnplayable(track); return <button data-tv-focusable="true" data-hud-row={activeSubtitle?.track_id === track.track_id ? "subtitle-track" : undefined} data-subtitle-row={track.track_id} className="option-row" key={track.track_id} disabled={unplayable && activeSubtitle?.track_id !== track.track_id} onClick={() => { if (!unplayable) selectSubtitle(track); }}><span>{subtitleName(track)}</span><small>{activeSubtitle?.track_id === track.track_id ? (unplayable ? "Current · Unsupported format" : "Current") : unplayable ? "Unsupported format" : subtitleDetail(track)}</small></button>; })}{appearance ? <button data-tv-focusable="true" data-style-entry className="option-row" onClick={() => openStyleView("list")}><span>Appearance</span><small>{subtitleChoiceLabel("fontSize", appearance.fontSize)} · {subtitleChoiceLabel("position", appearance.position)}</small></button> : null}<button data-tv-focusable="true" data-timing-entry className="option-row" disabled={!hasSidecarSubtitle && !timingActions} onClick={() => { setStyleView("timing"); requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-timing-first]")?.focus()); }}><span>Timing</span><small>{timingActions && (timingActions.busy || timingActions.inProgress) ? "Working..." : hasSidecarSubtitle ? delaySecondsLabel(subtitleDelayMs) : timingActions ? timingValue(timingActions) : "Unavailable"}</small></button>{version?.file_id != null ? <><div className="player-hud-eyebrow">Find more</div><button data-tv-focusable="true" data-hud-row="subtitle-search" className="option-row" onClick={() => void openSubtitleSearch()}><span>Search online</span></button>{aiStatus && (aiStatus.enabled || aiStatus.transcribe_enabled) ? <button data-tv-focusable="true" data-hud-row="subtitle-ai" className="option-row" onClick={() => void openAiTranslate()}><span>Translate with AI</span></button> : null}</> : null}</> : styleView === "timing" ? <><div className="player-hud-eyebrow">Timing</div><button data-tv-focusable="true" data-timing-first={hasSidecarSubtitle ? "" : undefined} data-hud-row="subtitle-delay" className="option-row" disabled={!hasSidecarSubtitle} onClick={() => presentHudPicker("Subtitle delay", delayChoices(-2000, 2000, 100), String(subtitleDelayMs), "subtitle-delay", value => changeSubtitleDelay(Number(value)))}><span>Delay</span><small>{hasSidecarSubtitle ? delayLabel(subtitleDelayMs) : "Unavailable for burned-in subtitles"}</small></button>{timingActions ? <>
           <button data-tv-focusable="true" data-timing-first={hasSidecarSubtitle ? undefined : ""} data-hud-row="subtitle-sync" className="option-row" onClick={() => { if (!timingActions.forbidden && !timingActions.busy && !timingActions.inProgress && timingActions.canSync) void syncStore.current?.requestSync(timingActions.key); }}><span>Sync to audio</span><small>{timingValue(timingActions)}</small></button>
           {timingActions.canReset ? <button data-tv-focusable="true" data-hud-row="subtitle-reset" className="option-row" onClick={() => { if (!timingActions.forbidden && !timingActions.busy && !timingActions.inProgress) void syncStore.current?.resetTiming(timingActions.key); }}><span>Reset timing</span></button> : null}
           {timingActions.inProgress && timingActions.percent != null ? <div className="player-hud-sync"><div className="ai-translate-bar"><div style={{ width: `${timingActions.percent}%` }} /></div>{timingActions.phaseLabel ? <p className="player-hud-note">{timingActions.phaseLabel}</p> : null}</div> : null}

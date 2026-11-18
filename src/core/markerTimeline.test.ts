@@ -19,7 +19,7 @@ const got: FileMarkers = {
 
 describe("marker timeline (#166)", () => {
   it("reads every occurrence, in order", () => {
-    expect(markerRanges(got).map(rangeKey)).toEqual(["recap:20", "intro:108", "credits:2975.5", "credits:3189"]);
+    expect(markerRanges(got).map(rangeKey)).toEqual(["recap:20-107", "intro:108-220", "credits:2975.5-3167.4", "credits:3189-3300"]);
   });
 
   it("offers Skip Credits in both ranges, and nothing in the gap between them", () => {
@@ -59,5 +59,22 @@ describe("marker timeline (#166)", () => {
       { kind: "recap", start_seconds: 0, end_seconds: 5 }
     ] };
     expect(markerRanges(odd)).toEqual([{ kind: "recap", start: 0, end: 5 }]);
+  });
+
+  it("keeps two ranges that start together apart", () => {
+    const ranges = markerRanges({ ...base, marker_segments: [
+      { kind: "recap", start_seconds: 10, end_seconds: 20 },
+      { kind: "recap", start_seconds: 10, end_seconds: 30 }
+    ] });
+    expect(new Set(ranges.map(rangeKey)).size).toBe(2);
+  });
+
+  it("joins credits ranges through one that reaches past a shorter one", () => {
+    const nested: FileMarkers = { ...base, marker_segments: [
+      { kind: "credits", start_seconds: 100, end_seconds: 300 },
+      { kind: "credits", start_seconds: 150, end_seconds: 170 },
+      { kind: "credits", start_seconds: 250, end_seconds: 320 }
+    ] };
+    expect(upNextStart(markerRanges(nested))).toBe(100);
   });
 });

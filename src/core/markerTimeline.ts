@@ -44,19 +44,20 @@ export function rangeAt(ranges: MarkerRange[], position: number, kinds: MarkerKi
 }
 
 /** A range's identity for "offered", "skipped" and "dismissed": each occurrence is its own. */
-export const rangeKey = (range: MarkerRange) => `${range.kind}:${range.start}`;
+export const rangeKey = (range: MarkerRange) => `${range.kind}:${range.start}-${range.end}`;
 
 /**
  * Where Up Next appears: the start of the last credits range, extended back over credits ranges
  * that run into it. Content between two separate ranges (a mid-credits scene) plays first.
  */
 export function upNextStart(ranges: MarkerRange[]): number | undefined {
-  const credits = ranges.filter(range => range.kind === "credits");
-  if (!credits.length) return undefined;
-  let start = credits[credits.length - 1].start;
-  for (let index = credits.length - 2; index >= 0; index -= 1) {
-    if (credits[index].end >= start - 1) start = Math.min(start, credits[index].start);
-    else break;
+  // Join the credits ranges into blocks (each range in start order joins the block when it starts
+  // within a second of the furthest end so far), then take the last block's start.
+  let blockStart: number | undefined;
+  let blockEnd = -Infinity;
+  for (const range of ranges.filter(candidate => candidate.kind === "credits")) {
+    if (blockStart === undefined || range.start > blockEnd + 1) blockStart = range.start;
+    blockEnd = Math.max(blockEnd, range.end);
   }
-  return start;
+  return blockStart;
 }
