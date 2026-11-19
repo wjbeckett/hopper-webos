@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { connectionStatus, holdConnectionDialog, NetworkError, onceReachable, reportNetworkFailure, subscribeConnection } from "../api/connection";
 import type Hls from "hls.js";
 import { pinFocusedRailItem } from "../navigation/spatial";
-import { allowDirectPlay, isDirectPlay, allowDolbyAudio, setBufferingQualityMode, bestVersionForDevice, getMarkers, isDolbyAudio, getTrickplay, getWatchDetail, playbackUrl, replanPlaybackV3, reportProgress, saveAudioPreference, saveSubtitlePreference, startPlaybackV3, stopPlayback, stopPlaybackKeepalive, type AudioTrack, type FileMarkers, subtitleUnplayable, type PlaybackChoices, type PlaybackFailure, type PlaybackPlan, type Quality, type SubtitleInventory, type Trickplay, type WatchDetail } from "../api/playback";
+import { allowDirectPlay, isDirectPlay, allowDolbyAudio, setBufferingQualityMode, selectPlaybackVersion, getMarkers, isDolbyAudio, getTrickplay, getWatchDetail, playbackUrl, replanPlaybackV3, reportProgress, saveAudioPreference, saveSubtitlePreference, startPlaybackV3, stopPlayback, stopPlaybackKeepalive, type AudioTrack, type FileMarkers, subtitleUnplayable, type PlaybackChoices, type PlaybackFailure, type PlaybackPlan, type Quality, type SubtitleInventory, type Trickplay, type WatchDetail } from "../api/playback";
 import { classifyPlaybackFailure } from "./playbackFailure";
 import type { HomeRail, Session, SiloItem } from "../types";
 import { getEffectiveSettings, putScopedSetting } from "../api/settings";
@@ -883,8 +883,8 @@ export function PlayerScreen({ session, item, startPosition, choices, onBack, on
     allowDirectPlay(true);
     getWatchDetail(session, item).then(async (watch) => {
       if (!alive) return;
-      const selectedVersion = watch.versions.find(entry => entry.file_id === choices?.fileId)
-        ?? bestVersionForDevice(watch.versions, watch.user_data?.last_file_id);
+      // The same rule Details used to show this file (#197).
+      const selectedVersion = selectPlaybackVersion(watch, choices);
       if (!selectedVersion) throw new Error("Silo did not return a playable media file.");
       setDetail(watch);
       setVersion(selectedVersion);
