@@ -5,8 +5,8 @@
  * (`web/src/lib/accentColor.ts` in silo-server).
  */
 
-/** The panel a mark is drawn on at its lightest: a settings row over Hopper's background. */
-const MARK_PANEL = "#1b1c1e";
+/** The lightest panel a mark is drawn on: a ticked row in a Settings picker (white at 14% over the picker). */
+const MARK_PANEL = "#3c3c3e";
 /** Marks include short labels (a toggle's "On"), so they need text contrast. */
 const MIN_MARK_CONTRAST = 4.5;
 const STORAGE_KEY = "hopper-accent-v1";
@@ -71,6 +71,9 @@ export function applyAccent(accent: unknown) {
     if (variables) root.style.setProperty(name, variables[name]);
     else root.style.removeProperty(name);
   }
+  // Accented labels drop the dimming the white ones have, which would take them under 4.5:1.
+  if (variables) root.dataset.accent = "true";
+  else delete root.dataset.accent;
 }
 
 function readStore(): Record<string, string> {

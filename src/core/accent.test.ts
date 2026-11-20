@@ -17,10 +17,15 @@ describe("the server's accent colour (#201)", () => {
     expect(markColour("#2dd4bf")).toBe("#2dd4bf");
   });
 
+  it("lightens a mid-grey accent that would read on black but not on a ticked row", () => {
+    expect(contrastRatio(markColour("#858585"), "#3c3c3e")).toBeGreaterThanOrEqual(4.5);
+    expect(markColour("#858585")).not.toBe("#858585");
+  });
+
   it("lightens a dark accent until a mark reads at 4.5:1", () => {
     const mark = markColour("#1a237e");
     expect(mark).not.toBe("#1a237e");
-    expect(contrastRatio(mark, "#1b1c1e")).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(mark, "#3c3c3e")).toBeGreaterThanOrEqual(4.5);
     expect(markColour("#000000")).toMatch(/^#[0-9a-f]{6}$/);
   });
 
@@ -29,7 +34,9 @@ describe("the server's accent colour (#201)", () => {
     const style = document.documentElement.style;
     expect(style.getPropertyValue("--server-accent")).toMatch(/^#[0-9a-f]{6}$/);
     expect(style.getPropertyValue("--server-accent-glow")).toContain("rgba(229,9,20,.16)");
+    expect(document.documentElement.dataset.accent).toBe("true");
     applyAccent(null);
+    expect(document.documentElement.dataset.accent).toBeUndefined();
     expect(style.getPropertyValue("--server-accent")).toBe("");
     expect(style.getPropertyValue("--server-accent-glow")).toBe("");
   });

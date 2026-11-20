@@ -4780,6 +4780,7 @@ body {
 .settings-toggle strong { opacity: .55; }
 .settings-toggle.is-on strong { font-weight: calc(600 + var(--font-weight-boost)); opacity: .9; color: var(--server-accent, inherit); }
 .settings-toggle.is-on:focus strong { color: inherit; }
+html[data-accent="true"] .settings-toggle.is-on:not(:focus) strong { opacity: 1; }
 .settings-pane .option-row:focus,
 .settings-picker .option-row:focus { outline: none; box-shadow: none; border-color: transparent; background: #EDEDED; color: #000; }
 .settings-pane .option-row:focus strong,
