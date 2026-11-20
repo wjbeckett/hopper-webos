@@ -94,3 +94,60 @@ export function rememberAccent(serverUrl: string, accent: unknown) {
   if (hex) store[serverUrl] = hex; else delete store[serverUrl];
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(store)); } catch { /* Storage full or blocked: the accent still applies this launch. */ }
 }
+
+/**
+ * A profile's own accent on this TV (#201): the server's colour, none, or one of a few presets.
+ * Silo has no profile accent setting since themes were retired, so the choice stays on this TV
+ * and doesn't follow the profile to other devices.
+ */
+export const ACCENT_PRESETS: ReadonlyArray<{ label: string; hex: string }> = [
+  { label: "Teal", hex: "#2dd4bf" },
+  { label: "Blue", hex: "#3b82f6" },
+  { label: "Purple", hex: "#a855f7" },
+  { label: "Pink", hex: "#ec4899" },
+  { label: "Red", hex: "#ef4444" },
+  { label: "Orange", hex: "#f97316" },
+  { label: "Gold", hex: "#eab308" },
+  { label: "Green", hex: "#22c55e" }
+];
+
+/** No choice: the server's colour. "none": no accent. Otherwise a `#rrggbb` colour. */
+export type AccentChoice = "server" | "none" | string;
+
+const PROFILE_KEY = "hopper-profile-accent-v1";
+export const ACCENT_CHANGED_EVENT = "hopper-accent-changed";
+
+function profileStoreKey(serverUrl: string, profileId: string) {
+  return `${serverUrl}|${profileId}`;
+}
+
+function readProfileStore(): Record<string, string> {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(PROFILE_KEY) || "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, string> : {};
+  } catch { return {}; }
+}
+
+export function profileAccentChoice(serverUrl: string, profileId: string | undefined): AccentChoice {
+  if (!profileId) return "server";
+  const stored = readProfileStore()[profileStoreKey(serverUrl, profileId)];
+  if (stored === "none") return "none";
+  return normalizeHex(stored) ?? "server";
+}
+
+export function setProfileAccentChoice(serverUrl: string, profileId: string, choice: AccentChoice) {
+  const store = readProfileStore();
+  const key = profileStoreKey(serverUrl, profileId);
+  const hex = normalizeHex(choice);
+  if (choice === "none") store[key] = "none";
+  else if (hex) store[key] = hex;
+  else delete store[key];
+  try { localStorage.setItem(PROFILE_KEY, JSON.stringify(store)); } catch { /* Storage blocked: the choice applies until the app closes. */ }
+  window.dispatchEvent(new Event(ACCENT_CHANGED_EVENT));
+}
+
+/** The accent to show: the profile's choice on this TV, else the server's. */
+export function resolveAccent(choice: AccentChoice, serverAccent: unknown): string | null {
+  if (choice === "none") return null;
+  return normalizeHex(choice) ?? normalizeHex(serverAccent);
+}

@@ -5,7 +5,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } f
 import { TopNav, type AppSection, type LibraryLanding } from "./components/TopNav";
 import { advanceShuffle, createShuffle, deleteShuffle, getCatalogItem, getEpisodes, getLibraries, getProfileAppearance, getRequestsFeatureStatus, getServerAccent, getSeasons, getSetupStatus, restoreDefaultProfile } from "./api/silo";
 import { serverRegistry } from "./core/serverRegistry";
-import { applyAccent, cachedAccent, rememberAccent } from "./core/accent";
+import { ACCENT_CHANGED_EVENT, applyAccent, cachedAccent, profileAccentChoice, rememberAccent, resolveAccent } from "./core/accent";
 import { focusTopNavigation, installSpatialNavigation } from "./navigation/spatial";
 import { installPointerNavigation } from "./navigation/pointer";
 import { installGridPaintWindow } from "./navigation/gridWindow";
@@ -393,19 +393,25 @@ export default function App() {
     return () => { alive = false; };
   }, [session?.profileId]);
 
-  // The server's accent colour (#201): the last one seen at once, then the server's current one.
+  // The accent (#201): the profile's own choice on this TV, else the server's colour, shown at
+  // once from the last one seen and then from the server's current one.
   const accentServer = session?.serverUrl;
+  const accentProfile = session?.profileId;
   useEffect(() => {
     if (!accentServer) { applyAccent(null); return; }
-    applyAccent(cachedAccent(accentServer));
+    let serverAccent: string | null = cachedAccent(accentServer);
+    const apply = () => applyAccent(resolveAccent(profileAccentChoice(accentServer, accentProfile), serverAccent));
+    apply();
     let alive = true;
     getServerAccent(accentServer).then(accent => {
       if (!alive) return;
       rememberAccent(accentServer, accent);
-      applyAccent(accent);
+      serverAccent = accent;
+      apply();
     }).catch(() => undefined);
-    return () => { alive = false; };
-  }, [accentServer]);
+    window.addEventListener(ACCENT_CHANGED_EVENT, apply);
+    return () => { alive = false; window.removeEventListener(ACCENT_CHANGED_EVENT, apply); };
+  }, [accentServer, accentProfile]);
 
   useEffect(() => {
     const onBack = (event: KeyboardEvent) => {

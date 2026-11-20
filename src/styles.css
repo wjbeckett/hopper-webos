@@ -4799,6 +4799,11 @@ html[data-accent="true"] .settings-toggle.is-on:not(:focus) strong { opacity: 1;
 .settings-picker-list::-webkit-scrollbar { display: none; }
 .settings-picker .option-row.is-selected { background: rgba(255,255,255,.14); font-weight: calc(600 + var(--font-weight-boost)); }
 .settings-picker .option-row.is-selected:focus { background: #EDEDED; }
+/* Accent colour picker (#201): a swatch before each colour; an empty ring for none. */
+.settings-picker .option-row > .settings-swatch + span { flex: 1; min-width: 0; }
+.settings-swatch { flex: none; width: 32px; height: 32px; border-radius: 50%; border: 2px solid rgba(255,255,255,.35); }
+.settings-swatch.is-empty { background: transparent; }
+.settings-picker .option-row:focus .settings-swatch { border-color: rgba(0,0,0,.4); }
 .settings-picker-detail { display: block; font-size: 1.75rem; line-height: 34px; opacity: .72; font-weight: calc(400 + var(--font-weight-boost)); }
 .settings-confirm { width: 760px; max-width: 80vw; padding: 36px !important; display: grid; gap: 16px; }
 .settings-confirm h2 { margin: 0; font-size: 2.625rem; line-height: 50px; }

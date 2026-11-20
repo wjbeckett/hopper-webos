@@ -28,12 +28,13 @@ import { LOCAL_SETTINGS_STORAGE } from "../core/playerSettings";
 import { allowedPhones, subscribeAllowedPhones } from "../core/allowedPhones";
 import { forgetRemotePhone } from "../control/hub";
 import { remoteControlAvailable } from "../platform/remoteControl";
+import { ACCENT_PRESETS, cachedAccent, profileAccentChoice, setProfileAccentChoice } from "../core/accent";
 
 /** Hopper's own policy (docs/privacy.md, published with GitHub Pages). It links to Silo's for the server. */
 const PRIVACY_POLICY_URL = "https://wjbeckett.github.io/hopper-webos/privacy/";
 
 type Category = "general" | "playback" | "subtitles" | "diagnostics" | "server";
-type Choice = { label: string; value: unknown; detail?: string };
+type Choice = { label: string; value: unknown; detail?: string; swatch?: string };
 type PickerRequest = { title: string; choices: Choice[]; current: unknown; returnKey: string; onPick: (value: unknown) => void };
 
 const categories: Array<{ id: Category; label: string; blurb: string; pane: string }> = [
@@ -299,6 +300,7 @@ function ChoicePicker({ picker, onClose }: { picker: PickerRequest; onClose: () 
                 className={`option-row${selected ? " is-selected" : ""}`}
                 onClick={() => onPick(choice.value)}
               >
+                {choice.swatch !== undefined ? <i className={`settings-swatch${choice.swatch ? "" : " is-empty"}`} style={choice.swatch ? { background: choice.swatch } : undefined} aria-hidden="true" /> : null}
                 <span>{choice.label}{choice.detail && !selected ? <small className="settings-picker-detail">{choice.detail}</small> : null}</span>
                 {selected ? <SettingsGlyph name="check" className="settings-check" /> : null}
               </button>
@@ -332,6 +334,7 @@ export function SettingsScreen({
   const [loadAttempt, setLoadAttempt] = useState(0);
   const refocusAfterLoad = useRef(false);
   const [picker, setPicker] = useState<PickerRequest | null>(null);
+  const [accentChoice, setAccentChoice] = useState(() => profileAccentChoice(session.serverUrl, session.profileId));
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [diagEligible, setDiagEligible] = useState<boolean | null>(null);
   const [accountRole, setAccountRole] = useState("");
@@ -887,6 +890,39 @@ export function SettingsScreen({
     }
   }
 
+  /** The profile's accent on this TV (#201): the server's colour, none, or a preset. Kept on the TV only. */
+  function renderAccent() {
+    const profileId = session.profileId;
+    if (!profileId) return null;
+    const serverHex = cachedAccent(session.serverUrl);
+    const current = accentChoice;
+    const choices: Choice[] = [
+      { label: "Server Colour", value: "server", swatch: serverHex ?? "", detail: serverHex ? undefined : "Your server has no accent colour set" },
+      { label: "None", value: "none", swatch: "" },
+      ...ACCENT_PRESETS.map(preset => ({ label: preset.label, value: preset.hex, swatch: preset.hex }))
+    ];
+    const label = choices.find(choice => choice.value === current)?.label ?? "Server Colour";
+    return (
+      <section className="settings-group">
+        <h3>Accent Colour</h3>
+        <button data-tv-focusable="true" data-setting-key="accent-colour" className="option-row settings-row" onClick={() => setPicker({
+          title: "Accent Colour",
+          choices,
+          current,
+          returnKey: "accent-colour",
+          onPick: value => {
+            setPicker(null);
+            const choice = typeof value === "string" ? value : "server";
+            setProfileAccentChoice(session.serverUrl, profileId, choice);
+            setAccentChoice(profileAccentChoice(session.serverUrl, profileId));
+            refocus("accent-colour");
+          }
+        })}><span>Accent Colour</span><strong>{label}</strong></button>
+        <p className="settings-footer">Colours progress bars, ticks and the glow behind the screens for this profile. It is kept on this TV only; Server Colour uses the colour your Silo server's admin chose.</p>
+      </section>
+    );
+  }
+
   function renderCardPresentation() {
     const definition = definitions.get("ui.card_presentation");
     return (
@@ -1140,7 +1176,7 @@ export function SettingsScreen({
   } else if (category === "subtitles") {
     pane = <>{renderGroups(keysByCategory.subtitles)}{renderSubtitleAppearance()}</>;
   } else if (category === "general") {
-    pane = <>{renderProfileLaunch()}{renderHomeSections()}{renderCardPresentation()}{renderTitleArt()}{renderThemeMusic()}{renderGroups(keysByCategory.general)}</>;
+    pane = <>{renderProfileLaunch()}{renderHomeSections()}{renderAccent()}{renderCardPresentation()}{renderTitleArt()}{renderThemeMusic()}{renderGroups(keysByCategory.general)}</>;
   } else {
     pane = renderPlaybackPane();
   }

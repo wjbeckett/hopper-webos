@@ -5,7 +5,7 @@ permalink: /privacy/
 
 # Hopper privacy policy
 
-*Last updated: 17 November 2026*
+*Last updated: 20 November 2026*
 
 Hopper is an app for LG webOS TVs that plays media from a Silo media server. It is developed
 independently and is not affiliated with Silo or LG. This policy covers the Hopper app only.
@@ -28,7 +28,8 @@ Kept in the app's storage on the TV, and nowhere else:
   below);
 - app preferences, such as browsing and sort choices, the last screen you were on, and a
   measurement of your network speed used to choose playback quality;
-- each server's accent colour, so the app shows it straight away at launch.
+- each server's accent colour, so the app shows it straight away at launch, and the accent colour
+  each profile picks in Settings.
 
 Signing out removes that server's sign-in. Deleting the app, or its data, removes all of it.
 
