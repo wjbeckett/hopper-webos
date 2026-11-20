@@ -1820,21 +1820,22 @@ export async function getPersonFilmographyPage(session: Session, personId: strin
   };
 }
 
-export type SiloAppearance = { theme: string; variables: Record<string, string>; textScale: string; textWeight: string; highContrast: boolean; posterSize: string };
+/** The server's accent colour from its public branding (#201): the admin's "#rrggbb", or null when unset. */
+export async function getServerAccent(serverUrl: string): Promise<string | null> {
+  const response = await fetch(apiUrl(serverUrl, "/theme/branding", "v2"), { headers: { Accept: "application/json" } });
+  if (!response.ok) throw new Error(`Branding request failed: ${response.status}`);
+  const body = await response.json() as { accent_color?: unknown };
+  return typeof body.accent_color === "string" && body.accent_color.trim() ? body.accent_color : null;
+}
+
+export type SiloAppearance = { textScale: string; textWeight: string; highContrast: boolean; posterSize: string };
 
 export async function getProfileAppearance(session: Session): Promise<SiloAppearance> {
   const params = new URLSearchParams();
-  ["ui.theme", "ui.custom_theme_vars", "ui.text_scale", "ui.text_weight", "ui.high_contrast", "ui.card_presentation"].forEach(key => params.append("keys", key));
+  ["ui.text_scale", "ui.text_weight", "ui.high_contrast", "ui.card_presentation"].forEach(key => params.append("keys", key));
   const data = await requestV2<{ items?: Array<{ key: string; value?: unknown }> }>(session, `/settings/values/effective?${params}`, { headers: { "X-Silo-Device-Id": getDeviceId() } });
   const values = new Map((data.items ?? []).map(entry => [entry.key, entry.value == null ? "" : typeof entry.value === "string" ? entry.value : typeof entry.value === "object" ? JSON.stringify(entry.value) : String(entry.value)]));
-  let variables: Record<string, string> = {};
-  try {
-    const parsed = JSON.parse(values.get("ui.custom_theme_vars") || "{}");
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) variables = parsed as Record<string, string>;
-  } catch { /* Invalid custom values must not break the TV shell. */ }
   return {
-    theme: values.get("ui.theme") || "midnight-cinema",
-    variables,
     textScale: values.get("ui.text_scale") || "default",
     textWeight: values.get("ui.text_weight") || "default",
     highContrast: values.get("ui.high_contrast") === "true",
