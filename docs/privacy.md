@@ -27,7 +27,8 @@ Kept in the app's storage on the TV, and nowhere else:
 - the names and identifiers of the phones you allow to control the TV (see "Phone remote"
   below);
 - app preferences, such as browsing and sort choices, the last screen you were on, and a
-  measurement of your network speed used to choose playback quality.
+  measurement of your network speed used to choose playback quality;
+- each server's accent colour, so the app shows it straight away at launch.
 
 Signing out removes that server's sign-in. Deleting the app, or its data, removes all of it.
 

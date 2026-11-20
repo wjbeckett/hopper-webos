@@ -52,6 +52,7 @@ Hopper is an independent, community-built client. It is not affiliated with or e
 - Search, calendar, watchlist, favorites, history and media requests. Requests are in the profile menu, where you can also remove a request that failed; a household manager can turn requests off for one profile. Home and library pages show rows of collections when the server has them. Rate movies and series with stars, and mark titles Not Interested from the For You and Recommended pages to tune your recommendations. Movie box sets show on a movie's page and in search, with a page of their own.
 - Hold OK on a card for quick actions: mark watched, favorite and watchlist.
 - Poster badges for resolution, HDR, audio, ratings and more, following the card overlay settings on your Silo server. Settings → General → Poster Badges turns them off for the profile.
+- Your server's accent colour, set by its admin, on progress bars and switches, with a soft glow of it behind the screens.
 
 **Playback**
 - Silo decides direct play, remux or transcode for each file, based on what the TV can play.
