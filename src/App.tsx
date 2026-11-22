@@ -10,38 +10,19 @@ import { focusTopNavigation, installSpatialNavigation } from "./navigation/spati
 import { installPointerNavigation } from "./navigation/pointer";
 import { installGridPaintWindow } from "./navigation/gridWindow";
 import { isTvDevice } from "./core/artwork";
-import { DetailsScreen } from "./screens/DetailsScreen";
-import { CalendarScreen } from "./screens/CalendarScreen";
-import { CollectionsScreen } from "./screens/CollectionsScreen";
-import { DeviceLoginScreen } from "./screens/DeviceLoginScreen";
 import { ForYouScreen } from "./screens/ForYouScreen";
 import { HomeScreen } from "./screens/HomeScreen";
-import { HistoryScreen } from "./screens/HistoryScreen";
 import { AudiobookGroupsScreen, groupSubtitle } from "./screens/AudiobookGroupsScreen";
 import type { GroupKind } from "./screens/AudiobookGroupsScreen";
-import { LibraryCollectionsScreen } from "./screens/LibraryCollectionsScreen";
-import { LibraryScreen } from "./screens/LibraryScreen";
 import { LibraryRecommendationsScreen } from "./screens/LibraryRecommendationsScreen";
-import { LoginScreen } from "./screens/LoginScreen";
-import { PersonScreen } from "./screens/PersonScreen";
-import { PlayerScreen } from "./screens/PlayerScreen";
 import { nextInChain } from "./navigation/similarChain";
-import { BoxSetScreen } from "./screens/BoxSetScreen";
-import { PersonalScreen } from "./screens/PersonalScreen";
 import { clearBackgrounded, markBackgrounded, requiresSelectionAfterBackground, requiresSelectionAtLaunch } from "./core/profileLaunch";
 import { ProfileSelectionScreen } from "./screens/ProfileSelectionScreen";
-import { RequestsScreen } from "./screens/RequestsScreen";
-import { SearchScreen } from "./screens/SearchScreen";
-import { SeriesScreen } from "./screens/SeriesScreen";
-import { SignupScreen } from "./screens/SignupScreen";
 import { PhoneSetupScreen } from "./screens/PhoneSetupScreen";
-import { ServerSetupScreen } from "./screens/ServerSetupScreen";
 import { pairingAvailable } from "./platform/pairing";
 import { platformBack } from "./platform/back";
 import { installKeyboardTracking, virtualKeyboardVisible } from "./platform/keyboard";
-import { FirstRunSetupScreen } from "./screens/FirstRunSetupScreen";
-import { SettingsScreen } from "./screens/SettingsScreen";
-import { SectionBrowseScreen, type SectionBrowseArgs } from "./screens/SectionBrowseScreen";
+import type { SectionBrowseArgs } from "./screens/SectionBrowseScreen";
 import type { AudiobookGroup } from "./api/silo";
 import { invalidateWatchDetail, type PlaybackChoices } from "./api/playback";
 import { applyResumeState, applyServerUserData, applyWatchedState, publishPlaybackSettled, publishWatchState } from "./core/watchState";
@@ -60,6 +41,46 @@ import type { HomeRail, Session, SiloCollection, SiloItem, SiloLibrary, SiloProf
 import { LoadingState } from "./components/LoadingState";
 
 import { installClientLogCapture } from "./core/clientLogs";
+import { DeviceLoginScreen } from "./screens/DeviceLoginScreen";
+import { ServerSetupScreen } from "./screens/ServerSetupScreen";
+import { lazyScreen } from "./core/lazyScreen";
+
+// Screens Home doesn't need load the first time they open (#208); see preloadScreens. The screens
+// a launch can open on stay in the main bundle: Home, the profile picker, phone setup, device
+// sign-in and server setup.
+const DetailsScreen = lazyScreen(() => import("./screens/DetailsScreen"), "DetailsScreen");
+const CalendarScreen = lazyScreen(() => import("./screens/CalendarScreen"), "CalendarScreen");
+const CollectionsScreen = lazyScreen(() => import("./screens/CollectionsScreen"), "CollectionsScreen");
+const HistoryScreen = lazyScreen(() => import("./screens/HistoryScreen"), "HistoryScreen");
+const LibraryCollectionsScreen = lazyScreen(() => import("./screens/LibraryCollectionsScreen"), "LibraryCollectionsScreen");
+const LoginScreen = lazyScreen(() => import("./screens/LoginScreen"), "LoginScreen");
+const PersonScreen = lazyScreen(() => import("./screens/PersonScreen"), "PersonScreen");
+const PlayerScreen = lazyScreen(() => import("./screens/PlayerScreen"), "PlayerScreen");
+const BoxSetScreen = lazyScreen(() => import("./screens/BoxSetScreen"), "BoxSetScreen");
+const PersonalScreen = lazyScreen(() => import("./screens/PersonalScreen"), "PersonalScreen");
+const RequestsScreen = lazyScreen(() => import("./screens/RequestsScreen"), "RequestsScreen");
+const SearchScreen = lazyScreen(() => import("./screens/SearchScreen"), "SearchScreen");
+const SeriesScreen = lazyScreen(() => import("./screens/SeriesScreen"), "SeriesScreen");
+const SignupScreen = lazyScreen(() => import("./screens/SignupScreen"), "SignupScreen");
+const FirstRunSetupScreen = lazyScreen(() => import("./screens/FirstRunSetupScreen"), "FirstRunSetupScreen");
+const SettingsScreen = lazyScreen(() => import("./screens/SettingsScreen"), "SettingsScreen");
+const LibraryScreen = lazyScreen(() => import("./screens/LibraryScreen"), "LibraryScreen");
+const SectionBrowseScreen = lazyScreen(() => import("./screens/SectionBrowseScreen"), "SectionBrowseScreen");
+
+/**
+ * Fetch the screens a viewer is likely to open next, once the launch has settled, so opening one
+ * doesn't wait for its code: a title's page and the player when someone is signed in, the sign-in
+ * screens when nobody is.
+ */
+function preloadScreens(signedIn: boolean) {
+  const screens = signedIn
+    ? [DetailsScreen, SeriesScreen, PlayerScreen, LibraryScreen, SearchScreen, SectionBrowseScreen, SettingsScreen]
+    : [LoginScreen, SignupScreen, FirstRunSetupScreen];
+  for (const screen of screens) void screen.preload().catch(() => undefined);
+}
+
+/** How long after launch, or after signing in, the preload waits before it starts. */
+const PRELOAD_DELAY_MS = 4000;
 
 installClientLogCapture();
 
@@ -392,6 +413,21 @@ export default function App() {
     }).catch(error => console.warn("[Hopper] profile appearance", error));
     return () => { alive = false; };
   }, [session?.profileId]);
+
+  // Load the next likely screens' code once the launch has settled (#208).
+  const signedIn = !!session;
+  useEffect(() => {
+    let idle: number | undefined;
+    const timer = window.setTimeout(() => {
+      const run = () => preloadScreens(signedIn);
+      if (typeof window.requestIdleCallback === "function") idle = window.requestIdleCallback(run, { timeout: 3000 });
+      else run();
+    }, PRELOAD_DELAY_MS);
+    return () => {
+      window.clearTimeout(timer);
+      if (idle !== undefined) window.cancelIdleCallback?.(idle);
+    };
+  }, [signedIn]);
 
   // The accent (#201): the profile's own choice on this TV, else the server's colour, shown at
   // once from the last one seen and then from the server's current one.

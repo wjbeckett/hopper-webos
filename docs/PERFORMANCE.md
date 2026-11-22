@@ -159,6 +159,31 @@ The same MP4 film (H.264, AAC, 1080p) over HLS (a server remux) and played direc
 
 Direct play starts no faster, but it seeks in under a second, and the server runs no packaging process for it.
 
+## Cold launch (#208)
+
+Before #208 every screen was in one 815 kB script (248 kB gzipped), which the TV parses and compiles before the first screen. Screens that no launch opens now load the first time they open (`src/core/lazyScreen.tsx`): the player, a title's page, the library grid, Settings, Search, Requests, Calendar and the rest. The screens a launch can show stay in the main script: Home, the profile picker, phone setup, device sign-in and server setup. Four seconds after launch, once the page is idle, the likely next screens are fetched in the background, so opening one doesn't wait for its code.
+
+| Main script | Size | Gzipped |
+| --- | --- | --- |
+| Before | 815 kB | 248 kB |
+| After | 523 kB | 164 kB |
+
+Desktop Chrome, headless, CPU slowed 6 times, the built app from disk with no server (it opens on server setup), median of five cold loads in the first 3.5 s:
+
+| | Script time | Main-thread tasks | First control on screen |
+| --- | --- | --- | --- |
+| Before | 110 ms | 202 ms | 215 ms |
+| After | 79 ms | 168 ms | 178 ms |
+
+On a webOS 22 TV (50UQ9000PSD), seven cold launches each with a saved session, medians in ms since navigation:
+
+| | DOMContentLoaded | App code started | Splash lifted |
+| --- | --- | --- | --- |
+| Before | 815 | 871 | 4264 |
+| After | 679 | 777 | 4175 |
+
+The app starts about 100 ms sooner. What a viewer sees is mostly the splash: it plays for 2.6 s once the page has loaded, then waits up to 1.5 s for the artwork on screen. The first launch or two after installing a new build are slower (up to 2.5 s to DOMContentLoaded) while the TV caches the compiled code.
+
 ## Poster badges (#175)
 
 `home.mjs` on Home, two runs per build, 2026-11-18. Frames drawn per key press in the 700 ms after it (42 is every frame); "cold" is the first pass after launch, "warm" the second. Left and Right drew 38 to 40 frames in every build; only Down, which mounts a new row of cards, changed.
@@ -179,6 +204,7 @@ Direct play starts no faster, but it seeks in under a second, and the server run
 - Move things with `transform` and `opacity` on elements that already have their own layer. Do not animate scroll positions from script.
 - Do not create or destroy composited layers when focus moves: no transitions inside cards, no remounting images, no CSS masks on things that fade.
 - Keep focus-driven state out of components that render lists.
+- A screen no launch opens is loaded when it opens (`lazyScreen` in `src/App.tsx`). Keep the launch path's screens in the main script, or the first screen waits for a second file.
 - Never seek the video unless the viewer asked to. On a TV even a one-millisecond seek costs seconds.
 - One animation per property per element: two animations of `transform` on one element run on the main thread.
 - Nothing new may be drawn while a launch animation plays: the first draw of a screen ties up the TV's GPU thread.
