@@ -31,4 +31,28 @@ describe("screens loaded when they open (#208)", () => {
     await Screen.preload();
     expect(load).toHaveBeenCalledTimes(2);
   });
+
+  it("offers to try again when the load fails twice, and loads afresh when asked", async () => {
+    const load = vi.fn<() => Promise<{ Hello: typeof Hello }>>()
+      .mockRejectedValueOnce(new Error("read failed"))
+      .mockRejectedValueOnce(new Error("read failed again"))
+      .mockResolvedValue({ Hello });
+    const Screen = lazyScreen(load, "Hello");
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    await act(async () => { root.render(createElement(Screen, { name: "Ada" })); });
+    await act(async () => { await Promise.resolve(); });
+    const retry = host.querySelector("button");
+    expect(retry?.textContent).toBe("Try again");
+    expect(document.activeElement).toBe(retry);
+    await act(async () => { retry!.click(); });
+    await act(async () => { await Promise.resolve(); });
+    expect(host.textContent).toBe("Hello Ada");
+    expect(load).toHaveBeenCalledTimes(3);
+    quiet.mockRestore();
+    await act(async () => { root.unmount(); });
+    host.remove();
+  });
 });
