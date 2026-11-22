@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { selectPlaybackVersion, type FileVersion, type WatchDetail } from "./playback";
+import { editionAutoVersion, playbackEditions, preferredResolutionHeight, selectPlaybackVersion, setPreferredResolution, type FileVersion, type WatchDetail } from "./playback";
 
 const file = (file_id: number, resolution: string, extra: Partial<FileVersion> = {}): FileVersion => ({ file_id, resolution, ...extra });
 const detail = (versions: FileVersion[], user_data?: WatchDetail["user_data"]) => ({ versions, user_data });
@@ -72,5 +72,56 @@ describe("the file a title opens on (#197)", () => {
 
   it("returns nothing for a title with no files", () => {
     expect(pick(detail([]))).toBeUndefined();
+  });
+});
+
+describe("Version Auto capped at the profile's Resolution (#199)", () => {
+  beforeEach(() => { vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (Web0S; Linux/SmartTV)"); });
+  afterEach(() => { setPreferredResolution(null); vi.restoreAllMocks(); });
+
+  const uhd = file(1, "2160p", { hdr: true });
+  const fullHd = file(2, "1080p");
+  const hd = file(3, "720p");
+
+  it("reads the setting's values as heights, with Auto and Original as no cap", () => {
+    expect(preferredResolutionHeight("1080p")).toBe(1080);
+    expect(preferredResolutionHeight("4k")).toBe(2160);
+    expect(preferredResolutionHeight("2160p")).toBe(2160);
+    expect(preferredResolutionHeight("auto")).toBeNull();
+    expect(preferredResolutionHeight("original")).toBeNull();
+    expect(preferredResolutionHeight(null)).toBeNull();
+  });
+
+  it("opens on the best file at or below the setting", () => {
+    expect(pick(detail([uhd, fullHd, hd]))).toBe(1);
+    setPreferredResolution("1080p");
+    expect(pick(detail([uhd, fullHd, hd]))).toBe(2);
+    setPreferredResolution("720p");
+    expect(pick(detail([uhd, fullHd, hd]))).toBe(3);
+    setPreferredResolution("auto");
+    expect(pick(detail([uhd, fullHd, hd]))).toBe(1);
+  });
+
+  it("takes the closest file above the setting when none fits", () => {
+    setPreferredResolution("720p");
+    expect(pick(detail([uhd, fullHd]))).toBe(2);
+  });
+
+  it("never goes above the device's limit, whatever the setting", () => {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (X11; Linux x86_64)");
+    vi.spyOn(screen, "height", "get").mockReturnValue(1080);
+    setPreferredResolution("2160p");
+    expect(pick(detail([uhd, fullHd]))).toBe(2);
+  });
+
+  it("compares editions within the cap, and a pinned file still wins", () => {
+    setPreferredResolution("1080p");
+    const imax = file(4, "2160p", { edition_key: "imax", edition_raw: "IMAX" });
+    const imaxHd = file(5, "1080p", { edition_key: "imax", edition_raw: "IMAX" });
+    const extended = file(6, "2160p", { edition_key: "extended", edition_raw: "Extended Cut" });
+    // Extended has nothing within 1080p; IMAX does.
+    expect(pick(detail([extended, imax, imaxHd]))).toBe(5);
+    expect(editionAutoVersion(playbackEditions([imax, imaxHd])[0])?.file_id).toBe(5);
+    expect(pick(detail([uhd, fullHd]), { fileId: 1 })).toBe(1);
   });
 });

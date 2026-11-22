@@ -26,7 +26,7 @@ import { platformBack } from "./platform/back";
 import { installKeyboardTracking, virtualKeyboardVisible } from "./platform/keyboard";
 import type { SectionBrowseArgs } from "./screens/SectionBrowseScreen";
 import type { AudiobookGroup } from "./api/silo";
-import { invalidateWatchDetail, type PlaybackChoices } from "./api/playback";
+import { invalidateWatchDetail, setPreferredResolution, type PlaybackChoices } from "./api/playback";
 import { applyResumeState, applyServerUserData, applyWatchedState, publishPlaybackSettled, publishWatchState } from "./core/watchState";
 import { firstEpisodeOfSeason, nextEpisodeAfter } from "./core/episodeNavigation";
 import { publishRailsChanged } from "./core/watchState";
@@ -454,11 +454,15 @@ export default function App() {
 
   useEffect(() => {
     setThemeMusicSession(session ?? null);
+    setPreferredResolution(null);
     if (!session?.profileId) return;
     let alive = true;
     void hydrateTitleArt(session);
-    getEffectiveSettings(session, ["ui.theme_music_enabled", "ui.theme_music_loop"]).then(effective => {
-      if (alive) setThemeMusicPreferences(effective.get("ui.theme_music_enabled")?.value === true, effective.get("ui.theme_music_loop")?.value === true);
+    getEffectiveSettings(session, ["ui.theme_music_enabled", "ui.theme_music_loop", "playback.preferred_quality"]).then(effective => {
+      if (!alive) return;
+      setThemeMusicPreferences(effective.get("ui.theme_music_enabled")?.value === true, effective.get("ui.theme_music_loop")?.value === true);
+      // Version Auto's cap (#199): the profile's Resolution setting.
+      setPreferredResolution(effective.get("playback.preferred_quality")?.value);
     }).catch(() => undefined);
     return () => { alive = false; };
   }, [session?.profileId, session?.serverUrl]);

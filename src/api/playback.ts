@@ -6,6 +6,7 @@ import { clientIdentity } from "../platform/device";
 import type { Session, SiloItem } from "../types";
 import { getDeviceId } from "../platform/device";
 import { requestV2 } from "./silo";
+import { getEffectiveSettings } from "./settings";
 import { freshProbeKbps, notePlaybackStarted } from "../core/bandwidthProbe";
 import { BUFFERING_QUALITY_V1_FEATURE, LEARNED_LIMIT_IGNORE, withKeptStepDownEstimate, type BufferingQualityMode, type BufferingQualityReplan, type KeptStepDownEstimate } from "../core/bufferingQuality";
 
@@ -181,6 +182,36 @@ function deviceHeightLimit() {
   return isWebOs ? 2160 : physicalHeight >= 2160 ? 2160 : physicalHeight >= 1080 ? 1080 : 720;
 }
 
+/** The profile's Resolution setting as a height, or null for Auto and Original (#199). */
+let preferredHeight: number | null = null;
+
+/** `playback.preferred_quality` as a height: "1080p" is 1080, "4k" is 2160; Auto, Original and anything unknown are no cap. */
+export function preferredResolutionHeight(value: unknown): number | null {
+  if (typeof value !== "string") return null;
+  const height = resolutionHeight(value);
+  return height > 0 ? height : null;
+}
+
+/** The profile's effective `playback.preferred_quality`, which caps Version Auto (#199). */
+export function setPreferredResolution(value: unknown) { preferredHeight = preferredResolutionHeight(value); }
+
+/** Read the profile's Resolution setting again, e.g. after Settings changes it. */
+export async function loadPreferredResolution(session: Session) {
+  try {
+    const settings = await getEffectiveSettings(session, ["playback.preferred_quality"]);
+    setPreferredResolution(settings.get("playback.preferred_quality")?.value);
+  } catch { /* keep the last value */ }
+}
+
+/**
+ * Version Auto's cap (#199, Android TV's qualityCap): the profile's Resolution setting, kept within
+ * what this device can show. Android caps at the setting alone; Hopper also keeps the device limit.
+ */
+function autoCap() {
+  const device = deviceHeightLimit();
+  return preferredHeight ? Math.min(device, preferredHeight) : device;
+}
+
 export type PlaybackEdition = { id: string; label: string; versions: FileVersion[]; fileIds: number[] };
 
 export function editionLabel(raw?: string, key?: string) {
@@ -244,15 +275,15 @@ function autoFile(candidates: FileVersion[], cap: number): FileVersion | undefin
   return known[known.length - 1];
 }
 
-/** The file Auto picks in `edition` on this device. */
+/** The file Auto picks in `edition` on this device, for this profile. */
 export function editionAutoVersion(edition: PlaybackEdition) {
-  return autoFile(edition.versions, deviceHeightLimit());
+  return autoFile(edition.versions, autoCap());
 }
 
 /**
  * The edition a title opens on with no history (#197, Android TV's openingEdition): chosen by name
  * first, so a standard cut is never passed over for a longer one in better quality. Among the cuts
- * in the most preferred group, each one's Auto file is compared by fit (within the device's limit,
+ * in the most preferred group, each one's Auto file is compared by fit (within Auto's cap,
  * above it, unknown), then resolution (higher within the limit, lower above it), then HDR, then
  * the server's order.
  */
@@ -284,7 +315,7 @@ export function selectPlaybackVersion(detail: Pick<WatchDetail, "versions" | "us
   if (!versions.length) return undefined;
   const pinned = choices.fileId == null ? undefined : versions.find(version => version.file_id === choices.fileId);
   if (pinned) return pinned;
-  const cap = deviceHeightLimit();
+  const cap = autoCap();
   const editions = playbackEditions(versions);
   const lastFileId = detail.user_data?.last_file_id;
   const lastKey = detail.user_data?.last_edition_key?.trim();
