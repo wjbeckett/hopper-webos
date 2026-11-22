@@ -19,6 +19,15 @@ describe("the Home backdrop's corner colours (#207)", () => {
     expect([hue(corners.topLeft), hue(corners.topRight), hue(corners.bottomLeft), hue(corners.bottomRight)]).toEqual(["red", "blue", "blue", "red"]);
   });
 
+  it("gives the bottom right a hue that differs from both its neighbours when the art has one", () => {
+    const rgba = quarters(8, [200, 30, 30], [30, 30, 200], [30, 200, 30], [200, 30, 30]);
+    // The bottom-right quarter: blue on its left half, red on its right, so the two tie on area.
+    for (let y = 4; y < 8; y += 1) for (let x = 4; x < 6; x += 1) rgba.set([30, 30, 200, 255], (y * 8 + x) * 4);
+    const corners = sampleCorners(rgba, 8, 8)!;
+    expect(hue(corners.topRight)).toBe("blue");
+    expect(hue(corners.bottomRight)).toBe("red");
+  });
+
   it("caps brightness, darkest behind the title, and lifts real colour", () => {
     const corners = sampleCorners(quarters(8, [250, 120, 120], [250, 120, 120], [250, 120, 120], [250, 120, 120]), 8, 8)!;
     expect(Math.max(corners.topLeft.r, corners.topLeft.g, corners.topLeft.b)).toBeCloseTo(0.2, 5);

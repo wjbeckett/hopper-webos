@@ -51,9 +51,9 @@ function hueDistance(a: number, b: number) {
  * A quarter's most telling colour: pixels go into twelve hue buckets and one neutral bucket, and
  * each bucket's mean is scored on how much of the quarter it covers and how saturated it is. Grey
  * art stays grey, but a modest patch of real colour beats a larger grey area. Greens are marked
- * down (darkened, they go olive), and so is a hue too close to `avoid`.
+ * down (darkened, they go olive), and so is a hue too close to any hue in `avoid`.
  */
-function cornerPick(pixels: Rgb[], avoid: number | null): { colour: Rgb; hue: number | null } {
+function cornerPick(pixels: Rgb[], avoid: Array<number | null>): { colour: Rgb; hue: number | null } {
   const buckets = new Map<number, Rgb[]>();
   for (const pixel of pixels) {
     const { hue, saturation, value } = hsv(pixel);
@@ -73,7 +73,7 @@ function cornerPick(pixels: Rgb[], avoid: number | null): { colour: Rgb; hue: nu
     if (key === NEUTRAL) score -= 40;
     else {
       if (hue >= 0.22 && hue <= 0.4) score -= 60;
-      if (avoid != null && hueDistance(hue, avoid) < 15) score -= 30;
+      for (const neighbour of avoid) if (neighbour != null && hueDistance(hue, neighbour) < 15) score -= 30;
     }
     if (score > best.score) best = { score, colour, hue: key === NEUTRAL ? null : hue };
   });
@@ -93,7 +93,7 @@ function cornerTint(colour: Rgb, valueCeiling: number): Rgb {
 
 /**
  * One colour per corner of a `width` x `height` RGBA bitmap, row 0 at the top. Top right and bottom
- * left avoid the top-left hue, and bottom right avoids the bottom-left one, so neighbours differ
+ * left avoid the top-left hue, and bottom right avoids both the top-right and bottom-left hues, so neighbours differ
  * when the art allows it.
  */
 export function sampleCorners(rgba: ArrayLike<number>, width: number, height: number): Corners | null {
@@ -108,10 +108,10 @@ export function sampleCorners(rgba: ArrayLike<number>, width: number, height: nu
     }
     return pixels;
   };
-  const topLeft = cornerPick(quarter(0, midX, 0, midY), null);
-  const topRight = cornerPick(quarter(midX, width, 0, midY), topLeft.hue);
-  const bottomLeft = cornerPick(quarter(0, midX, midY, height), topLeft.hue);
-  const bottomRight = cornerPick(quarter(midX, width, midY, height), bottomLeft.hue);
+  const topLeft = cornerPick(quarter(0, midX, 0, midY), []);
+  const topRight = cornerPick(quarter(midX, width, 0, midY), [topLeft.hue]);
+  const bottomLeft = cornerPick(quarter(0, midX, midY, height), [topLeft.hue]);
+  const bottomRight = cornerPick(quarter(midX, width, midY, height), [topRight.hue, bottomLeft.hue]);
   return {
     topLeft: cornerTint(topLeft.colour, TOP_LEFT_VALUE_CEILING),
     topRight: cornerTint(topRight.colour, CORNER_VALUE_CEILING),
