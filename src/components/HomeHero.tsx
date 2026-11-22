@@ -355,9 +355,10 @@ const TvBackdrop = forwardRef<TvBackdropHandle>(function TvBackdrop(_props, ref)
 
   /** Crossfade to these corners' wash (#207). */
   function applyWash(corners: Corners | null) {
+    // A wash still waiting for the splash is stale now, whatever this one is.
+    window.clearTimeout(washWait.current);
     // Corners are cached per ThumbHash, so the same title gives the same object.
     if (corners === washShown.current) return;
-    window.clearTimeout(washWait.current);
     // Not while the startup splash is up: the first canvas cost the launch about half a second on
     // a TV (measured on webOS 22). The wash for whatever is focused follows once the splash is gone.
     if (document.getElementById("boot-splash")) {
