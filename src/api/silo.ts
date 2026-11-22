@@ -1671,6 +1671,27 @@ export async function getItemBoxSet(session: Session, itemId: string): Promise<S
   }
 }
 
+/**
+ * The collections a title's page lists under "Also in" (#206, `GET /catalog/items/{id}/collections`):
+ * server collections, then personal ones. When there is exactly one, `preview` holds up to 6 of its
+ * other titles. Smart collections and the synced copy of the page's box set are left out by the
+ * server. Empty on a server without the endpoint.
+ */
+export async function getItemCollections(session: Session, itemId: string): Promise<{ collections: SiloItem[]; preview: SiloItem[] }> {
+  try {
+    const response = await requestV2<{ items?: NativeSectionCollectionCard[]; preview_items?: NativeItem[] }>(session, `/catalog/items/${encodeURIComponent(itemId)}/collections`);
+    return parseItemCollections(response);
+  } catch {
+    return { collections: [], preview: [] };
+  }
+}
+
+export function parseItemCollections(response: { items?: NativeSectionCollectionCard[]; preview_items?: NativeItem[] }) {
+  const collections = (response.items ?? []).map(collectionCardItem).filter((item): item is SiloItem => item != null);
+  const preview = collections.length === 1 ? (response.preview_items ?? []).map(toItem).filter(item => item.Id) : [];
+  return { collections, preview };
+}
+
 /** One box set with its movies the viewer can see, in collection order (#171). */
 export async function getBoxSet(session: Session, boxSetId: string, libraryId: string): Promise<SiloBoxSet> {
   const response = await requestV2<NativeBoxSet>(session, `/catalog/box-sets/${encodeURIComponent(boxSetId)}?library_id=${encodeURIComponent(libraryId)}`);

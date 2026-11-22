@@ -11,6 +11,7 @@ import { claimAutoTranslation, hasMachineTranslatedOverview, releaseAutoTranslat
 import { ResumeProgress } from "../components/ResumeProgress";
 import { RatingStars } from "../components/RatingStars";
 import { subscribePlaybackSettled, subscribeWatchState } from "../core/watchState";
+import { AlsoInSection } from "../components/AlsoInSection";
 import type { PlaybackChoices } from "../api/playback";
 import type { DetailPerson, DetailTrailer } from "../api/silo";
 import type { Session, SiloBoxSet, SiloItem } from "../types";
@@ -347,6 +348,7 @@ export function DetailsScreen({ session, item, onPlay, onOpenSimilar, onOpen, on
             slide
           />
         ) : null}
+        {detail.Type === "Movie" || detail.Type === "Series" ? <AlsoInSection session={session} itemId={detail.Id} onOpen={onOpen} /> : null}
         {similar.length ? <MediaRail rail={{ id: "similar", title: relatedTitle, items: similar }} session={session} onOpen={onOpenSimilar} slide /> : null}
         <FactsSection facts={factsFor(extras)} />
       </div>
