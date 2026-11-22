@@ -146,7 +146,7 @@ Two causes:
 
 The app now loads and lays out under the splash but stays at opacity 0, which is not rastered, until the animation stops. It is then drawn behind the still mark. The splash also drops to opacity 0.99 at that point, so the first blend over the app happens before the fade. The cost: the splash lifts about 1 s later, around 5.1 to 5.7 s after launch instead of 4.3 s, because that GPU work now follows the animation instead of overlapping it. The fade can still catch one hitch of up to about 300 ms, from the app's first big commit and image uploads.
 
-To win some of that second back, the whole timeline was then sped up by a quarter: the last part stops moving at 1.65 s instead of 2.2 s, and the hold on the finished mark is 1.95 s instead of 2.6 s (`index.html`, `MOTION_MS` and `ANIMATION_MS` in `src/core/bootSplash.ts`). The shapes and keyframes are unchanged. This should bring the lift forward by about 0.55 s; it has not been measured on the TV yet.
+To win some of that second back, the whole timeline was then sped up by a quarter: the last part stops moving at 1.65 s instead of 2.2 s, and the hold on the finished mark is 1.95 s instead of 2.6 s (`index.html`, `MOTION_MS` and `ANIMATION_MS` in `src/core/bootSplash.ts`). The shapes and keyframes are unchanged. Measured on the TV (four launches): the animation stays smooth, 52 to 58 fps with a longest gap of 34 to 143 ms, but the splash still lifts 5.2 to 5.6 s after launch. The time saved in the animation goes to waiting for Home's first draw after the reveal, which takes as long as before, so a viewer sees Home no sooner. The fade had one gap of 187 ms in one of the four launches.
 
 ## Direct play (#58)
 
