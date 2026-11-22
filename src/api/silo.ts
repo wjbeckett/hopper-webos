@@ -1702,6 +1702,27 @@ export async function getItemBoxSet(session: Session, itemId: string): Promise<S
   }
 }
 
+/**
+ * The collections a title's page lists under "Also in" (#206, `GET /catalog/items/{id}/collections`):
+ * server collections, then personal ones. When there is exactly one, `preview` holds up to 6 of its
+ * other titles. Smart collections and the synced copy of the page's box set are left out by the
+ * server. Empty on a server without the endpoint.
+ */
+export async function getItemCollections(session: Session, itemId: string): Promise<{ collections: SiloItem[]; preview: SiloItem[] }> {
+  try {
+    const response = await requestV2<{ items?: NativeSectionCollectionCard[]; preview_items?: NativeItem[] }>(session, `/catalog/items/${encodeURIComponent(itemId)}/collections`);
+    return parseItemCollections(response);
+  } catch {
+    return { collections: [], preview: [] };
+  }
+}
+
+export function parseItemCollections(response: { items?: NativeSectionCollectionCard[]; preview_items?: NativeItem[] }) {
+  const collections = (response.items ?? []).map(collectionCardItem).filter((item): item is SiloItem => item != null);
+  const preview = collections.length === 1 ? (response.preview_items ?? []).map(toItem).filter(item => item.Id) : [];
+  return { collections, preview };
+}
+
 /** One box set with its movies the viewer can see, in collection order (#171). */
 export async function getBoxSet(session: Session, boxSetId: string, libraryId: string): Promise<SiloBoxSet> {
   const response = await requestV2<NativeBoxSet>(session, `/catalog/box-sets/${encodeURIComponent(boxSetId)}?library_id=${encodeURIComponent(libraryId)}`);
@@ -1851,21 +1872,22 @@ export async function getPersonFilmographyPage(session: Session, personId: strin
   };
 }
 
-export type SiloAppearance = { theme: string; variables: Record<string, string>; textScale: string; textWeight: string; highContrast: boolean; posterSize: string };
+/** The server's accent colour from its public branding (#201): the admin's "#rrggbb", or null when unset. */
+export async function getServerAccent(serverUrl: string): Promise<string | null> {
+  const response = await fetch(apiUrl(serverUrl, "/theme/branding", "v2"), { headers: { Accept: "application/json" } });
+  if (!response.ok) throw new Error(`Branding request failed: ${response.status}`);
+  const body = await response.json() as { accent_color?: unknown };
+  return typeof body.accent_color === "string" && body.accent_color.trim() ? body.accent_color : null;
+}
+
+export type SiloAppearance = { textScale: string; textWeight: string; highContrast: boolean; posterSize: string };
 
 export async function getProfileAppearance(session: Session): Promise<SiloAppearance> {
   const params = new URLSearchParams();
-  ["ui.theme", "ui.custom_theme_vars", "ui.text_scale", "ui.text_weight", "ui.high_contrast", "ui.card_presentation"].forEach(key => params.append("keys", key));
+  ["ui.text_scale", "ui.text_weight", "ui.high_contrast", "ui.card_presentation"].forEach(key => params.append("keys", key));
   const data = await requestV2<{ items?: Array<{ key: string; value?: unknown }> }>(session, `/settings/values/effective?${params}`, { headers: { "X-Silo-Device-Id": getDeviceId() } });
   const values = new Map((data.items ?? []).map(entry => [entry.key, entry.value == null ? "" : typeof entry.value === "string" ? entry.value : typeof entry.value === "object" ? JSON.stringify(entry.value) : String(entry.value)]));
-  let variables: Record<string, string> = {};
-  try {
-    const parsed = JSON.parse(values.get("ui.custom_theme_vars") || "{}");
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) variables = parsed as Record<string, string>;
-  } catch { /* Invalid custom values must not break the TV shell. */ }
   return {
-    theme: values.get("ui.theme") || "midnight-cinema",
-    variables,
     textScale: values.get("ui.text_scale") || "default",
     textWeight: values.get("ui.text_weight") || "default",
     highContrast: values.get("ui.high_contrast") === "true",

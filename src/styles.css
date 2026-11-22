@@ -1497,7 +1497,7 @@ textarea:hover:not(:focus) {
 /* Android states: 8px at rest, 10px focused, 14px during timeline scrubbing. */
 .player-scrubber:not([data-active="true"]) .scrub-segment { border-radius: 8px; }
 .scrub-buffered { background: rgba(255,255,255,.20); }
-.scrub-fill { background: #EDEDED; }
+.scrub-fill { background: var(--server-accent, #EDEDED); }
 .scrub-puck {
   position: absolute;
   top: 50%;
@@ -2949,7 +2949,11 @@ body {
 
 .app-shell {
   min-height: 100vh;
-  background: var(--background);
+  background-color: var(--background);
+  /* #202: a soft glow in the server's accent (src/core/accent.ts), or none. Static and painted
+     with the shell itself, so it adds no compositor layer. */
+  background-image: var(--server-accent-glow, none);
+  background-repeat: no-repeat;
 }
 
 .tv-nav {
@@ -3083,7 +3087,8 @@ body {
 .content-screen:not(.home-screen) {
   min-height: calc(100vh - 96px);
   padding: 34px clamp(44px, 4.2vw, 82px) 84px;
-  background: var(--background);
+  /* The shell paints the background, with the accent glow (#202). */
+  background: transparent;
 }
 
 .content-screen.profile-selection-screen {
@@ -3352,7 +3357,7 @@ body {
 }
 
 .progress-track span {
-  background: var(--primary);
+  background: var(--server-accent, var(--primary));
 }
 
 .library-screen {
@@ -3634,6 +3639,10 @@ body {
 }
 
 .browse-panel-row.selected .browse-panel-check {
+  color: var(--server-accent, currentColor);
+}
+
+.browse-panel-row.selected:focus .browse-panel-check {
   color: currentColor;
 }
 
@@ -4170,7 +4179,7 @@ body {
 .details-remaining svg { width: 1.15em; height: 1.15em; transform: rotate(-90deg); }
 .details-remaining circle { fill: none; stroke-width: 2.6; }
 .details-remaining-track { stroke: rgba(255,255,255,.22); }
-.details-remaining-fill { stroke: var(--accent); stroke-linecap: round; }
+.details-remaining-fill { stroke: var(--server-accent, var(--accent)); stroke-linecap: round; }
 
 .details-rating-chip {
   padding: 1px 7px;
@@ -4708,7 +4717,8 @@ body {
 .settings-account { margin-bottom: 12px; background: rgba(255,255,255,.07); border-color: rgba(255,255,255,.09); }
 .settings-glyph { flex: none; width: 34px; height: 34px; }
 .settings-chevron { flex: none; width: 28px; height: 28px; opacity: .55; }
-.settings-check { flex: none; width: 32px; height: 32px; }
+.settings-check { flex: none; width: 32px; height: 32px; color: var(--server-accent, currentColor); }
+.option-row:focus .settings-check { color: currentColor; }
 .settings-category-text,
 .settings-account-text { display: grid; flex: 1; min-width: 0; gap: 0; }
 .settings-category-text span,
@@ -4768,7 +4778,9 @@ body {
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 .settings-toggle strong { opacity: .55; }
-.settings-toggle.is-on strong { font-weight: calc(600 + var(--font-weight-boost)); opacity: .9; }
+.settings-toggle.is-on strong { font-weight: calc(600 + var(--font-weight-boost)); opacity: .9; color: var(--server-accent, inherit); }
+.settings-toggle.is-on:focus strong { color: inherit; }
+html[data-accent="true"] .settings-toggle.is-on:not(:focus) strong { opacity: 1; }
 .settings-pane .option-row:focus,
 .settings-picker .option-row:focus { outline: none; box-shadow: none; border-color: transparent; background: #EDEDED; color: #000; }
 .settings-pane .option-row:focus strong,
@@ -4787,6 +4799,11 @@ body {
 .settings-picker-list::-webkit-scrollbar { display: none; }
 .settings-picker .option-row.is-selected { background: rgba(255,255,255,.14); font-weight: calc(600 + var(--font-weight-boost)); }
 .settings-picker .option-row.is-selected:focus { background: #EDEDED; }
+/* Accent colour picker (#201): a swatch before each colour; an empty ring for none. */
+.settings-picker .option-row > .settings-swatch + span { flex: 1; min-width: 0; }
+.settings-swatch { flex: none; width: 32px; height: 32px; border-radius: 50%; border: 2px solid rgba(255,255,255,.35); }
+.settings-swatch.is-empty { background: transparent; }
+.settings-picker .option-row:focus .settings-swatch { border-color: rgba(0,0,0,.4); }
 .settings-picker-detail { display: block; font-size: 1.75rem; line-height: 34px; opacity: .72; font-weight: calc(400 + var(--font-weight-boost)); }
 .settings-confirm { width: 760px; max-width: 80vw; padding: 36px !important; display: grid; gap: 16px; }
 .settings-confirm h2 { margin: 0; font-size: 2.625rem; line-height: 50px; }
@@ -5131,7 +5148,7 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 .profile-form-switch:focus small { color: rgba(0,0,0,.6); }
 .profile-form-toggle { position: relative; flex: 0 0 48px; height: 28px; border-radius: 999px; background: rgba(255,255,255,.22); transition: background .16s ease; }
 .profile-form-toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: transform .16s ease; }
-.profile-form-toggle.on { background: var(--primary); }
+.profile-form-toggle.on { background: var(--server-accent, var(--primary)); }
 .profile-form-toggle.on::after { transform: translateX(20px); }
 .profile-form-panel { display: grid; gap: 10px; padding: 18px; border-radius: 16px; background: rgba(255,255,255,.04); }
 .profile-form-panel h3 { margin: 6px 0 0; color: rgba(255,255,255,.6); font-size: 1.25rem; font-weight: calc(600 + var(--font-weight-boost)); letter-spacing: .08em; text-transform: uppercase; }
