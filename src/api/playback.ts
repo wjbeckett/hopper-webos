@@ -12,14 +12,15 @@ import { BUFFERING_QUALITY_V1_FEATURE, LEARNED_LIMIT_IGNORE, withKeptStepDownEst
 export type AudioTrack = { index?: number; codec?: string; channels?: number; layout?: string; language?: string; title?: string; embedded_title?: string; default?: boolean };
 export type SubtitleTrack = { index?: number; codec?: string; language?: string; title?: string; embedded_title?: string; forced?: boolean; hearing_impaired?: boolean; default?: boolean; external?: boolean; source?: string; file_name?: string };
 export type Chapter = { index: number; title?: string; start_seconds: number; end_seconds?: number; source?: string; thumbnail_url?: string; thumbnail_thumbhash?: string };
-export type FileVersion = { file_id: number; resolution?: string; codec_video?: string; codec_audio?: string; container?: string; edition_raw?: string; edition_key?: string; bitrate?: number; duration?: number; duration_seconds?: number; audio_tracks?: AudioTrack[]; subtitle_tracks?: SubtitleTrack[]; chapters?: Chapter[]; effective_audio_track_index?: number };
-export type WatchDetail = { content_id: string; title: string; overview?: string; series_id?: string; series_title?: string; season_number?: number; episode_number?: number; versions: FileVersion[]; user_data?: { position_seconds?: number; last_file_id?: number } };
+export type FileVersion = { file_id: number; resolution?: string; codec_video?: string; codec_audio?: string; container?: string; edition_raw?: string; edition_key?: string; bitrate?: number; hdr?: boolean; file_size?: number; duration?: number; duration_seconds?: number; audio_tracks?: AudioTrack[]; subtitle_tracks?: SubtitleTrack[]; chapters?: Chapter[]; effective_audio_track_index?: number };
+export type WatchDetail = { content_id: string; title: string; overview?: string; series_id?: string; series_title?: string; season_number?: number; episode_number?: number; versions: FileVersion[]; user_data?: { position_seconds?: number; last_file_id?: number; last_edition_key?: string } };
 /**
  * Why a plan failed, for a `failure_recovery` replan (FailureV3). Classifications follow Android
  * TV's: decoder_failure, http_failure, source_unavailable, transport_stall, player_failure.
  */
 export type PlaybackFailure = { classification: string; message?: string; decoder_name?: string };
-export type PlaybackChoices = { fileId?: number; audioIndex?: number; subtitleIndex?: number; subtitleOff?: boolean };
+/** `fileId` pins a file; without one, `editionId` (a viewer's edition pick) scopes Auto to that edition. */
+export type PlaybackChoices = { fileId?: number; editionId?: string; audioIndex?: number; subtitleIndex?: number; subtitleOff?: boolean };
 export type Quality = { label: string; height?: number; bitrate_kbps?: number; preserves_source: boolean };
 export type SubtitleInventory = { track_id: string; combined_index: number; source: string; codec?: string; language?: string; label?: string; forced: boolean; default: boolean; hearing_impaired: boolean; delivery: string; url?: string; sync_key?: string; unplayable?: boolean };
 export type TrackIdentity = { id: string; index?: number };
@@ -168,28 +169,130 @@ function snapshot() {
 function resolutionHeight(resolution?: string): number {
   const value = resolution?.trim().toLowerCase() ?? "";
   if (value === "4k" || value === "uhd" || value === "2160p") return 2160;
+  if (value === "8k" || value === "4320p") return 4320;
   const match = value.match(/(\d{3,4})p/);
   return match ? Number(match[1]) : 0;
 }
 
-export function bestVersionForDevice(versions: FileVersion[], preferredFileId?: number): FileVersion | undefined {
-  if (preferredFileId != null) {
-    const last = versions.find(version => version.file_id === preferredFileId);
-    if (last) return last;
-  }
-  // webOS reports a 1920x1080 CSS viewport even on many UHD televisions. A
-  // real LG TV can negotiate a 2160p source; desktop development is bounded
-  // by its physical screen to avoid needlessly selecting a larger edition.
+/** The tallest picture this device should be given: a webOS TV reports a 1920x1080 viewport even when it is UHD. */
+function deviceHeightLimit() {
   const isWebOs = /web0s|webos|netcast/i.test(navigator.userAgent);
   const physicalHeight = Math.round(screen.height * (window.devicePixelRatio || 1));
-  const deviceLimit = isWebOs ? 2160 : physicalHeight >= 2160 ? 2160 : physicalHeight >= 1080 ? 1080 : 720;
-  return [...versions].sort((left, right) => {
-    const leftHeight = resolutionHeight(left.resolution);
-    const rightHeight = resolutionHeight(right.resolution);
-    const leftScore = leftHeight <= deviceLimit ? leftHeight : -leftHeight;
-    const rightScore = rightHeight <= deviceLimit ? rightHeight : -rightHeight;
-    return rightScore - leftScore || (right.bitrate ?? 0) - (left.bitrate ?? 0);
-  })[0];
+  return isWebOs ? 2160 : physicalHeight >= 2160 ? 2160 : physicalHeight >= 1080 ? 1080 : 720;
+}
+
+export type PlaybackEdition = { id: string; label: string; versions: FileVersion[]; fileIds: number[] };
+
+export function editionLabel(raw?: string, key?: string) {
+  const clean = raw?.trim();
+  if (clean) return clean;
+  const fromKey = key?.trim();
+  if (fromKey) {
+    return fromKey.split(/[_-]+/).filter(Boolean)
+      .map(part => (part.toLowerCase() === "imax" ? "IMAX" : part.charAt(0).toUpperCase() + part.slice(1)))
+      .join(" ");
+  }
+  return undefined;
+}
+
+/** The files grouped by edition, in the server's order. An unnamed edition has the id "". */
+export function playbackEditions(versions: FileVersion[]): PlaybackEdition[] {
+  const groups = new Map<string, FileVersion[]>();
+  for (const version of versions) {
+    const label = editionLabel(version.edition_raw, version.edition_key);
+    const key = version.edition_key?.trim() || label || "";
+    const list = groups.get(key) ?? [];
+    list.push(version);
+    groups.set(key, list);
+  }
+  return [...groups.entries()].map(([id, files]) => ({
+    id,
+    label: editionLabel(files[0].edition_raw, files[0].edition_key) ?? "Standard",
+    versions: files,
+    fileIds: files.map(file => file.file_id)
+  }));
+}
+
+export function hasEditionChoices(editions: PlaybackEdition[]) {
+  return editions.length > 1 && new Set(editions.map(edition => edition.label.toLowerCase())).size > 1;
+}
+
+/** 0 for the unnamed or standard edition, 1 for a theatrical one, 2 for any other cut. */
+function editionPreference(edition: PlaybackEdition) {
+  const raw = edition.versions[0]?.edition_raw;
+  const names = [edition.id, raw].map(name => name?.trim().toLowerCase() ?? "").filter(Boolean);
+  if (!names.length) return 0;
+  if (names.some(name => name === "standard" || name === "default" || name.startsWith("standard ") || name.endsWith(" standard"))) return 0;
+  if (names.some(name => name.includes("theatrical"))) return 1;
+  return 2;
+}
+
+/**
+ * Version Auto within one edition: the best file at or below `cap`, else the closest above it. A
+ * file of unknown resolution is picked only when no file's resolution is known. Files are ranked
+ * by resolution, then HDR, then size (the server's version order).
+ */
+function autoFile(candidates: FileVersion[], cap: number): FileVersion | undefined {
+  const ordered = [...candidates].sort((left, right) =>
+    resolutionHeight(right.resolution) - resolutionHeight(left.resolution)
+    || Number(right.hdr === true) - Number(left.hdr === true)
+    || (right.file_size ?? 0) - (left.file_size ?? 0));
+  const known = ordered.filter(version => resolutionHeight(version.resolution) > 0);
+  if (!known.length) return ordered[0];
+  const fits = known.find(version => resolutionHeight(version.resolution) <= cap);
+  if (fits) return fits;
+  return known[known.length - 1];
+}
+
+/** The file Auto picks in `edition` on this device. */
+export function editionAutoVersion(edition: PlaybackEdition) {
+  return autoFile(edition.versions, deviceHeightLimit());
+}
+
+/**
+ * The edition a title opens on with no history (#197, Android TV's openingEdition): chosen by name
+ * first, so a standard cut is never passed over for a longer one in better quality. Among the cuts
+ * in the most preferred group, each one's Auto file is compared by fit (within the device's limit,
+ * above it, unknown), then resolution (higher within the limit, lower above it), then HDR, then
+ * the server's order.
+ */
+function openingEdition(editions: PlaybackEdition[], cap: number): PlaybackEdition {
+  const best = Math.min(...editions.map(editionPreference));
+  const candidates = editions.filter(edition => editionPreference(edition) === best).map((edition, index) => {
+    const auto = autoFile(edition.versions, cap);
+    const height = resolutionHeight(auto?.resolution);
+    return { edition, index, height, hdr: auto?.hdr === true, fit: height === 0 ? 2 : height <= cap ? 0 : 1 };
+  });
+  candidates.sort((left, right) =>
+    left.fit - right.fit
+    || (left.fit === 1 ? left.height - right.height : right.height - left.height)
+    || Number(right.hdr) - Number(left.hdr)
+    || left.index - right.index);
+  return candidates[0].edition;
+}
+
+/**
+ * The file a details page shows and Play starts (#197, Android TV's selectDetailPlaybackVersion;
+ * the web, Apple and Roku clients follow the same rule):
+ * - a file the viewer pinned (`choices.fileId`);
+ * - else Auto within the edition: the viewer's edition pick, else the one last played
+ *   (`last_edition_key`, where "" is the unnamed edition, then the edition of `last_file_id`),
+ *   else the opening edition. History picks only the edition; Auto picks the file within it.
+ */
+export function selectPlaybackVersion(detail: Pick<WatchDetail, "versions" | "user_data">, choices: PlaybackChoices = {}): FileVersion | undefined {
+  const versions = detail.versions ?? [];
+  if (!versions.length) return undefined;
+  const pinned = choices.fileId == null ? undefined : versions.find(version => version.file_id === choices.fileId);
+  if (pinned) return pinned;
+  const cap = deviceHeightLimit();
+  const editions = playbackEditions(versions);
+  const lastFileId = detail.user_data?.last_file_id;
+  const lastKey = detail.user_data?.last_edition_key?.trim();
+  const edition = (choices.editionId != null ? editions.find(entry => entry.id === choices.editionId) : undefined)
+    ?? (lastKey != null ? editions.find(entry => entry.id === lastKey) : undefined)
+    ?? (lastFileId != null ? editions.find(entry => entry.fileIds.includes(lastFileId)) : undefined)
+    ?? openingEdition(editions, cap);
+  return autoFile(edition.versions, cap);
 }
 
 function requirePlan(decision: Decision): PlaybackPlan {
