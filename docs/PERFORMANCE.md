@@ -155,11 +155,30 @@ Direct play starts no faster, but it seeks in under a second, and the server run
 
 `layers.mjs` found no layer for any badge: the cost is painting and rasterising them over the artwork as a row arrives. A rounded box that clips (`overflow: hidden`) cost the most and was dropped. The delay gained little and made badges pop in, so it was left out. Square badges with no border cost least, but they are not the look the server's presets describe. A profile can turn badges off (`ui.card_overlays_enabled`).
 
+## Cold launch (#208)
+
+Before #208 every screen was in one 815 kB script (248 kB gzipped), which the TV parses and compiles before the first screen. Screens that no launch opens now load the first time they open (`src/core/lazyScreen.tsx`): the player, a title's page, the library grid, Settings, Search, Requests, Calendar and the rest. The screens a launch can show stay in the main script: Home, the profile picker, phone setup, device sign-in and server setup. Four seconds after launch, once the page is idle, the likely next screens are fetched in the background, so opening one doesn't wait for its code.
+
+| Main script | Size | Gzipped |
+| --- | --- | --- |
+| Before | 815 kB | 248 kB |
+| After | 523 kB | 164 kB |
+
+Desktop Chrome, headless, CPU slowed 6 times, the built app from disk with no server (it opens on server setup), median of five cold loads in the first 3.5 s:
+
+| | Script time | Main-thread tasks | First control on screen |
+| --- | --- | --- | --- |
+| Before | 110 ms | 202 ms | 215 ms |
+| After | 79 ms | 168 ms | 178 ms |
+
+Not measured on a TV yet: launch to a usable Home with a saved session, five launches before and after.
+
 ## Rules that came out of this
 
 - Keep the number of mounted cards small. Do not render what is far off screen.
 - Move things with `transform` and `opacity` on elements that already have their own layer. Do not animate scroll positions from script.
 - Do not create or destroy composited layers when focus moves: no transitions inside cards, no remounting images, no CSS masks on things that fade.
 - Keep focus-driven state out of components that render lists.
+- A screen no launch opens is loaded when it opens (`lazyScreen` in `src/App.tsx`). Keep the launch path's screens in the main script, or the first screen waits for a second file.
 - Never seek the video unless the viewer asked to. On a TV even a one-millisecond seek costs seconds.
 - Measure on the TV before and after. Changes chosen by eye have gone both ways. Measure with the lightest tool that answers the question: tracing and the Network domain change the result.
