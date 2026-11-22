@@ -155,11 +155,27 @@ Direct play starts no faster, but it seeks in under a second, and the server run
 
 `layers.mjs` found no layer for any badge: the cost is painting and rasterising them over the artwork as a row arrives. A rounded box that clips (`overflow: hidden`) cost the most and was dropped. The delay gained little and made badges pop in, so it was left out. Square badges with no border cost least, but they are not the look the server's presets describe. A profile can turn badges off (`ui.card_overlays_enabled`).
 
+## Corner wash (#207)
+
+`scripts/tvbench/home.mjs` on a webOS 22 TV (50UQ9000PSD), warm pass, frames drawn per key press (42 is every frame) and long-task time per press:
+
+| Build | Right | Down |
+| --- | --- | --- |
+| Before the wash | 37 frames, 38 ms | 20 frames, 232 ms |
+| CSS gradients behind a CSS mask, 192x108 scaled up | 18 frames, 133 ms | 7 frames, 390 ms |
+| 192x108 canvas, scaled up | 32 frames, 49 ms | 16 frames, 260 ms |
+| 96x54 canvas, scaled up | 32 frames, 27 ms | 13 frames, 317 ms |
+
+The benchmark rests 700 ms on each card, longer than the backdrop's 450 ms settle, so every press changes the wash. As CSS, each change re-rastered the gradients at full screen size, with four times the raster tasks. A canvas is one small texture that the compositor scales. What is left is GPU time for one more full-screen layer.
+
+Cold launch, seven launches each, when the splash lifted (median): 4264 ms before, 4743 ms with the wash drawn while the splash was up, 4182 ms once the first wash waits for the splash to go. The first 2D canvas on a TV is slow to create.
+
 ## Rules that came out of this
 
 - Keep the number of mounted cards small. Do not render what is far off screen.
 - Move things with `transform` and `opacity` on elements that already have their own layer. Do not animate scroll positions from script.
 - Do not create or destroy composited layers when focus moves: no transitions inside cards, no remounting images, no CSS masks on things that fade.
+- A large, soft picture that changes (a gradient wash) goes on a small canvas scaled up, not CSS gradients: the TV re-rasters CSS gradients at full size on every change.
 - Keep focus-driven state out of components that render lists.
 - Never seek the video unless the viewer asked to. On a TV even a one-millisecond seek costs seconds.
 - Measure on the TV before and after. Changes chosen by eye have gone both ways. Measure with the lightest tool that answers the question: tracing and the Network domain change the result.
