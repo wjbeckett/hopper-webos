@@ -51,6 +51,7 @@ describe("the events socket (#193)", () => {
     again.onmessage?.({ data: JSON.stringify({ type: "subscribed" }) });
     vi.advanceTimersByTime(2_000);
     expect(onSignal).toHaveBeenCalledTimes(1);
+    expect(onSignal).toHaveBeenCalledWith("catch-up");
     stop();
   });
 
@@ -62,6 +63,7 @@ describe("the events socket (#193)", () => {
     FakeSocket.all[0].onmessage?.({ data: JSON.stringify({ channel: "user_state", data: { profile_id: "p" } }) });
     vi.advanceTimersByTime(2_000);
     expect(onSignal).toHaveBeenCalledTimes(1);
+    expect(onSignal).toHaveBeenCalledWith("change");
     stop();
   });
 
@@ -75,6 +77,23 @@ describe("the events socket (#193)", () => {
     FakeSocket.all[1].onopen?.();
     vi.advanceTimersByTime(2_000);
     expect(onSignal).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
+  it("reports a change, not a catch-up, when one arrives with the reconnect (#217)", async () => {
+    const onSignal = vi.fn();
+    const stop = connectEventsSocket(session, onSignal);
+    await flush();
+    FakeSocket.all[0].onopen?.();
+    FakeSocket.all[0].onclose?.();
+    vi.advanceTimersByTime(1_000);
+    await flush();
+    const again = FakeSocket.all[1];
+    again.onopen?.();
+    again.onmessage?.({ data: JSON.stringify({ channel: "catalog" }) });
+    vi.advanceTimersByTime(2_000);
+    expect(onSignal).toHaveBeenCalledTimes(1);
+    expect(onSignal).toHaveBeenCalledWith("change");
     stop();
   });
 });
