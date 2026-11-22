@@ -351,6 +351,33 @@ const TvBackdrop = forwardRef<TvBackdropHandle>(function TvBackdrop(_props, ref)
   const washes = [useRef<HTMLCanvasElement>(null), useRef<HTMLCanvasElement>(null)];
   const washFront = useRef<0 | 1>(0);
   const washShown = useRef<Corners | null>(null);
+  const washWait = useRef<number | undefined>(undefined);
+
+  /** Crossfade to these corners' wash (#207). */
+  function applyWash(corners: Corners | null) {
+    // Corners are cached per ThumbHash, so the same title gives the same object.
+    if (corners === washShown.current) return;
+    window.clearTimeout(washWait.current);
+    // Not while the startup splash is up: the first canvas cost the launch about half a second on
+    // a TV (measured on webOS 22). The wash for whatever is focused follows once the splash is gone.
+    if (document.getElementById("boot-splash")) {
+      washWait.current = window.setTimeout(() => applyWash(corners), 500);
+      return;
+    }
+    washShown.current = corners;
+    const front = washes[washFront.current].current;
+    const back = washes[1 - washFront.current].current;
+    if (!front || !back) return;
+    front.classList.remove("shown");
+    if (!corners) return;
+    const context = back.getContext("2d");
+    if (!context) return;
+    const image = context.createImageData(WASH_WIDTH, WASH_HEIGHT);
+    image.data.set(renderCornerWash(corners, WASH_WIDTH, WASH_HEIGHT, WASH_HOLE));
+    context.putImageData(image, 0, 0);
+    back.classList.add("shown");
+    washFront.current = (1 - washFront.current) as 0 | 1;
+  }
 
   useImperativeHandle(ref, () => ({
     show(url: string) {
@@ -390,23 +417,7 @@ const TvBackdrop = forwardRef<TvBackdropHandle>(function TvBackdrop(_props, ref)
       second.current?.classList.remove("shown");
     },
     showing: () => wanted.current,
-    wash(corners: Corners | null) {
-      // Corners are cached per ThumbHash, so the same title gives the same object.
-      if (corners === washShown.current) return;
-      washShown.current = corners;
-      const front = washes[washFront.current].current;
-      const back = washes[1 - washFront.current].current;
-      if (!front || !back) return;
-      front.classList.remove("shown");
-      if (!corners) return;
-      const context = back.getContext("2d");
-      if (!context) return;
-      const image = context.createImageData(WASH_WIDTH, WASH_HEIGHT);
-      image.data.set(renderCornerWash(corners, WASH_WIDTH, WASH_HEIGHT, WASH_HOLE));
-      context.putImageData(image, 0, 0);
-      back.classList.add("shown");
-      washFront.current = (1 - washFront.current) as 0 | 1;
-    }
+    wash: applyWash
   }), []);
 
   return (
