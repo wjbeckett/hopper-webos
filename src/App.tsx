@@ -165,7 +165,7 @@ export default function App() {
   const [libraryLanding, setLibraryLanding] = useState<LibraryLanding>("recommended");
   const [browseDetail, setBrowseDetail] = useState<BrowseDetail | null>(null);
   /** Where a collection opened from a row of collections returns to on Back (#170). */
-  const [collectionReturn, setCollectionReturn] = useState<{ section: AppSection; landing: LibraryLanding; seriesLibraryId: number | null } | null>(null);
+  const [collectionReturn, setCollectionReturn] = useState<{ section: AppSection; landing: LibraryLanding; seriesLibraryId: number | null; route?: DetailRoute } | null>(null);
   /** A personal collection opened from a row of collections, shown on the Collections screen (#170). */
   const [personalCollection, setPersonalCollection] = useState<SiloCollection | null>(null);
   // A row's full page ("Explore all"), shown inside the shell so the top nav stays.
@@ -675,7 +675,8 @@ export default function App() {
   function openCollectionCard(item: SiloItem) {
     const card = item.CollectionCard;
     if (!card) return;
-    const back = { section, landing: libraryLanding, seriesLibraryId: selectedSeriesLibraryId };
+    // From a title's "Also in" row (#206), Back returns to that title's page.
+    const back = { section, landing: libraryLanding, seriesLibraryId: selectedSeriesLibraryId, route: route.name === "main" ? undefined : route };
     if (card.source === "library") {
       const library = libraries.find(candidate => candidate.id === card.libraryId);
       const target = library ? sectionForLibrary(library) : null;
@@ -704,6 +705,7 @@ export default function App() {
     setLibraryLanding(back.landing);
     setSelectedSeriesLibraryId(back.seriesLibraryId);
     setSection(back.section);
+    if (back.route) setRoute(back.route);
     return true;
   }
 
@@ -993,6 +995,7 @@ export default function App() {
         onPlayEpisode={(episode, startPosition, choices) => setRoute({ name: "player", item: episode, startPosition, choices, returnTo: { series: route.item, selectedEpisode: episode } })}
         onShuffle={startShuffle}
         onOpenSimilar={item => openSimilar(route, item)}
+        onOpenCollection={openItem}
       />
       {overlays}
       </>

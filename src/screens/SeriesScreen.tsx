@@ -12,6 +12,7 @@ import { ExpandableOverview } from "../components/ExpandableOverview";
 import { claimAutoTranslation, hasMachineTranslatedOverview, releaseAutoTranslation, runDescriptionTranslation } from "../core/descriptionTranslation";
 import { useMetadataAiOnView } from "./useMetadataAiOnView";
 import { ArtworkImage } from "../components/ArtworkImage";
+import { AlsoInSection } from "../components/AlsoInSection";
 import type { PlaybackChoices, WatchDetail } from "../api/playback";
 import type { DetailPerson, DetailTrailer } from "../api/silo";
 import type { Session, SiloItem } from "../types";
@@ -29,6 +30,8 @@ type Props = {
   onShuffle: (kind: string, id: string | number) => Promise<void>;
   /** A pick from the More Like This rail (#177). */
   onOpenSimilar: (item: SiloItem) => void;
+  /** A card from "Also in" (#206): a collection, or a title from its preview row. */
+  onOpenCollection: (item: SiloItem) => void;
   restoreCastIndex?: number;
   onOpenPerson: (person: DetailPerson, index: number) => void;
   onPlayExtra: (trailer: DetailTrailer) => void;
@@ -89,7 +92,7 @@ function resolveNextUp(episodes: SiloItem[]) {
   return episodes.find(isInProgress) ?? episodes.find(episode => !isWatched(episode)) ?? episodes[0];
 }
 
-export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, onShuffle, onOpenSimilar, restoreCastIndex, onOpenPerson, onPlayExtra }: Props) {
+export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, onShuffle, onOpenSimilar, onOpenCollection, restoreCastIndex, onOpenPerson, onPlayExtra }: Props) {
   const [show, setShow] = useState(series);
   const [seasons, setSeasons] = useState<SiloItem[]>([]);
   const [episodesBySeason, setEpisodesBySeason] = useState<Record<number, SiloItem[]>>({});
@@ -512,6 +515,7 @@ export function SeriesScreen({ session, series, initialEpisode, onPlayEpisode, o
         <div className="series-related">
           {extras ? <CastSection cast={extras.cast} restoreIndex={restoreCastIndex} onOpen={onOpenPerson} /> : null}
           {extras ? <TrailersSection trailers={extras.trailers} onPlayLocal={onPlayExtra} /> : null}
+          <AlsoInSection session={session} itemId={series.Id} onOpen={onOpenCollection} />
           {similar.length ? <MediaRail rail={{ id: "similar", title: "Recommended Series", items: similar }} session={session} onOpen={onOpenSimilar} slide /> : null}
           <FactsSection facts={factsFor(extras)} />
         </div>
