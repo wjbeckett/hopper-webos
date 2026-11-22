@@ -76,6 +76,12 @@ export function useWatchStateRefresh(refresh: () => unknown, debounceMs = 300, p
     let signalTimer: number | undefined;
     const unsubscribeBus = subscribeWatchState(() => schedule(busTimer, debounceMs, next => { busTimer = next; }));
     const unsubscribeSignals = subscribeRailsChanged(() => schedule(signalTimer, 2_000, next => { signalTimer = next; }));
+    // Coming back to the app (#205): the poll skipped while it was hidden, so read again now
+    // rather than up to a poll later, as Android TV does when its Home returns.
+    const onVisible = () => {
+      if (pollMs && document.visibilityState === "visible") run();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     if (pollMs) {
       const tick = () => {
         if (document.visibilityState === "visible") run();
@@ -83,6 +89,7 @@ export function useWatchStateRefresh(refresh: () => unknown, debounceMs = 300, p
       pollRef.current = window.setInterval(tick, pollMs);
     }
     return () => {
+      document.removeEventListener("visibilitychange", onVisible);
       unsubscribeBus();
       unsubscribeSignals();
       if (busTimer !== undefined) window.clearTimeout(busTimer);
