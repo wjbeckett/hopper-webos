@@ -141,20 +141,6 @@ The same MP4 film (H.264, AAC, 1080p) over HLS (a server remux) and played direc
 
 Direct play starts no faster, but it seeks in under a second, and the server runs no packaging process for it.
 
-## Poster badges (#175)
-
-`home.mjs` on Home, two runs per build, 2026-11-18. Frames drawn per key press in the 700 ms after it (42 is every frame); "cold" is the first pass after launch, "warm" the second. Left and Right drew 38 to 40 frames in every build; only Down, which mounts a new row of cards, changed.
-
-| Build | Down, cold | Down, warm |
-| --- | --- | --- |
-| main, no badges | 22, 25 | 27, 28 |
-| Badges as first built: rounded, bordered, `overflow: hidden` for an ellipsis | 12, 13 | 19, 20 |
-| Rounded and bordered, no `overflow: hidden` (shipped) | 14, 16 | 20, 21 |
-| The same, each card's badges drawn 400 ms after it mounts | 15, 16 | 22, 23 |
-| Square, no border (an experiment) | 20 | 23 |
-
-`layers.mjs` found no layer for any badge: the cost is painting and rasterising them over the artwork as a row arrives. A rounded box that clips (`overflow: hidden`) cost the most and was dropped. The delay gained little and made badges pop in, so it was left out. Square badges with no border cost least, but they are not the look the server's presets describe. A profile can turn badges off (`ui.card_overlays_enabled`).
-
 ## Cold launch (#208)
 
 Before #208 every screen was in one 815 kB script (248 kB gzipped), which the TV parses and compiles before the first screen. Screens that no launch opens now load the first time they open (`src/core/lazyScreen.tsx`): the player, a title's page, the library grid, Settings, Search, Requests, Calendar and the rest. The screens a launch can show stay in the main script: Home, the profile picker, phone setup, device sign-in and server setup. Four seconds after launch, once the page is idle, the likely next screens are fetched in the background, so opening one doesn't wait for its code.
@@ -179,6 +165,20 @@ On a webOS 22 TV (50UQ9000PSD), seven cold launches each with a saved session, m
 | After | 679 | 777 | 4175 |
 
 The app starts about 100 ms sooner. What a viewer sees is mostly the splash: it plays for 2.6 s once the page has loaded, then waits up to 1.5 s for the artwork on screen. The first launch or two after installing a new build are slower (up to 2.5 s to DOMContentLoaded) while the TV caches the compiled code.
+
+## Poster badges (#175)
+
+`home.mjs` on Home, two runs per build, 2026-11-18. Frames drawn per key press in the 700 ms after it (42 is every frame); "cold" is the first pass after launch, "warm" the second. Left and Right drew 38 to 40 frames in every build; only Down, which mounts a new row of cards, changed.
+
+| Build | Down, cold | Down, warm |
+| --- | --- | --- |
+| main, no badges | 22, 25 | 27, 28 |
+| Badges as first built: rounded, bordered, `overflow: hidden` for an ellipsis | 12, 13 | 19, 20 |
+| Rounded and bordered, no `overflow: hidden` (shipped) | 14, 16 | 20, 21 |
+| The same, each card's badges drawn 400 ms after it mounts | 15, 16 | 22, 23 |
+| Square, no border (an experiment) | 20 | 23 |
+
+`layers.mjs` found no layer for any badge: the cost is painting and rasterising them over the artwork as a row arrives. A rounded box that clips (`overflow: hidden`) cost the most and was dropped. The delay gained little and made badges pop in, so it was left out. Square badges with no border cost least, but they are not the look the server's presets describe. A profile can turn badges off (`ui.card_overlays_enabled`).
 
 ## Rules that came out of this
 
