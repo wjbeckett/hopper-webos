@@ -26,6 +26,24 @@ export function downloadSubtitle(session: Session, mediaFileId: number | string,
   });
 }
 
+/** `GET /subtitles/providers/status`: whether this viewer can search subtitle providers (#204). */
+export type SubtitleProviderStatus = { state?: string; allowed?: boolean; enabled?: boolean; providers?: string[] };
+export const getSubtitleProviderStatus = (session: Session) => requestV2<SubtitleProviderStatus>(session, "/subtitles/providers/status");
+
+/** How long the status read may take before it counts as failed, as on Android. */
+export const SUBTITLE_PROVIDER_STATUS_TIMEOUT_MS = 5000;
+
+/**
+ * Whether to offer "Search online" after a status read (Android's `subtitleSearchAvailabilityAfter`).
+ * An answer decides it. A failed or timed-out read (null), such as an older server without the
+ * endpoint, keeps the last answer, or offers search when there is none, so a working feature
+ * isn't taken away.
+ */
+export function subtitleSearchAvailableAfter(status: SubtitleProviderStatus | null, previous: boolean | null): boolean {
+  if (status) return status.allowed === true && status.enabled === true && status.state === "available";
+  return previous ?? true;
+}
+
 export type AiStatus = { enabled: boolean; transcribe_enabled: boolean };
 export type AiQuota = { limited: boolean; limit: number; used: number; remaining: number; period: string };
 export type AiJob = { id: string; status: string; progress: number; progress_message: string; error_message?: string; result_subtitle_id: string | null };

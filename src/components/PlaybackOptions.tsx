@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { saveAudioChoice, saveSubtitleChoice } from "../api/playback";
 import type { AudioTrack, FileVersion, PlaybackChoices, SubtitleTrack, WatchDetail } from "../api/playback";
-import { catalogSubtitleUnplayable, getWatchDetail, prewarmPlayback } from "../api/playback";
+import { catalogSubtitleUnplayable, editionAutoVersion, getWatchDetail, hasEditionChoices, playbackEditions, prewarmPlayback, selectPlaybackVersion } from "../api/playback";
 import type { Session, SiloItem } from "../types";
 import { LoadingState } from "./LoadingState";
 
@@ -166,48 +166,10 @@ export function versionValueLabel(version: FileVersion | undefined, selectedFile
   return selectedFileId == null ? (version ? `Auto: ${detail}` : "Auto") : detail;
 }
 
-export type PlaybackEdition = { id: string; label: string; versions: FileVersion[]; fileIds: number[] };
-
-export function editionLabel(raw?: string, key?: string) {
-  const clean = raw?.trim();
-  if (clean) return clean;
-  const fromKey = key?.trim();
-  if (fromKey) {
-    return fromKey.split(/[_-]+/).filter(Boolean)
-      .map(part => (part.toLowerCase() === "imax" ? "IMAX" : part.charAt(0).toUpperCase() + part.slice(1)))
-      .join(" ");
-  }
-  return undefined;
-}
-
-export function playbackEditions(versions: FileVersion[]): PlaybackEdition[] {
-  const groups = new Map<string, FileVersion[]>();
-  for (const version of versions) {
-    const label = editionLabel(version.edition_raw, version.edition_key);
-    const key = version.edition_key?.trim() || label || "";
-    const list = groups.get(key) ?? [];
-    list.push(version);
-    groups.set(key, list);
-  }
-  return [...groups.entries()].map(([id, files]) => ({
-    id,
-    label: editionLabel(files[0].edition_raw, files[0].edition_key) ?? "Standard",
-    versions: files,
-    fileIds: files.map(file => file.file_id)
-  }));
-}
-
-export function hasEditionChoices(editions: PlaybackEdition[]) {
-  return editions.length > 1 && new Set(editions.map(edition => edition.label.toLowerCase())).size > 1;
-}
-
 export function choiceSummary(detail: WatchDetail | null, choices: PlaybackChoices) {
-  const versions = detail?.versions ?? [];
-  const scoped = hasEditionChoices(playbackEditions(versions));
-  const current = versions.find(version => version.file_id === choices.fileId) ?? versions[0];
-  const versionId = scoped ? choices.fileId ?? current?.file_id : choices.fileId;
+  const current = detail ? selectPlaybackVersion(detail, choices) : undefined;
   return {
-    version: versionValueLabel(current, versionId),
+    version: versionValueLabel(current, choices.fileId),
     audio: audioValueLabel(current, choices.audioIndex),
     subtitles: subtitleValueLabel(current, choices.subtitleIndex, choices.subtitleOff)
   };
@@ -280,12 +242,11 @@ export function PlaybackOptionsDialog({ session, detail, choices, onChange, onCl
   const versions = detail?.versions ?? [];
   const editions = playbackEditions(versions);
   const scoped = hasEditionChoices(editions);
-  const active = versions.find(version => version.file_id === choices.fileId) ?? versions[0];
-  const scopedFileId = choices.fileId ?? active?.file_id;
-  const edition = scoped
-    ? editions.find(entry => scopedFileId != null && entry.fileIds.includes(scopedFileId)) ?? editions[0]
-    : undefined;
-  const rowsFor = scoped ? edition?.versions ?? [] : versions;
+  // The file shown and played: a pin, else Auto within the picked, last-played or opening edition (#197).
+  const active = detail ? selectPlaybackVersion(detail, choices) : undefined;
+  const edition = scoped && active ? editions.find(entry => entry.fileIds.includes(active.file_id)) : undefined;
+  // Version lists the current edition's files only; the Edition rows switch between cuts.
+  const rowsFor = edition ? edition.versions : versions;
   const seriesKey = detail?.series_id ?? detail?.content_id;
   const audioTracks = active?.audio_tracks ?? [];
   const subtitleTracks = active?.subtitle_tracks ?? [];
@@ -331,12 +292,22 @@ export function PlaybackOptionsDialog({ session, detail, choices, onChange, onCl
         <h2>Playback Options</h2>
         {!detail ? <LoadingState label="Loading" /> : (
           <>
-            {versions.length > 1 ? (
+            {edition ? (
+              <>
+                <div className="browse-panel-section-heading">EDITION</div>
+                {editions.map(entry => {
+                  const auto = editionAutoVersion(entry);
+                  // A new cut starts on Auto, with its own tracks.
+                  return row(entry.id === edition.id, entry.label, auto ? versionShortLabel(auto) : "", () => apply({ ...choices, editionId: entry.id, fileId: undefined, audioIndex: undefined, subtitleIndex: undefined }), `e-${entry.id}`);
+                })}
+              </>
+            ) : null}
+            {rowsFor.length > 1 ? (
               <>
                 <div className="browse-panel-section-heading">VERSION</div>
-                {scoped ? null : row(choices.fileId == null, "Auto", "Best match for this device", () => apply({ ...choices, fileId: undefined, audioIndex: undefined, subtitleIndex: undefined }), "v-auto")}
+                {row(choices.fileId == null, "Auto", "Best match for this device", () => apply({ ...choices, fileId: undefined, audioIndex: undefined, subtitleIndex: undefined }), "v-auto")}
                 {rowsFor.map(version => {
-                  const selected = scoped ? scopedFileId === version.file_id : choices.fileId === version.file_id;
+                  const selected = choices.fileId === version.file_id;
                   return row(selected, versionShortLabel(version), [version.container?.toUpperCase(), version.bitrate ? `${(version.bitrate / 1_000_000).toFixed(1)} Mbps` : ""].filter(Boolean).join(" · "), () => apply({ ...choices, fileId: version.file_id, audioIndex: undefined, subtitleIndex: undefined, subtitleOff: choices.subtitleOff }), `v-${version.file_id}`);
                 })}
               </>
