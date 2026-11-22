@@ -414,6 +414,8 @@ export default function App() {
   const screensaverOnRef = useRef(false);
   screensaverOnRef.current = screensaverOn;
   const screensaverSession = !!session;
+  /** Starts the idle wait again; the screensaver calls it when it closes with nothing to show. */
+  const rearmScreensaver = useRef<() => void>(() => undefined);
   useEffect(() => {
     if (!screensaverSession) { setScreensaverOn(false); return; }
     let timer: number | undefined;
@@ -451,6 +453,7 @@ export default function App() {
     window.addEventListener("keyup", onKeyUp, true);
     window.addEventListener("pointermove", onPointer, true);
     window.addEventListener("wheel", onPointer, true);
+    rearmScreensaver.current = arm;
     const unsubscribe = subscribeScreensaver(arm);
     arm();
     return () => {
@@ -936,7 +939,7 @@ export default function App() {
   }
 
   // Over every signed-in screen: the connection-lost dialog and the allow-a-phone question (#162).
-  const overlays = <><ConnectionLost serverName={serverRegistry.active()?.name ?? "the server"} /><PhoneApproval />{screensaverOn && session ? <Screensaver session={session} onEmpty={() => setScreensaverOn(false)} /> : null}</>;
+  const overlays = <><ConnectionLost serverName={serverRegistry.active()?.name ?? "the server"} /><PhoneApproval />{screensaverOn && session ? <Screensaver session={session} onEmpty={() => { setScreensaverOn(false); rearmScreensaver.current(); }} /> : null}</>;
 
   if (profileError) {
     return (

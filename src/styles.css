@@ -5691,9 +5691,9 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
   left: 0;
   z-index: 900;
   overflow: hidden;
-  background: #000;
   cursor: none;
 }
+.screensaver.ready { background: #000; }
 .screensaver-image {
   position: absolute;
   top: 0;

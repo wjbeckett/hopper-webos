@@ -888,13 +888,33 @@ async function browseArtworkParams(session: Session): Promise<Array<[string, str
 
 /**
  * Random movies and series with backdrops, for the screensaver (#209): `GET /catalog`, sorted
- * `random`. The server applies the profile's library access and rating limits.
+ * `random`. A server that doesn't sort this listing at random (422 `invalid_sort_field`, seen on a
+ * live server in November 2026) gives its 200 most recently added titles instead, shuffled here.
+ * The server applies the profile's library access and rating limits either way.
  */
 export async function getScreensaverTitles(session: Session, limit = 40): Promise<SiloItem[]> {
-  const params = new URLSearchParams({ source: "query", type: "video", sort: "random", limit: String(limit), skip_total: "true" });
-  if ((await acceptedWidthSlots(session)).has("backdrop")) params.set("backdrop_width", "1920");
-  const page = await requestV2<NativeCatalogPage>(session, `/catalog?${params}`);
-  return (page.items ?? []).map(toItem).filter(item => item.Id && item.BackdropUrl);
+  const wide = (await acceptedWidthSlots(session)).has("backdrop");
+  const read = async (sort: string, count: number) => {
+    const params = new URLSearchParams({ source: "query", type: "video", sort, limit: String(count), skip_total: "true" });
+    if (wide) params.set("backdrop_width", "1920");
+    const page = await requestV2<NativeCatalogPage>(session, `/catalog?${params}`);
+    return (page.items ?? []).map(toItem).filter(item => item.Id && item.BackdropUrl);
+  };
+  try {
+    return await read("random", limit);
+  } catch {
+    return shuffled(await read("-added_at", 200)).slice(0, limit);
+  }
+}
+
+/** A shuffled copy (Fisher-Yates). */
+export function shuffled<T>(items: T[], random = Math.random): T[] {
+  const copy = items.slice();
+  for (let index = copy.length - 1; index > 0; index -= 1) {
+    const other = Math.floor(random() * (index + 1));
+    [copy[index], copy[other]] = [copy[other], copy[index]];
+  }
+  return copy;
 }
 
 export async function getHomeRails(session: Session): Promise<HomeRail[]> {

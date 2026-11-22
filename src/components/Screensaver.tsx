@@ -21,6 +21,8 @@ export function Screensaver({ session, onEmpty }: { session: Session; onEmpty: (
   const first = useRef<HTMLImageElement>(null);
   const second = useRef<HTMLImageElement>(null);
   const [caption, setCaption] = useState<Caption | null>(null);
+  /** Until the first picture is ready the screen behind stays as it is, so a saver with nothing to show never flashes black. */
+  const [ready, setReady] = useState(false);
   const [logoFailed, setLogoFailed] = useState("");
   const onEmptyRef = useRef(onEmpty);
   onEmptyRef.current = onEmpty;
@@ -60,6 +62,7 @@ export function Screensaver({ session, onEmpty }: { session: Session; onEmpty: (
       if (!alive) return;
       current.classList.remove("shown");
       back.classList.add("shown");
+      setReady(true);
       front = 1 - front;
       const corner = revealCorner(slide);
       slide += 1;
@@ -81,7 +84,7 @@ export function Screensaver({ session, onEmpty }: { session: Session; onEmpty: (
 
   const logo = caption ? mediaLogoUrl(session, caption.item) : "";
   return (
-    <div className="screensaver" aria-hidden="true">
+    <div className={`screensaver${ready ? " ready" : ""}`} aria-hidden="true">
       <img ref={first} className="screensaver-image" alt="" decoding="async" />
       <img ref={second} className="screensaver-image" alt="" decoding="async" />
       <div className="screensaver-shade" />

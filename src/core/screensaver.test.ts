@@ -32,3 +32,16 @@ describe("the screensaver setting (#209)", () => {
     expect([0, 1, 2, 3].map(revealCorner)).toEqual(["left", "right", "left", "right"]);
   });
 });
+
+describe("the screensaver's fallback order (#209)", () => {
+  it("shuffles every title exactly once", async () => {
+    const { shuffled } = await import("../api/silo");
+    const items = [1, 2, 3, 4, 5, 6];
+    let seed = 1;
+    const random = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+    const result = shuffled(items, random);
+    expect([...result].sort()).toEqual(items);
+    expect(result).not.toEqual(items);
+    expect(items).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+});
