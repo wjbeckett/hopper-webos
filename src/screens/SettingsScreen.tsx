@@ -28,6 +28,7 @@ import { LOCAL_SETTINGS_STORAGE } from "../core/playerSettings";
 import { allowedPhones, subscribeAllowedPhones } from "../core/allowedPhones";
 import { forgetRemotePhone } from "../control/hub";
 import { remoteControlAvailable } from "../platform/remoteControl";
+import { SCREENSAVER_DELAYS, screensaverLabel, screensaverMinutes, setScreensaverMinutes } from "../core/screensaver";
 import { ACCENT_PRESETS, cachedAccent, profileAccentChoice, setProfileAccentChoice } from "../core/accent";
 
 /** Hopper's own policy (docs/privacy.md, published with GitHub Pages). It links to Silo's for the server. */
@@ -334,6 +335,7 @@ export function SettingsScreen({
   const [loadAttempt, setLoadAttempt] = useState(0);
   const refocusAfterLoad = useRef(false);
   const [picker, setPicker] = useState<PickerRequest | null>(null);
+  const [screensaver, setScreensaver] = useState(screensaverMinutes);
   const [accentChoice, setAccentChoice] = useState(() => profileAccentChoice(session.serverUrl, session.profileId));
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [diagEligible, setDiagEligible] = useState<boolean | null>(null);
@@ -890,6 +892,29 @@ export function SettingsScreen({
     }
   }
 
+  /** The screensaver (#209): off, or the minutes without a key press before it starts. Kept on this TV. */
+  function renderScreensaver() {
+    return (
+      <section className="settings-group">
+        <h3>Screensaver</h3>
+        <button data-tv-focusable="true" data-setting-key="screensaver" className="option-row settings-row" onClick={() => setPicker({
+          title: "Screensaver",
+          choices: SCREENSAVER_DELAYS.map(minutes => ({ label: screensaverLabel(minutes), value: minutes })),
+          current: screensaver,
+          returnKey: "screensaver",
+          onPick: value => {
+            setPicker(null);
+            const minutes = Number(value);
+            setScreensaverMinutes(minutes);
+            setScreensaver(minutes);
+            refocus("screensaver");
+          }
+        })}><span>Screensaver</span><strong>{screensaverLabel(screensaver)}</strong></button>
+        <p className="settings-footer">When nothing has been pressed for a while, shows artwork from your library, with each title's name a few seconds later. Any button returns you to where you were. Never during playback. Applies to this TV.</p>
+      </section>
+    );
+  }
+
   /** The profile's accent on this TV (#201): the server's colour, none, or a preset. Kept on the TV only. */
   function renderAccent() {
     const profileId = session.profileId;
@@ -1176,7 +1201,7 @@ export function SettingsScreen({
   } else if (category === "subtitles") {
     pane = <>{renderGroups(keysByCategory.subtitles)}{renderSubtitleAppearance()}</>;
   } else if (category === "general") {
-    pane = <>{renderProfileLaunch()}{renderHomeSections()}{renderAccent()}{renderCardPresentation()}{renderTitleArt()}{renderThemeMusic()}{renderGroups(keysByCategory.general)}</>;
+    pane = <>{renderProfileLaunch()}{renderHomeSections()}{renderAccent()}{renderCardPresentation()}{renderTitleArt()}{renderThemeMusic()}{renderScreensaver()}{renderGroups(keysByCategory.general)}</>;
   } else {
     pane = renderPlaybackPane();
   }

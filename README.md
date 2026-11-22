@@ -73,6 +73,7 @@ Hopper is an independent, community-built client. It is not affiliated with or e
 - Press Home during a video and Hopper stops it with its position saved; when you come back you're on its page, ready to resume.
 - Text sized to be read from the sofa: at least 20 px at the default size, as LG recommends, with larger descriptions. A larger text size chosen in the profile's appearance settings on the server is followed.
 - An animated startup splash, and performance tuning for older webOS TVs.
+- A screensaver when the TV sits idle: artwork from your library, with each title's name revealed a few seconds later, so you can guess it first. Settings → General → Screensaver sets the delay or turns it off.
 - If the server can't be reached, Hopper says so, keeps trying, and carries on when it answers: screens load again and a video resumes where it stopped. If the server ends your sign-in, you return to the sign-in screen for the same server.
 - Settings for General, Playback, Subtitles, Diagnostics and Server, laid out like the official Android TV client.
 - Diagnostics stay on the TV. Logs can be viewed or exported, and are never uploaded.
