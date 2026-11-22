@@ -44,7 +44,7 @@ Hopper is an independent, community-built client. It is not affiliated with or e
 - Create, edit and delete household profiles: avatars, PIN, child profiles, rating limits and library access.
 
 **Browsing**
-- Home and per-library rows set by the server. Each row has a large hero backdrop and an "Explore all" page.
+- Home and per-library rows set by the server. Each row has a large hero backdrop, with the screen's corners tinted in the colours of the art, and an "Explore all" page.
 - Continue Watching with a time-left ring. It updates live when you watch on another device.
 - Movies, TV, music and audiobook libraries, with sorting, filters, an A–Z jump bar, collections and shuffle. Music libraries can also be browsed by genre.
 - Details pages with cast and crew, trailers and extras, facts, related titles and theme music. When the server has AI translation set up, a description in another language can be translated, on Details and Series pages and, automatically, for episodes.

@@ -2,78 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "re
 import { backdropUrl, mediaLogoUrl } from "../api/silo";
 import { isResumable, ResumeProgress } from "./ResumeProgress";
 import type { HomeRail, Session, SiloItem } from "../types";
-
-const ambientTintCache = new Map<string, string | null>();
-
-function sampleAmbientTint(url: string): Promise<string | null> {
-  if (ambientTintCache.has(url)) return Promise.resolve(ambientTintCache.get(url) ?? null);
-  // TV: a second CORS fetch, a canvas decode and a pixel read per backdrop cost more than the tint adds.
-  if (/Web0S|webOS/i.test(navigator.userAgent)) return Promise.resolve(null);
-
-  return new Promise(resolve => {
-    const cacheFailure = (message: string) => {
-      ambientTintCache.set(url, null);
-      console.warn(message);
-      resolve(null);
-    };
-    const image = new Image();
-    image.crossOrigin = "anonymous";
-    image.onload = () => {
-      try {
-        const canvas = document.createElement("canvas");
-        canvas.width = 64;
-        canvas.height = 36;
-        const context = canvas.getContext("2d", { willReadFrequently: true });
-        if (!context) {
-          cacheFailure("Home backdrop tint unavailable: canvas context could not be created.");
-          return;
-        }
-        context.drawImage(image, 0, 0, canvas.width, canvas.height);
-        const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-        let red = 0;
-        let green = 0;
-        let blue = 0;
-        let count = 0;
-        for (let index = 0; index < pixels.length; index += 4) {
-          if (pixels[index + 3] === 0) continue;
-          red += pixels[index];
-          green += pixels[index + 1];
-          blue += pixels[index + 2];
-          count++;
-        }
-        if (!count) {
-          cacheFailure("Home backdrop tint unavailable: canvas contained no readable pixels.");
-          return;
-        }
-
-        red /= count * 255;
-        green /= count * 255;
-        blue /= count * 255;
-        const luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
-        const scale = luminance <= 0.001
-          ? 0
-          : luminance > 0.22
-            ? 0.22 / luminance
-            : Math.max(1, 0.22 / Math.max(luminance, 0.05));
-        const tint = [
-          red,
-          green,
-          blue
-        ].map(channel => Math.round(Math.max(0, Math.min(1, channel * scale)) * 255)).join(", ");
-        ambientTintCache.set(url, tint);
-        if (ambientTintCache.size > 256) {
-          const oldest = ambientTintCache.keys().next().value;
-          if (oldest) ambientTintCache.delete(oldest);
-        }
-        resolve(tint);
-      } catch {
-        cacheFailure("Home backdrop tint unavailable: canvas sampling failed.");
-      }
-    };
-    image.onerror = () => cacheFailure("Home backdrop tint unavailable: cross-origin image load failed.");
-    image.src = url;
-  });
-}
+import { cornerWash } from "../core/cornerWash";
 
 const warmBackdrops = new Map<string, HTMLImageElement>();
 
@@ -140,6 +69,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero({ ra
   const focusedItemRef = useRef<SiloItem | undefined>(undefined);
   const focusedRailIndexRef = useRef<number | undefined>(undefined);
   const heroImageRef = useRef("");
+  /** The corner wash (#207) of the backdrop being shown: from its ThumbHash, so it costs no fetch. */
+  const heroWashRef = useRef<string | null>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
   const tvBackdropRef = useRef<TvBackdropHandle>(null);
   const lastHeroSwapAt = useRef(0);
@@ -186,6 +117,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero({ ra
     lastHeroSwapAt.current = performance.now();
     setFocusedItem(item);
     const nextImage = backdropUrl(session, item);
+    const nextWash = nextImage ? cornerWash(item.BackdropThumbhash) : null;
     if (backdropTimer.current !== undefined) window.clearTimeout(backdropTimer.current);
     backdropTimer.current = undefined;
     if (tv) {
@@ -193,8 +125,10 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero({ ra
       // one shows at once; later ones wait for focus to settle, and the old one fades out meanwhile.
       const first = !heroImageRef.current;
       heroImageRef.current = nextImage;
+      // The wash changes when the backdrop does, so moving quickly along a row never repaints it.
       if (first) {
         tvBackdropRef.current?.show(nextImage);
+        tvBackdropRef.current?.wash(nextWash);
         return;
       }
       if (tvBackdropRef.current?.showing() === nextImage) {
@@ -205,10 +139,12 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero({ ra
       backdropTimer.current = window.setTimeout(() => {
         backdropTimer.current = undefined;
         tvBackdropRef.current?.show(nextImage);
+        tvBackdropRef.current?.wash(nextWash);
       }, TV_BACKDROP_SETTLE_MS);
       return;
     }
     if (!nextImage || nextImage === heroImageRef.current) return;
+    heroWashRef.current = nextWash;
     applyHeroImage(nextImage);
   }
 
@@ -307,16 +243,13 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero({ ra
               onLoad={() => {
                 setLoadedHeroImage(heroImage);
                 finishBackdropTransition();
-                void sampleAmbientTint(heroImage).then(tint => {
-                  if (heroImageRef.current !== heroImage) return;
-                  setAmbientTint(tint ?? "");
-                  setLoadedAmbientTint(heroImage);
-                  if (ambientTintTimer.current !== undefined) window.clearTimeout(ambientTintTimer.current);
-                  ambientTintTimer.current = window.setTimeout(() => {
-                    setPreviousAmbientTint("");
-                    ambientTintTimer.current = undefined;
-                  }, 320);
-                });
+                setAmbientTint(heroWashRef.current ?? "");
+                setLoadedAmbientTint(heroImage);
+                if (ambientTintTimer.current !== undefined) window.clearTimeout(ambientTintTimer.current);
+                ambientTintTimer.current = window.setTimeout(() => {
+                  setPreviousAmbientTint("");
+                  ambientTintTimer.current = undefined;
+                }, 720);
               }}
               onError={() => {
                 setFailedHeroImage(heroImage);
@@ -341,13 +274,13 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero({ ra
         {previousAmbientTint ? (
           <div
             className={`home-backdrop-tint previous ${loadedAmbientTint === heroImage ? "transitioning-out" : ""}`}
-            style={{ backgroundImage: ambientTintGradient(previousAmbientTint) }}
+            style={{ backgroundImage: previousAmbientTint }}
           />
         ) : null}
         {ambientTint ? (
           <div
             className={`home-backdrop-tint current ${loadedAmbientTint === heroImage ? "loaded" : ""}`}
-            style={{ backgroundImage: ambientTintGradient(ambientTint) }}
+            style={{ backgroundImage: ambientTint }}
           />
         ) : null}
         <div className="home-backdrop-scrim" />
@@ -388,6 +321,8 @@ type TvBackdropHandle = {
   hide: () => void;
   /** The URL on screen or being loaded. */
   showing: () => string;
+  /** Crossfade the corner wash (#207) to `gradient`, or out with null. */
+  wash: (gradient: string | null) => void;
 };
 
 /**
@@ -406,6 +341,9 @@ const TvBackdrop = forwardRef<TvBackdropHandle>(function TvBackdrop(_props, ref)
   const front = useRef<0 | 1>(0);
   const wanted = useRef("");
   const token = useRef(0);
+  const washes = [useRef<HTMLDivElement>(null), useRef<HTMLDivElement>(null)];
+  const washFront = useRef<0 | 1>(0);
+  const washShown = useRef<string | null>(null);
 
   useImperativeHandle(ref, () => ({
     show(url: string) {
@@ -444,7 +382,19 @@ const TvBackdrop = forwardRef<TvBackdropHandle>(function TvBackdrop(_props, ref)
       first.current?.classList.remove("shown");
       second.current?.classList.remove("shown");
     },
-    showing: () => wanted.current
+    showing: () => wanted.current,
+    wash(gradient: string | null) {
+      if (gradient === washShown.current) return;
+      washShown.current = gradient;
+      const front = washes[washFront.current].current;
+      const back = washes[1 - washFront.current].current;
+      if (!front || !back) return;
+      front.classList.remove("shown");
+      if (!gradient) return;
+      back.style.backgroundImage = gradient;
+      back.classList.add("shown");
+      washFront.current = (1 - washFront.current) as 0 | 1;
+    }
   }), []);
 
   return (
@@ -452,13 +402,11 @@ const TvBackdrop = forwardRef<TvBackdropHandle>(function TvBackdrop(_props, ref)
       <img ref={first} className="tv-backdrop-image" alt="" decoding="async" />
       <img ref={second} className="tv-backdrop-image" alt="" decoding="async" />
       <div className="tv-backdrop-shade" />
+      <div ref={washes[0]} className="tv-backdrop-wash" />
+      <div ref={washes[1]} className="tv-backdrop-wash" />
     </div>
   );
 });
-
-function ambientTintGradient(tint: string) {
-  return `linear-gradient(to bottom left, rgba(${tint}, 1) 0%, rgba(${tint}, .5) 50%, rgba(${tint}, .18) 100%)`;
-}
 
 function FeaturedCopy({
   item,
