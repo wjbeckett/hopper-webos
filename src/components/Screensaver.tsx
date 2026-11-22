@@ -26,6 +26,9 @@ export function Screensaver({ session, onEmpty }: { session: Session; onEmpty: (
   const [logoFailed, setLogoFailed] = useState("");
   const onEmptyRef = useRef(onEmpty);
   onEmptyRef.current = onEmpty;
+  // The latest session (a token refresh replaces the object), so a refresh doesn't restart the slides.
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
 
   useEffect(() => {
     let alive = true;
@@ -37,7 +40,7 @@ export function Screensaver({ session, onEmpty }: { session: Session; onEmpty: (
 
     async function nextTitle(): Promise<SiloItem | null> {
       if (!queue.length) {
-        try { queue = await getScreensaverTitles(session); } catch { queue = []; }
+        try { queue = await getScreensaverTitles(sessionRef.current); } catch { queue = []; }
       }
       return queue.shift() ?? null;
     }
@@ -51,7 +54,7 @@ export function Screensaver({ session, onEmpty }: { session: Session; onEmpty: (
       const back = images[1 - front];
       const current = images[front];
       if (!back || !current) return;
-      back.src = backdropUrl(session, item);
+      back.src = backdropUrl(sessionRef.current, item);
       try {
         await back.decode();
       } catch {
@@ -80,7 +83,7 @@ export function Screensaver({ session, onEmpty }: { session: Session; onEmpty: (
       window.clearTimeout(revealTimer);
       window.clearTimeout(slideTimer);
     };
-  }, [session]);
+  }, [session.serverUrl, session.profileId]);
 
   const logo = caption ? mediaLogoUrl(session, caption.item) : "";
   return (
