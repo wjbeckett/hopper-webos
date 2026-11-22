@@ -3,8 +3,9 @@ import { hydrateTitleArt } from "./core/titleArt";
 import { setThemeMusicPreferences, setThemeMusicSession } from "./core/themeMusic";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { TopNav, type AppSection, type LibraryLanding } from "./components/TopNav";
-import { advanceShuffle, createShuffle, deleteShuffle, getCatalogItem, getEpisodes, getLibraries, getProfileAppearance, getRequestsFeatureStatus, getSeasons, getSetupStatus, restoreDefaultProfile } from "./api/silo";
+import { advanceShuffle, createShuffle, deleteShuffle, getCatalogItem, getEpisodes, getLibraries, getProfileAppearance, getRequestsFeatureStatus, getServerAccent, getSeasons, getSetupStatus, restoreDefaultProfile } from "./api/silo";
 import { serverRegistry } from "./core/serverRegistry";
+import { ACCENT_CHANGED_EVENT, applyAccent, cachedAccent, profileAccentChoice, rememberAccent, resolveAccent } from "./core/accent";
 import { focusTopNavigation, installSpatialNavigation } from "./navigation/spatial";
 import { installPointerNavigation } from "./navigation/pointer";
 import { installGridPaintWindow } from "./navigation/gridWindow";
@@ -93,14 +94,6 @@ function safeBrowsingRoute(route: DetailRoute): DetailRoute {
   }
   return route;
 }
-
-const THEME_TOKENS: Record<string, Record<string, string>> = {
-  "midnight-cinema": { "--background": "#070809", "--foreground": "#f4f4f2", "--primary": "#f4f4f2", "--primary-foreground": "#08090a", "--secondary": "#1b1c1e", "--surface": "#101113", "--ring": "#f4f4f2", "--muted-foreground": "#929398", "--font-body": "Outfit, system-ui, sans-serif", "--font-display": "Outfit, system-ui, sans-serif" },
-  "cinema-light": { "--background": "#f4f4f6", "--foreground": "#1a1a1e", "--primary": "#1a1a1e", "--primary-foreground": "#f4f4f6", "--secondary": "#e8e8ec", "--surface": "#ffffff", "--ring": "#1a1a1e", "--muted-foreground": "#63636b", "--font-body": "Outfit, system-ui, sans-serif", "--font-display": "Outfit, system-ui, sans-serif" },
-  "cobalt-studio": { "--background": "#101722", "--foreground": "#f4f8ff", "--primary": "#78aefc", "--primary-foreground": "#0f1722", "--secondary": "#1b2634", "--surface": "#151e2b", "--ring": "#78aefc", "--muted-foreground": "#90a0b5", "--font-body": "Outfit, system-ui, sans-serif", "--font-display": "Outfit, system-ui, sans-serif" },
-  "oxblood-noir": { "--background": "#171113", "--foreground": "#f7edef", "--primary": "#d16a78", "--primary-foreground": "#1b0e11", "--secondary": "#2b1b1f", "--surface": "#211619", "--ring": "#d16a78", "--muted-foreground": "#ad9298", "--font-body": "Outfit, system-ui, sans-serif", "--font-display": "Outfit, system-ui, sans-serif" },
-  "evergreen-studio": { "--background": "#101715", "--foreground": "#eff8f4", "--primary": "#5bc39d", "--primary-foreground": "#09130f", "--secondary": "#192823", "--surface": "#15211d", "--ring": "#5bc39d", "--muted-foreground": "#8fa89f", "--font-body": "Outfit, system-ui, sans-serif", "--font-display": "Outfit, system-ui, sans-serif" }
-};
 
 function effectiveServerUrl(url: string) {
   return import.meta.env.DEV ? DEV_SERVER_URL : url;
@@ -392,18 +385,33 @@ export default function App() {
     getProfileAppearance(session).then(appearance => {
       if (!alive) return;
       const root = document.documentElement;
-      root.dataset.theme = appearance.theme;
       root.dataset.textScale = appearance.textScale;
       root.dataset.textWeight = appearance.textWeight;
       root.dataset.highContrast = appearance.highContrast ? "true" : "false";
       root.dataset.posterSize = appearance.posterSize;
-      const merged = { ...(THEME_TOKENS[appearance.theme] ?? THEME_TOKENS["midnight-cinema"]), ...appearance.variables };
-      for (const [name, value] of Object.entries(merged)) {
-        if (/^--[a-z0-9-]+$/.test(name) && typeof value === "string" && value.length <= 128) root.style.setProperty(name, value);
-      }
     }).catch(error => console.warn("[Hopper] profile appearance", error));
     return () => { alive = false; };
   }, [session?.profileId]);
+
+  // The accent (#201): the profile's own choice on this TV, else the server's colour, shown at
+  // once from the last one seen and then from the server's current one.
+  const accentServer = session?.serverUrl;
+  const accentProfile = session?.profileId;
+  useEffect(() => {
+    if (!accentServer) { applyAccent(null); return; }
+    let serverAccent: string | null = cachedAccent(accentServer);
+    const apply = () => applyAccent(resolveAccent(profileAccentChoice(accentServer, accentProfile), serverAccent));
+    apply();
+    let alive = true;
+    getServerAccent(accentServer).then(accent => {
+      if (!alive) return;
+      rememberAccent(accentServer, accent);
+      serverAccent = accent;
+      apply();
+    }).catch(() => undefined);
+    window.addEventListener(ACCENT_CHANGED_EVENT, apply);
+    return () => { alive = false; window.removeEventListener(ACCENT_CHANGED_EVENT, apply); };
+  }, [accentServer, accentProfile]);
 
   useEffect(() => {
     const onBack = (event: KeyboardEvent) => {
