@@ -13,9 +13,9 @@
  */
 
 /** Length of the animation plus a short hold on the finished mark (timeline in index.html). */
-const ANIMATION_MS = 2600;
+const ANIMATION_MS = 1950;
 /** When the last part stops moving: the app is drawn from here, behind the still mark. */
-const MOTION_MS = 2250;
+const MOTION_MS = 1700;
 const FADE_MS = 400;
 /** If the page has not been reported visible this long after the app starts, start the animation anyway. */
 const START_FALLBACK_MS = 4000;
