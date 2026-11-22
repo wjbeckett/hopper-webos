@@ -9,8 +9,11 @@ const refreshListeners = new Set<(kind: RailsChange) => void>();
 
 /** "catch-up": the events socket reconnected and asks for a read in case something changed meanwhile. */
 export type RailsChange = "catch-up" | "change";
-/** A catch-up this soon after a read has started is skipped: that read already covers it (#217). */
-export const CATCH_UP_GRACE_MS = 10_000;
+/**
+ * A poll tick or a socket catch-up this soon after a read started is skipped: that read already
+ * covers it (#217). Coming back to the app reads at once, and both used to follow within seconds.
+ */
+export const RECENT_READ_MS = 10_000;
 
 export function publishWatchState(item: SiloItem) {
   // The item's position or watched flag changed: its cached /watch response is stale now.
@@ -56,8 +59,9 @@ export function useWatchStateRefresh(refresh: () => unknown, debounceMs = 300, p
   refreshRef.current = refresh;
 
   useEffect(() => {
-    /** When the last read started, so a reconnect's catch-up right after it can be skipped (#217). */
+    /** When the last read started, so a poll tick or catch-up right after it can be skipped (#217). */
     let lastRunAt = -Infinity;
+    const readRecently = () => Date.now() - lastRunAt < RECENT_READ_MS;
     const run = () => {
       if (busyRef.current) {
         queuedRef.current = true;
@@ -84,9 +88,9 @@ export function useWatchStateRefresh(refresh: () => unknown, debounceMs = 300, p
     let signalTimer: number | undefined;
     const unsubscribeBus = subscribeWatchState(() => schedule(busTimer, debounceMs, next => { busTimer = next; }));
     const unsubscribeSignals = subscribeRailsChanged(kind => {
-      // Coming back to the app reads at once (below) and the socket reconnects a few seconds later;
-      // its catch-up would read everything a second time.
-      if (kind === "catch-up" && Date.now() - lastRunAt < CATCH_UP_GRACE_MS) return;
+      // Coming back to the app reads at once (below); when the socket dropped while the app was
+      // hidden, its reconnect catch-up a few seconds later would read everything a second time.
+      if (kind === "catch-up" && readRecently()) return;
       schedule(signalTimer, 2_000, next => { signalTimer = next; });
     });
     // Coming back to the app (#205): the poll skipped while it was hidden, so read again now
@@ -96,8 +100,10 @@ export function useWatchStateRefresh(refresh: () => unknown, debounceMs = 300, p
     };
     document.addEventListener("visibilitychange", onVisible);
     if (pollMs) {
+      // webOS holds timers while the app is hidden, so a tick that fell due then fires the moment it
+      // comes back, just after the read above: measured on a webOS 22 TV, it read Home twice.
       const tick = () => {
-        if (document.visibilityState === "visible") run();
+        if (document.visibilityState === "visible" && !readRecently()) run();
       };
       pollRef.current = window.setInterval(tick, pollMs);
     }

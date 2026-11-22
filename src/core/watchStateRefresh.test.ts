@@ -57,4 +57,25 @@ describe("Home's rows when the app comes back (#205)", () => {
       vi.useRealTimers();
     }
   });
+
+  it("skips a poll tick that fires just after the read on return, and polls as usual after (#217)", async () => {
+    vi.useFakeTimers();
+    try {
+      const refresh = vi.fn(() => Promise.resolve());
+      function Probe() { useWatchStateRefresh(refresh, 300, 20_000); return null; }
+      const root = createRoot(document.createElement("div"));
+      await act(async () => { root.render(createElement(Probe)); });
+      await act(async () => { vi.advanceTimersByTime(19_000); setVisibility("hidden"); });
+      // The app comes back just before the held tick fires, as on the TV.
+      await act(async () => { setVisibility("visible"); });
+      await act(async () => { vi.advanceTimersByTime(1_000); });
+      expect(refresh).toHaveBeenCalledTimes(1);
+      // The next tick, 20 s later, reads.
+      await act(async () => { vi.advanceTimersByTime(20_000); });
+      expect(refresh).toHaveBeenCalledTimes(2);
+      await act(async () => { root.unmount(); });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
