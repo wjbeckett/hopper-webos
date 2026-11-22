@@ -9,6 +9,7 @@ import { setCardOverlaysEnabled, useCardOverlays } from "../core/cardOverlayStor
 import { clearDeviceSubtitleAppearance, clearScopedSetting, clearSetting, DEFAULT_SUBTITLE_APPEARANCE, getAccountRole, getEffectiveSettings, getMetadataAiAvailable, getSettingsContract, supportsTextOpacity, putProfileSubtitleAppearance, isClientLocal, putDeviceSubtitleAppearance, putScopedSetting, putSetting } from "../api/settings";
 import { SUBTITLE_APPEARANCE_CHOICES, settingsAppearanceChoices, subtitleChoiceLabel } from "../core/subtitleStyle";
 import type { SettingDefinition, SettingOption, SettingsContract, SubtitleAppearance } from "../api/settings";
+import { loadPreferredResolution } from "../api/playback";
 import { getPlaybackConnection, resetLearnedLimit, runSpeedTest } from "../api/playbackConnection";
 import type { PlaybackConnection } from "../api/playbackConnection";
 import { getDeviceId } from "../platform/device";
@@ -583,6 +584,12 @@ export function SettingsScreen({
   }
 
   async function savePlaybackSetting(definition: SettingDefinition, value: unknown) {
+    await savePlaybackSettingValue(definition, value);
+    // Version Auto follows the profile's Resolution (#199): pick up the new effective value.
+    if (definition.key === "playback.preferred_quality") void loadPreferredResolution(session);
+  }
+
+  async function savePlaybackSettingValue(definition: SettingDefinition, value: unknown) {
     const key = definition.key;
     if (layered(key)) {
       const previous = values.get(key);
