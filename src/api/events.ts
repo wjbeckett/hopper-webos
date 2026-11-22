@@ -6,7 +6,12 @@ const CHANNELS = ["user_state", "catalog"];
 const INITIAL_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_MS = 30_000;
 
-export type RealtimeSignal = () => void;
+/**
+ * "catch-up" after a reconnect, for whatever changed while the socket was down; "change" when the
+ * server reports a change. Screens that have just read everything can skip a catch-up (#217).
+ */
+export type SignalKind = "catch-up" | "change";
+export type RealtimeSignal = (kind: SignalKind) => void;
 
 type SocketFrame = {
   type?: string;
@@ -30,11 +35,15 @@ export function connectEventsSocket(session: Session, onSignal: RealtimeSignal):
    */
   let connectedBefore = false;
 
-  const signal = () => {
+  /** What the pending signal will say: a change wins over a catch-up in the same 2 s. */
+  let pendingKind: SignalKind = "catch-up";
+  const signal = (kind: SignalKind) => {
+    if (kind === "change") pendingKind = "change";
     if (signalTimer !== undefined) return;
+    if (kind === "catch-up") pendingKind = "catch-up";
     signalTimer = window.setTimeout(() => {
       signalTimer = undefined;
-      if (!disposed) onSignal();
+      if (!disposed) onSignal(pendingKind);
     }, 2_000);
   };
 
@@ -91,7 +100,7 @@ export function connectEventsSocket(session: Session, onSignal: RealtimeSignal):
       connectedBefore = true;
       socket?.send(JSON.stringify({ type: "subscribe", channels: CHANNELS }));
       closeTimer = window.setTimeout(() => socket?.close(1000, "max-connection"), Math.max(1, ticket.max_connection_seconds) * 1000);
-      if (reconnect) signal();
+      if (reconnect) signal("catch-up");
     };
     socket.onmessage = (event) => {
       let frame: SocketFrame;
@@ -101,12 +110,12 @@ export function connectEventsSocket(session: Session, onSignal: RealtimeSignal):
         return;
       }
       if (frame.type === "subscribed" || frame.type === "snapshot") {
-        if (reconnect) signal();
+        if (reconnect) signal("catch-up");
         return;
       }
       if (frame.channel === "user_state" && frame.data?.profile_id && session.profileId
         && frame.data.profile_id !== session.profileId) return;
-      signal();
+      signal("change");
     };
     socket.onclose = () => {
       socket = undefined;

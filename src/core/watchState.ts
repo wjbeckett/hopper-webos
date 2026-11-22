@@ -5,7 +5,12 @@ import { invalidateWatchDetail } from "../api/playback";
 type Listener = (item: SiloItem) => void;
 
 const listeners = new Set<Listener>();
-const refreshListeners = new Set<() => void>();
+const refreshListeners = new Set<(kind: RailsChange) => void>();
+
+/** "catch-up": the events socket reconnected and asks for a read in case something changed meanwhile. */
+export type RailsChange = "catch-up" | "change";
+/** A catch-up this soon after a read has started is skipped: that read already covers it (#217). */
+export const CATCH_UP_GRACE_MS = 10_000;
 
 export function publishWatchState(item: SiloItem) {
   // The item's position or watched flag changed: its cached /watch response is stale now.
@@ -29,8 +34,8 @@ export function subscribePlaybackSettled(listener: (ids: string[]) => void) {
   return () => { settledListeners.delete(listener); };
 }
 
-export function publishRailsChanged() {
-  for (const listener of [...refreshListeners]) listener();
+export function publishRailsChanged(kind: RailsChange = "change") {
+  for (const listener of [...refreshListeners]) listener(kind);
 }
 
 export function subscribeWatchState(listener: Listener) {
@@ -38,7 +43,7 @@ export function subscribeWatchState(listener: Listener) {
   return () => { listeners.delete(listener); };
 }
 
-function subscribeRailsChanged(listener: () => void) {
+function subscribeRailsChanged(listener: (kind: RailsChange) => void) {
   refreshListeners.add(listener);
   return () => { refreshListeners.delete(listener); };
 }
@@ -51,12 +56,15 @@ export function useWatchStateRefresh(refresh: () => unknown, debounceMs = 300, p
   refreshRef.current = refresh;
 
   useEffect(() => {
+    /** When the last read started, so a reconnect's catch-up right after it can be skipped (#217). */
+    let lastRunAt = -Infinity;
     const run = () => {
       if (busyRef.current) {
         queuedRef.current = true;
         return;
       }
       busyRef.current = true;
+      lastRunAt = Date.now();
       Promise.resolve(refreshRef.current()).catch(() => undefined).finally(() => {
         busyRef.current = false;
         if (queuedRef.current) {
@@ -75,7 +83,12 @@ export function useWatchStateRefresh(refresh: () => unknown, debounceMs = 300, p
     let busTimer: number | undefined;
     let signalTimer: number | undefined;
     const unsubscribeBus = subscribeWatchState(() => schedule(busTimer, debounceMs, next => { busTimer = next; }));
-    const unsubscribeSignals = subscribeRailsChanged(() => schedule(signalTimer, 2_000, next => { signalTimer = next; }));
+    const unsubscribeSignals = subscribeRailsChanged(kind => {
+      // Coming back to the app reads at once (below) and the socket reconnects a few seconds later;
+      // its catch-up would read everything a second time.
+      if (kind === "catch-up" && Date.now() - lastRunAt < CATCH_UP_GRACE_MS) return;
+      schedule(signalTimer, 2_000, next => { signalTimer = next; });
+    });
     // Coming back to the app (#205): the poll skipped while it was hidden, so read again now
     // rather than up to a poll later, as Android TV does when its Home returns.
     const onVisible = () => {
