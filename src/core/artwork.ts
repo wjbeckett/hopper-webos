@@ -12,7 +12,7 @@
  * equivalent of LocalImagePresentationDeferral + DeferImagePresentationWhileScrolling.
  */
 
-function decodeBase64(hash: string): Uint8Array | null {
+export function decodeBase64(hash: string): Uint8Array | null {
   try {
     const binary = atob(hash);
     const bytes = new Uint8Array(binary.length);

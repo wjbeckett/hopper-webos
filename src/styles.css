@@ -2167,7 +2167,8 @@ textarea:hover:not(:focus) {
   inset: 0;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 260ms ease-out;
+  /* The corner wash (#207) blends more slowly than the art changes, as on Apple TV. */
+  transition: opacity 700ms ease-in-out;
 }
 
 .home-backdrop-tint.current.loaded,
@@ -5251,6 +5252,26 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
     linear-gradient(to left, transparent 0%, transparent 68%, var(--background) 100%) top right / 64% min(58vh, 640px) no-repeat,
     linear-gradient(to bottom, transparent 0%, transparent 58%, var(--background) 100%) top right / 64% min(58vh, 640px) no-repeat;
 }
+
+/* The corner wash (#207): a glow from each corner in the colours of the same quarter of the art,
+   above the shade so the rows don't darken it. It is a 96x54 canvas (renderCornerWash) scaled
+   up 20x by the compositor, with a hole where the art shows that blends along the art's soft
+   edges, so the art fades into the wash rather than into black. A CSS gradient behind a CSS mask
+   here was re-rastered at full size on every change and halved the frame rate on Home; the canvas
+   is one small texture. The two take turns, and the colours blend over 0.7 s while the art keeps
+   its own quicker fade, as on Apple TV. */
+.tv-backdrop-wash {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 96px;
+  height: 54px;
+  transform: scale(20);
+  transform-origin: 0 0;
+  opacity: 0;
+  transition: opacity 700ms ease-in-out;
+}
+.tv-backdrop-wash.shown { opacity: 1; }
 
 /* Top-nav lockup: mark + word. Mark viewBox is 664x840 (portrait). */
 .tv-nav .brand-mark { width: auto; min-width: 0; }
