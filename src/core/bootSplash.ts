@@ -4,13 +4,18 @@
  * The splash and its animation are plain HTML and CSS so they are on screen from the first
  * paint. This module only decides when to lift it: once the animation has played in full,
  * counted from the frame it actually started on (index.html sets `__bootSplashStart` and
- * fires "boot-splash-start"), not from when the app mounted. The app renders underneath
- * meanwhile, so lifting the splash reveals a loaded screen. Remote keys are swallowed while
- * it is up. It plays on launches with a saved session only.
+ * fires "boot-splash-start"), not from when the app mounted. The app loads and lays out
+ * underneath meanwhile but isn't drawn until the animation has finished (#218: drawing it
+ * stalled the GPU thread the animation needs); then it is drawn behind the finished mark, and
+ * the splash lifts once its artwork has loaded and frames are flowing again, so the fade is
+ * smooth too. Remote keys are swallowed while it is up. It plays on launches with a saved
+ * session only.
  */
 
 /** Length of the animation plus a short hold on the finished mark (timeline in index.html). */
-const ANIMATION_MS = 2600;
+const ANIMATION_MS = 1950;
+/** When the last part stops moving: the app is drawn from here, behind the still mark. */
+const MOTION_MS = 1700;
 const FADE_MS = 400;
 /** If the page has not been reported visible this long after the app starts, start the animation anyway. */
 const START_FALLBACK_MS = 4000;
@@ -19,6 +24,11 @@ const MAX_WAIT_MS = 12000;
 
 /** After the animation, wait up to this long for the artwork on screen to load before lifting. */
 const CONTENT_WAIT_MS = 1500;
+/** Then wait up to this long for frames to flow again, so the fade doesn't stutter. */
+const SETTLE_WAIT_MS = 1000;
+/** Frames count as flowing after this many in a row, each within this many ms of the last. */
+const SMOOTH_FRAMES = 4;
+const SMOOTH_FRAME_MS = 40;
 
 /** True when the app has rendered images and every one inside the viewport has loaded. */
 function contentReady(): boolean {
@@ -69,28 +79,47 @@ export function releaseBootSplashWhenDone(play: boolean) {
     const timeline = (window as SplashWindow).__bootSplashLog ?? [];
     timeline.push(["app-start", Math.round(appStartedAt)], ["lift", Math.round(performance.now())]);
     console.info("[Hopper] startup splash", timeline.map(([name, at]) => `${name}@${at}`).join(" "));
-    splash.classList.add("leaving");
+    splash.classList.add("reveal", "leaving");
     window.setTimeout(() => {
       splash.remove();
       window.removeEventListener("keydown", swallow, true);
       window.removeEventListener("keyup", swallow, true);
     }, FADE_MS);
   };
-  // The animation is over. Hold the splash a little longer if the screen underneath is still
-  // loading its artwork, so lifting it reveals a finished screen and not empty cards.
+  // Lift once frames are flowing: drawing the app for the first time keeps the GPU busy for a
+  // moment, and the fade would stutter through it.
+  const finishWhenSmooth = () => {
+    const deadline = performance.now() + SETTLE_WAIT_MS;
+    let last = performance.now();
+    let smooth = 0;
+    const tick = (now: number) => {
+      if (done) return;
+      smooth = now - last <= SMOOTH_FRAME_MS ? smooth + 1 : 0;
+      last = now;
+      if (smooth >= SMOOTH_FRAMES || performance.now() >= deadline) finish();
+      else requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  };
+  // The animation is over: draw the app behind the finished mark. Hold the splash a little
+  // longer if the screen is still loading its artwork, so lifting it reveals a finished screen.
   const waitForContent = () => {
+    splash.classList.add("reveal");
     const deadline = performance.now() + CONTENT_WAIT_MS;
     const check = () => {
       if (done) return;
-      if (contentReady() || performance.now() >= deadline) finish();
+      if (contentReady() || performance.now() >= deadline) finishWhenSmooth();
       else playedTimer = window.setTimeout(check, 100);
     };
     check();
   };
+  let revealTimer: number | undefined;
   const onStart = () => {
     const startedAt = (window as SplashWindow).__bootSplashStart;
     if (startedAt == null || done) return;
     window.clearTimeout(playedTimer);
+    window.clearTimeout(revealTimer);
+    revealTimer = window.setTimeout(() => splash.classList.add("reveal"), Math.max(0, startedAt + MOTION_MS - performance.now()));
     playedTimer = window.setTimeout(waitForContent, Math.max(0, startedAt + ANIMATION_MS - performance.now()));
   };
   const startFallback = window.setTimeout(() => (window as SplashWindow).__bootSplashPlay?.(), START_FALLBACK_MS);
