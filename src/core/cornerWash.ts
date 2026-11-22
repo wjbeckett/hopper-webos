@@ -137,6 +137,52 @@ export function cornerWash(thumbhash: string | null | undefined) {
   return corners ? cornerGradient(corners) : null;
 }
 
+/**
+ * The TV's wash as pixels (#207): the same four glows as `cornerGradient`, composited in the same
+ * order, with a hole where the art shows that blends out along the art's soft left and bottom edges.
+ *
+ * On a TV the wash goes on a small canvas scaled up by the compositor. A CSS gradient behind a CSS
+ * mask was re-rastered at full screen size on every change, which halved the frame rate on Home
+ * (measured on a webOS 22 TV); a canvas is a texture uploaded once, so scaling and fading it costs
+ * the compositor only. `hole` is in the bitmap's pixels: the art covers x from `left` and y down to
+ * `bottom`, and fades in over `fadeX` and `fadeY`.
+ */
+export function renderCornerWash(corners: Corners, width: number, height: number, hole?: { left: number; fadeX: number; top: number; bottom: number }) {
+  const pixels = new Uint8ClampedArray(width * height * 4);
+  const rx = width * 4 / 3;
+  const ry = height * 4 / 3;
+  // Bottom of the stack first, as CSS paints a background list from the last layer up.
+  const glows: Array<[Rgb, number, number]> = [[corners.bottomLeft, 0, height], [corners.bottomRight, width, height], [corners.topRight, width, 0], [corners.topLeft, 0, 0]];
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      let r = 0, g = 0, b = 0, a = 0;
+      for (const [colour, cx, cy] of glows) {
+        const dx = (x + 0.5 - cx) / rx;
+        const dy = (y + 0.5 - cy) / ry;
+        const alpha = Math.max(0, 1 - Math.sqrt(dx * dx + dy * dy));
+        if (!alpha) continue;
+        const out = alpha + a * (1 - alpha);
+        r = (colour.r * alpha + r * a * (1 - alpha)) / out;
+        g = (colour.g * alpha + g * a * (1 - alpha)) / out;
+        b = (colour.b * alpha + b * a * (1 - alpha)) / out;
+        a = out;
+      }
+      if (hole) {
+        // Wash shows left of the art (fading out across fadeX) and below it (fading in across fadeY).
+        const left = Math.min(1, Math.max(0, (hole.left + hole.fadeX - (x + 0.5)) / hole.fadeX));
+        const below = Math.min(1, Math.max(0, (y + 0.5 - hole.top) / (hole.bottom - hole.top)));
+        a *= left + below - left * below;
+      }
+      const index = (y * width + x) * 4;
+      pixels[index] = r * 255;
+      pixels[index + 1] = g * 255;
+      pixels[index + 2] = b * 255;
+      pixels[index + 3] = a * 255;
+    }
+  }
+  return pixels;
+}
+
 const cache = new Map<string, Corners | null>();
 
 /** The corner colours of a backdrop's ThumbHash, cached; null with no hash or a bad one. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cornerGradient, sampleCorners, thumbhashCorners } from "./cornerWash";
+import { cornerGradient, renderCornerWash, sampleCorners, thumbhashCorners } from "./cornerWash";
 
 /** A `size` x `size` RGBA bitmap whose four quarters are flat colours. */
 function quarters(size: number, tl: number[], tr: number[], bl: number[], br: number[]) {
@@ -38,5 +38,27 @@ describe("the Home backdrop's corner colours (#207)", () => {
     expect(thumbhashCorners(undefined)).toBeNull();
     expect(thumbhashCorners("!!")).toBeNull();
     expect(thumbhashCorners("1QcSHQRnh493V4dIh4eXh1h4kJUI")).not.toBeNull();
+  });
+});
+
+describe("the TV's wash bitmap (#207)", () => {
+  const corners = { topLeft: { r: 0.2, g: 0, b: 0 }, topRight: { r: 0, g: 0, b: 0.4 }, bottomRight: { r: 0, g: 0.4, b: 0 }, bottomLeft: { r: 0.4, g: 0.4, b: 0 } };
+  const at = (pixels: Uint8ClampedArray, width: number, x: number, y: number) => Array.from(pixels.slice((y * width + x) * 4, (y * width + x) * 4 + 4));
+
+  it("is each corner's colour at that corner, close to opaque", () => {
+    const pixels = renderCornerWash(corners, 40, 20);
+    expect(at(pixels, 40, 0, 0).slice(0, 2)).toEqual([51, 0]); expect(at(pixels, 40, 0, 0)[3]).toBeGreaterThan(240);
+    const topRight = at(pixels, 40, 39, 0); expect(topRight[2]).toBeGreaterThan(Math.max(topRight[0], topRight[1]));
+    expect(at(pixels, 40, 0, 19)[3]).toBeGreaterThan(240);
+  });
+
+  it("leaves a hole where the art is, and keeps the wash outside it", () => {
+    const hole = { left: 20, fadeX: 5, top: 5, bottom: 15 };
+    const pixels = renderCornerWash(corners, 40, 20, hole);
+    expect(at(pixels, 40, 35, 2)[3]).toBe(0);
+    expect(at(pixels, 40, 5, 2)[3]).toBeGreaterThan(230);
+    expect(at(pixels, 40, 35, 19)[3]).toBeGreaterThan(200);
+    expect(at(pixels, 40, 22, 2)[3]).toBeGreaterThan(0);
+    expect(at(pixels, 40, 22, 2)[3]).toBeLessThan(255);
   });
 });

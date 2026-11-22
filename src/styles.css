@@ -5237,12 +5237,12 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 }
 
 /* The corner wash (#207): a glow from each corner in the colours of the same quarter of the art,
-   above the shade so the rows don't darken it. It is painted at a tenth of the screen's size and
-   scaled up, which costs a tenth of the raster for a picture this smooth. The mask leaves a hole
-   where the art shows and blends into it along the art's soft left and bottom edges, so the art
-   fades into the wash rather than into black (in tenths of 1920x1080: the art's box starts at
-   x 69 and its bottom fade runs from y 36 to 63). The two layers take turns, and the colours blend
-   over 0.7 s while the art keeps its own quicker fade, as on Apple TV. */
+   above the shade so the rows don't darken it. It is a 192x108 canvas (renderCornerWash) scaled
+   up 10x by the compositor, with a hole where the art shows that blends along the art's soft
+   edges, so the art fades into the wash rather than into black. A CSS gradient behind a CSS mask
+   here was re-rastered at full size on every change and halved the frame rate on Home; the canvas
+   is one small texture. The two take turns, and the colours blend over 0.7 s while the art keeps
+   its own quicker fade, as on Apple TV. */
 .tv-backdrop-wash {
   position: absolute;
   top: 0;
@@ -5253,8 +5253,6 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
   transform-origin: 0 0;
   opacity: 0;
   transition: opacity 700ms ease-in-out;
-  -webkit-mask-image: linear-gradient(to right, #000 69px, transparent 108px), linear-gradient(to bottom, transparent 36px, #000 63px);
-  mask-image: linear-gradient(to right, #000 69px, transparent 108px), linear-gradient(to bottom, transparent 36px, #000 63px);
 }
 .tv-backdrop-wash.shown { opacity: 1; }
 

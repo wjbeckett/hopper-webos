@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "re
 import { backdropUrl, mediaLogoUrl } from "../api/silo";
 import { isResumable, ResumeProgress } from "./ResumeProgress";
 import type { HomeRail, Session, SiloItem } from "../types";
-import { cornerWash } from "../core/cornerWash";
+import { cornerGradient, renderCornerWash, thumbhashCorners, type Corners } from "../core/cornerWash";
 
 const warmBackdrops = new Map<string, HTMLImageElement>();
 
@@ -117,7 +117,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero({ ra
     lastHeroSwapAt.current = performance.now();
     setFocusedItem(item);
     const nextImage = backdropUrl(session, item);
-    const nextWash = nextImage ? cornerWash(item.BackdropThumbhash) : null;
+    const nextCorners = nextImage ? thumbhashCorners(item.BackdropThumbhash) : null;
+    const nextWash = nextCorners ? cornerGradient(nextCorners) : null;
     if (backdropTimer.current !== undefined) window.clearTimeout(backdropTimer.current);
     backdropTimer.current = undefined;
     if (tv) {
@@ -128,7 +129,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero({ ra
       // The wash changes when the backdrop does, so moving quickly along a row never repaints it.
       if (first) {
         tvBackdropRef.current?.show(nextImage);
-        tvBackdropRef.current?.wash(nextWash);
+        tvBackdropRef.current?.wash(nextCorners);
         return;
       }
       if (tvBackdropRef.current?.showing() === nextImage) {
@@ -139,7 +140,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero({ ra
       backdropTimer.current = window.setTimeout(() => {
         backdropTimer.current = undefined;
         tvBackdropRef.current?.show(nextImage);
-        tvBackdropRef.current?.wash(nextWash);
+        tvBackdropRef.current?.wash(nextCorners);
       }, TV_BACKDROP_SETTLE_MS);
       return;
     }
@@ -321,8 +322,8 @@ type TvBackdropHandle = {
   hide: () => void;
   /** The URL on screen or being loaded. */
   showing: () => string;
-  /** Crossfade the corner wash (#207) to `gradient`, or out with null. */
-  wash: (gradient: string | null) => void;
+  /** Crossfade the corner wash (#207) to these colours, or out with null. */
+  wash: (corners: Corners | null) => void;
 };
 
 /**
@@ -334,6 +335,12 @@ type TvBackdropHandle = {
  *
  * React renders this once. Sources and classes are set directly on the elements.
  */
+/** The TV wash's bitmap: a tenth of 1920x1080, scaled up by the compositor. */
+const WASH_WIDTH = 192;
+const WASH_HEIGHT = 108;
+/** Where the art sits in that bitmap (it covers 64% of the width from the right, and 58% of the height), with its soft edges. */
+const WASH_HOLE = { left: 69, fadeX: 39, top: 36, bottom: 63 };
+
 const TvBackdrop = forwardRef<TvBackdropHandle>(function TvBackdrop(_props, ref) {
   const first = useRef<HTMLImageElement>(null);
   const second = useRef<HTMLImageElement>(null);
@@ -341,9 +348,9 @@ const TvBackdrop = forwardRef<TvBackdropHandle>(function TvBackdrop(_props, ref)
   const front = useRef<0 | 1>(0);
   const wanted = useRef("");
   const token = useRef(0);
-  const washes = [useRef<HTMLDivElement>(null), useRef<HTMLDivElement>(null)];
+  const washes = [useRef<HTMLCanvasElement>(null), useRef<HTMLCanvasElement>(null)];
   const washFront = useRef<0 | 1>(0);
-  const washShown = useRef<string | null>(null);
+  const washShown = useRef<Corners | null>(null);
 
   useImperativeHandle(ref, () => ({
     show(url: string) {
@@ -383,15 +390,20 @@ const TvBackdrop = forwardRef<TvBackdropHandle>(function TvBackdrop(_props, ref)
       second.current?.classList.remove("shown");
     },
     showing: () => wanted.current,
-    wash(gradient: string | null) {
-      if (gradient === washShown.current) return;
-      washShown.current = gradient;
+    wash(corners: Corners | null) {
+      // Corners are cached per ThumbHash, so the same title gives the same object.
+      if (corners === washShown.current) return;
+      washShown.current = corners;
       const front = washes[washFront.current].current;
       const back = washes[1 - washFront.current].current;
       if (!front || !back) return;
       front.classList.remove("shown");
-      if (!gradient) return;
-      back.style.backgroundImage = gradient;
+      if (!corners) return;
+      const context = back.getContext("2d");
+      if (!context) return;
+      const image = context.createImageData(WASH_WIDTH, WASH_HEIGHT);
+      image.data.set(renderCornerWash(corners, WASH_WIDTH, WASH_HEIGHT, WASH_HOLE));
+      context.putImageData(image, 0, 0);
       back.classList.add("shown");
       washFront.current = (1 - washFront.current) as 0 | 1;
     }
@@ -402,8 +414,8 @@ const TvBackdrop = forwardRef<TvBackdropHandle>(function TvBackdrop(_props, ref)
       <img ref={first} className="tv-backdrop-image" alt="" decoding="async" />
       <img ref={second} className="tv-backdrop-image" alt="" decoding="async" />
       <div className="tv-backdrop-shade" />
-      <div ref={washes[0]} className="tv-backdrop-wash" />
-      <div ref={washes[1]} className="tv-backdrop-wash" />
+      <canvas ref={washes[0]} className="tv-backdrop-wash" width={WASH_WIDTH} height={WASH_HEIGHT} />
+      <canvas ref={washes[1]} className="tv-backdrop-wash" width={WASH_WIDTH} height={WASH_HEIGHT} />
     </div>
   );
 });
