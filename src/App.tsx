@@ -1,6 +1,8 @@
 import { getEffectiveSettings } from "./api/settings";
 import { hydrateTitleArt } from "./core/titleArt";
 import { setThemeMusicPreferences, setThemeMusicSession } from "./core/themeMusic";
+import { Screensaver } from "./components/Screensaver";
+import { screensaverMinutes, subscribeScreensaver } from "./core/screensaver";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { TopNav, type AppSection, type LibraryLanding } from "./components/TopNav";
 import { advanceShuffle, createShuffle, deleteShuffle, getCatalogItem, getEpisodes, getLibraries, getProfileAppearance, getRequestsFeatureStatus, getServerAccent, getSeasons, getSetupStatus, restoreDefaultProfile } from "./api/silo";
@@ -60,8 +62,6 @@ import type { HomeRail, Session, SiloCollection, SiloItem, SiloLibrary, SiloProf
 import { LoadingState } from "./components/LoadingState";
 
 import { installClientLogCapture } from "./core/clientLogs";
-import { Screensaver } from "./components/Screensaver";
-import { screensaverMinutes, subscribeScreensaver } from "./core/screensaver";
 
 installClientLogCapture();
 
@@ -370,31 +370,6 @@ export default function App() {
     localStorage.setItem(NAVIGATION_KEY, JSON.stringify(saved));
   }, [navigationRestored, route, section, session?.profileId, session?.serverUrl]);
 
-  useEffect(() => {
-    setThemeMusicSession(session ?? null);
-    if (!session?.profileId) return;
-    let alive = true;
-    void hydrateTitleArt(session);
-    getEffectiveSettings(session, ["ui.theme_music_enabled", "ui.theme_music_loop"]).then(effective => {
-      if (alive) setThemeMusicPreferences(effective.get("ui.theme_music_enabled")?.value === true, effective.get("ui.theme_music_loop")?.value === true);
-    }).catch(() => undefined);
-    return () => { alive = false; };
-  }, [session?.profileId, session?.serverUrl]);
-
-  useEffect(() => {
-    if (!session?.profileId) return;
-    let alive = true;
-    getProfileAppearance(session).then(appearance => {
-      if (!alive) return;
-      const root = document.documentElement;
-      root.dataset.textScale = appearance.textScale;
-      root.dataset.textWeight = appearance.textWeight;
-      root.dataset.highContrast = appearance.highContrast ? "true" : "false";
-      root.dataset.posterSize = appearance.posterSize;
-    }).catch(error => console.warn("[Hopper] profile appearance", error));
-    return () => { alive = false; };
-  }, [session?.profileId]);
-
   // The screensaver (#209): after the chosen minutes with no key press or pointer movement, on any
   // screen but the player, while someone is signed in. The key that closes it goes no further, and
   // nor does its key-up, so it can't also act on the screen behind.
@@ -455,6 +430,31 @@ export default function App() {
   }, [screensaverSession]);
   // A phone starting a title, or anything else that changes the screen, closes it.
   useEffect(() => { setScreensaverOn(false); }, [route, section]);
+
+  useEffect(() => {
+    setThemeMusicSession(session ?? null);
+    if (!session?.profileId) return;
+    let alive = true;
+    void hydrateTitleArt(session);
+    getEffectiveSettings(session, ["ui.theme_music_enabled", "ui.theme_music_loop"]).then(effective => {
+      if (alive) setThemeMusicPreferences(effective.get("ui.theme_music_enabled")?.value === true, effective.get("ui.theme_music_loop")?.value === true);
+    }).catch(() => undefined);
+    return () => { alive = false; };
+  }, [session?.profileId, session?.serverUrl]);
+
+  useEffect(() => {
+    if (!session?.profileId) return;
+    let alive = true;
+    getProfileAppearance(session).then(appearance => {
+      if (!alive) return;
+      const root = document.documentElement;
+      root.dataset.textScale = appearance.textScale;
+      root.dataset.textWeight = appearance.textWeight;
+      root.dataset.highContrast = appearance.highContrast ? "true" : "false";
+      root.dataset.posterSize = appearance.posterSize;
+    }).catch(error => console.warn("[Hopper] profile appearance", error));
+    return () => { alive = false; };
+  }, [session?.profileId]);
 
   // The accent (#201): the profile's own choice on this TV, else the server's colour, shown at
   // once from the last one seen and then from the server's current one.
