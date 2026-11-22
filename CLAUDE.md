@@ -87,7 +87,7 @@ Keep each concern in its own layer:
 - Remote and focus behaviour goes in `src/navigation`.
 
 ### App shell and API
-- **`src/App.tsx` is the router and state root.** There is no router library. Auth routes (`AuthRoute`), top-level sections (`AppSection` from `TopNav`) and a `DetailRoute` union cover details, series, person and player. The last route is saved to `localStorage` (`silo-webos-navigation-v1`). `safeBrowsingRoute` never restores straight into the player. App.tsx also applies profile theme tokens (`THEME_TOKENS`), installs spatial navigation and connects the realtime events socket.
+- **`src/App.tsx` is the router and state root.** There is no router library. Auth routes (`AuthRoute`), top-level sections (`AppSection` from `TopNav`) and a `DetailRoute` union cover details, series, person and player. The last route is saved to `localStorage` (`silo-webos-navigation-v1`). `safeBrowsingRoute` never restores straight into the player. App.tsx also applies profile theme tokens (`THEME_TOKENS`), runs the screensaver's idle timer (`components/Screensaver.tsx`, `src/core/screensaver.ts`, #209; never over the player), installs spatial navigation and connects the realtime events socket.
 - **The startup splash is in `index.html`,** not in React: static markup and CSS that is on screen from the first paint, with each moving part as its own HTML element. `src/core/bootSplash.ts` lifts it once the animation has played. It plays on launches with a saved session only.
 - **`src/api/`:**
   - `silo.ts` is the main client. `requestV2`/`v2Url` build `/api/v2/...` calls from a `Session`. `refreshSession` performs single-flight token refresh per session. A refresh the server refuses (400, 401, 403) ends the sign-in; any other failure keeps it.
