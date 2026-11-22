@@ -335,11 +335,11 @@ type TvBackdropHandle = {
  *
  * React renders this once. Sources and classes are set directly on the elements.
  */
-/** The TV wash's bitmap: a tenth of 1920x1080, scaled up by the compositor. */
-const WASH_WIDTH = 192;
-const WASH_HEIGHT = 108;
+/** The TV wash's bitmap: a twentieth of 1920x1080, scaled up by the compositor. It is a soft blur, so more pixels add nothing but work. */
+const WASH_WIDTH = 96;
+const WASH_HEIGHT = 54;
 /** Where the art sits in that bitmap (it covers 64% of the width from the right, and 58% of the height), with its soft edges. */
-const WASH_HOLE = { left: 69, fadeX: 39, top: 36, bottom: 63 };
+const WASH_HOLE = { left: 34.5, fadeX: 19.5, top: 18, bottom: 31.5 };
 
 const TvBackdrop = forwardRef<TvBackdropHandle>(function TvBackdrop(_props, ref) {
   const first = useRef<HTMLImageElement>(null);

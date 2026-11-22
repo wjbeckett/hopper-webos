@@ -5237,8 +5237,8 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 }
 
 /* The corner wash (#207): a glow from each corner in the colours of the same quarter of the art,
-   above the shade so the rows don't darken it. It is a 192x108 canvas (renderCornerWash) scaled
-   up 10x by the compositor, with a hole where the art shows that blends along the art's soft
+   above the shade so the rows don't darken it. It is a 96x54 canvas (renderCornerWash) scaled
+   up 20x by the compositor, with a hole where the art shows that blends along the art's soft
    edges, so the art fades into the wash rather than into black. A CSS gradient behind a CSS mask
    here was re-rastered at full size on every change and halved the frame rate on Home; the canvas
    is one small texture. The two take turns, and the colours blend over 0.7 s while the art keeps
@@ -5247,9 +5247,9 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
   position: absolute;
   top: 0;
   left: 0;
-  width: 192px;
-  height: 108px;
-  transform: scale(10);
+  width: 96px;
+  height: 54px;
+  transform: scale(20);
   transform-origin: 0 0;
   opacity: 0;
   transition: opacity 700ms ease-in-out;
