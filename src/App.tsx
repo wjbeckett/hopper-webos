@@ -59,6 +59,8 @@ import type { HomeRail, Session, SiloCollection, SiloItem, SiloLibrary, SiloProf
 import { LoadingState } from "./components/LoadingState";
 
 import { installClientLogCapture } from "./core/clientLogs";
+import { Screensaver } from "./components/Screensaver";
+import { screensaverMinutes, subscribeScreensaver } from "./core/screensaver";
 
 installClientLogCapture();
 
@@ -404,6 +406,64 @@ export default function App() {
     }).catch(error => console.warn("[Hopper] profile appearance", error));
     return () => { alive = false; };
   }, [session?.profileId]);
+
+  // The screensaver (#209): after the chosen minutes with no key press or pointer movement, on any
+  // screen but the player, while someone is signed in. The key that closes it goes no further, and
+  // nor does its key-up, so it can't also act on the screen behind.
+  const [screensaverOn, setScreensaverOn] = useState(false);
+  const screensaverOnRef = useRef(false);
+  screensaverOnRef.current = screensaverOn;
+  const screensaverSession = !!session;
+  useEffect(() => {
+    if (!screensaverSession) { setScreensaverOn(false); return; }
+    let timer: number | undefined;
+    let swallowKey: string | null = null;
+    const arm = () => {
+      window.clearTimeout(timer);
+      const minutes = screensaverMinutes();
+      if (!minutes) return;
+      timer = window.setTimeout(() => {
+        if (document.visibilityState === "visible" && !document.querySelector(".player-shell")) setScreensaverOn(true);
+        else arm();
+      }, minutes * 60_000);
+    };
+    const wake = () => {
+      if (!screensaverOnRef.current) return false;
+      setScreensaverOn(false);
+      return true;
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (wake()) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        swallowKey = event.key;
+      }
+      arm();
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (swallowKey === null || event.key !== swallowKey) return;
+      swallowKey = null;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+    const onPointer = () => { wake(); arm(); };
+    window.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("keyup", onKeyUp, true);
+    window.addEventListener("pointermove", onPointer, true);
+    window.addEventListener("wheel", onPointer, true);
+    const unsubscribe = subscribeScreensaver(arm);
+    arm();
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("keyup", onKeyUp, true);
+      window.removeEventListener("pointermove", onPointer, true);
+      window.removeEventListener("wheel", onPointer, true);
+      unsubscribe();
+    };
+  }, [screensaverSession]);
+  // A phone starting a title, or anything else that changes the screen, closes it.
+  useEffect(() => { setScreensaverOn(false); }, [route, section]);
 
   useEffect(() => {
     const onBack = (event: KeyboardEvent) => {
@@ -876,7 +936,7 @@ export default function App() {
   }
 
   // Over every signed-in screen: the connection-lost dialog and the allow-a-phone question (#162).
-  const overlays = <><ConnectionLost serverName={serverRegistry.active()?.name ?? "the server"} /><PhoneApproval /></>;
+  const overlays = <><ConnectionLost serverName={serverRegistry.active()?.name ?? "the server"} /><PhoneApproval />{screensaverOn && session ? <Screensaver session={session} onEmpty={() => setScreensaverOn(false)} /> : null}</>;
 
   if (profileError) {
     return (

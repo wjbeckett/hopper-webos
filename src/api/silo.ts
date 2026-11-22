@@ -886,6 +886,17 @@ async function browseArtworkParams(session: Session): Promise<Array<[string, str
   return slots.has("poster") ? [["poster_width", "260"]] : [];
 }
 
+/**
+ * Random movies and series with backdrops, for the screensaver (#209): `GET /catalog`, sorted
+ * `random`. The server applies the profile's library access and rating limits.
+ */
+export async function getScreensaverTitles(session: Session, limit = 40): Promise<SiloItem[]> {
+  const params = new URLSearchParams({ source: "query", type: "video", sort: "random", limit: String(limit), skip_total: "true" });
+  if ((await acceptedWidthSlots(session)).has("backdrop")) params.set("backdrop_width", "1920");
+  const page = await requestV2<NativeCatalogPage>(session, `/catalog?${params}`);
+  return (page.items ?? []).map(toItem).filter(item => item.Id && item.BackdropUrl);
+}
+
 export async function getHomeRails(session: Session): Promise<HomeRail[]> {
   const [layout, artwork] = await Promise.all([
     requestV2<NativeHomeLayout>(session, "/home/layout"),

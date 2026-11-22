@@ -5679,3 +5679,53 @@ html[data-poster-size="large"] .rail-track.wide-rail { grid-auto-columns: clamp(
 .card-badges-shape-square .card-badge { border-radius: calc(var(--u) * 2); }
 .card-badges-plain .card-badge { text-transform: none; }
 .card-badges-shadow .card-badge { box-shadow: 0 2px 6px rgba(0, 0, 0, .35); }
+
+/* The screensaver (#209): random titles' backdrops, with each name revealed after a few seconds.
+   Two images trade places by opacity; only opacity changes, on layers that stay. Below the phone
+   approval prompt (950), so a phone asking to connect is never hidden. */
+.screensaver {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 900;
+  overflow: hidden;
+  background: #000;
+  cursor: none;
+}
+.screensaver-image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 1600ms ease-in-out;
+  will-change: opacity;
+}
+.screensaver-image.shown { opacity: 1; }
+.screensaver-shade {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 40%;
+  background: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,.65) 100%);
+}
+.screensaver-caption {
+  position: absolute;
+  bottom: 72px;
+  display: flex;
+  flex-direction: column;
+  max-width: 40%;
+  opacity: 0;
+  transition: opacity 1200ms ease-out;
+}
+.screensaver-caption.left { left: 96px; align-items: flex-start; text-align: left; }
+.screensaver-caption.right { right: 96px; align-items: flex-end; text-align: right; }
+.screensaver-caption.shown { opacity: 1; }
+.screensaver-logo { max-width: 520px; max-height: 180px; object-fit: contain; }
+.screensaver-title { color: #fff; font-size: 3.5rem; line-height: 1.1; font-weight: calc(700 + var(--font-weight-boost)); }
+.screensaver-year { margin-top: 12px; color: rgba(255,255,255,.8); font-size: 1.75rem; }
