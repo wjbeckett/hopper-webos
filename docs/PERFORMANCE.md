@@ -171,7 +171,14 @@ Desktop Chrome, headless, CPU slowed 6 times, the built app from disk with no se
 | Before | 110 ms | 202 ms | 215 ms |
 | After | 79 ms | 168 ms | 178 ms |
 
-Not measured on a TV yet: launch to a usable Home with a saved session, five launches before and after.
+On a webOS 22 TV (50UQ9000PSD), seven cold launches each with a saved session, medians in ms since navigation:
+
+| | DOMContentLoaded | App code started | Splash lifted |
+| --- | --- | --- | --- |
+| Before | 815 | 871 | 4264 |
+| After | 679 | 777 | 4175 |
+
+The app starts about 100 ms sooner. What a viewer sees is mostly the splash: it plays for 2.6 s once the page has loaded, then waits up to 1.5 s for the artwork on screen. The first launch or two after installing a new build are slower (up to 2.5 s to DOMContentLoaded) while the TV caches the compiled code.
 
 ## Rules that came out of this
 
