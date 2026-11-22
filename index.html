@@ -44,6 +44,19 @@
         will-change: opacity;
       }
       #boot-splash.leaving { opacity: 0; }
+      /* The app is not drawn while the animation plays (#218). It loads and lays out underneath,
+         but a layer at opacity 0 is not rastered, so the GPU stays free for the splash: on a cold
+         start, drawing Home for the first time compiles shaders on the GPU thread that also draws
+         the screen, and the animation froze for half a second at a time. bootSplash.ts adds
+         "reveal" when the animation has finished, behind the finished mark. Opacity, not
+         visibility, so the app can still put focus where it wants. */
+      #boot-splash ~ #root { opacity: 0; }
+      #boot-splash.reveal ~ #root { opacity: 1; }
+      /* Blending the splash over the app needs shaders the TV compiles on first use, which froze
+         the fade for most of a second. At 0.99 (too little to see) the first blend happens while
+         nothing moves, and bootSplash.ts starts the fade once frames flow again. */
+      #boot-splash.reveal { opacity: .99; transition: none; }
+      #boot-splash.reveal.leaving { opacity: 0; transition: opacity 400ms ease-out; }
       /* The splash artwork puts the mark top at y=180; plain centring lands at ~192. */
       .bs-brand { display: flex; flex-direction: column; align-items: center; transform: translateY(-12px); }
       .bs-mark { position: relative; width: 412px; height: 521px; }
@@ -69,7 +82,10 @@
         letter-spacing: 2px;
       }
       #boot-splash.play .bs-body { animation: bs-drop 460ms cubic-bezier(.2, .9, .3, 1.25) both; }
-      #boot-splash.play .bs-react { animation: bs-hit 250ms ease-out 714ms, bs-hit 250ms ease-out 974ms, bs-hit 300ms ease-out 1234ms; }
+      /* One animation for the three bounces. Three animations of transform on one element can't
+         run on the compositor in Chrome 87 (the trace reports them as incompatible), so they ran on
+         the main thread, and the whole mark stalled while the app loaded behind the splash (#218). */
+      #boot-splash.play .bs-react { animation: bs-hits 820ms ease-out 714ms; }
       #boot-splash.play .bs-tile { animation: bs-tile 520ms linear both; }
       #boot-splash.play .bs-tile-a { animation-delay: 360ms; }
       #boot-splash.play .bs-tile-c { animation-delay: 620ms; }
@@ -90,10 +106,19 @@
         84% { opacity: 1; transform: translateY(-3.1px) rotate(-.5deg); animation-timing-function: ease-in-out; }
         100% { opacity: 1; transform: translateY(0) rotate(0); }
       }
-      @keyframes bs-hit {
+      /* The mark dips and springs back as each tile lands: 250 ms at 714 and 974 ms, 300 ms at
+         1234 ms, each down at 28% of its length and back up past rest at 62%. Here as one run of
+         820 ms from 714 ms; ease-out applies to every step, as it did to each bounce before. */
+      @keyframes bs-hits {
         0% { transform: translateY(0) scale(1, 1); }
-        28% { transform: translateY(5.6px) scale(1.022, .962); }
-        62% { transform: translateY(-1.9px) scale(.994, 1.012); }
+        8.537% { transform: translateY(5.6px) scale(1.022, .962); }
+        18.902% { transform: translateY(-1.9px) scale(.994, 1.012); }
+        30.488%, 31.707% { transform: translateY(0) scale(1, 1); }
+        40.244% { transform: translateY(5.6px) scale(1.022, .962); }
+        50.61% { transform: translateY(-1.9px) scale(.994, 1.012); }
+        62.195%, 63.415% { transform: translateY(0) scale(1, 1); }
+        73.659% { transform: translateY(5.6px) scale(1.022, .962); }
+        86.098% { transform: translateY(-1.9px) scale(.994, 1.012); }
         100% { transform: translateY(0) scale(1, 1); }
       }
       @keyframes bs-play {

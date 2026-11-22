@@ -155,6 +155,22 @@ Direct play starts no faster, but it seeks in under a second, and the server run
 
 `layers.mjs` found no layer for any badge: the cost is painting and rasterising them over the artwork as a row arrives. A rounded box that clips (`overflow: hidden`) cost the most and was dropped. The delay gained little and made badges pop in, so it was left out. Square badges with no border cost least, but they are not the look the server's presets describe. A profile can turn badges off (`ui.card_overlays_enabled`).
 
+## Startup splash (#218)
+
+Traced from the TV's browser target, so the trace covers the launch from its first frame (frames drawn by the display compositor, cold launches on a webOS 22 TV):
+
+| Build | Frames during the 2.2 s animation | Longest freeze |
+| --- | --- | --- |
+| Before | 30 fps (one run 50) | 500 to 790 ms |
+| The three landing bounces as one animation | 27 to 34 fps | 470 to 640 ms |
+| Also: the app not drawn until the animation ends | 53 to 56 fps | 60 to 150 ms |
+
+Two causes:
+- The mark's three landing bounces were three animations of `transform` on one element, which Chrome 87 won't run on the compositor (`compositeFailed: 64` in the trace), so the whole mark waited for the main thread.
+- On a cold start, drawing Home for the first time compiles shaders and uploads artwork on the in-process GPU thread for about 1.3 to 1.8 s, and the screen is drawn on that same thread. Tasks of 250 to 400 ms there froze everything, compositor animations included.
+
+The app now loads and lays out under the splash but stays at opacity 0, which is not rastered, until the animation stops. It is then drawn behind the still mark. The splash also drops to opacity 0.99 at that point, so the first blend over the app happens before the fade. The cost: the splash lifts about 1 s later, around 5.1 to 5.7 s after launch instead of 4.3 s, because that GPU work now follows the animation instead of overlapping it. The fade can still catch one hitch of up to about 300 ms, from the app's first big commit and image uploads.
+
 ## Rules that came out of this
 
 - Keep the number of mounted cards small. Do not render what is far off screen.
@@ -162,4 +178,6 @@ Direct play starts no faster, but it seeks in under a second, and the server run
 - Do not create or destroy composited layers when focus moves: no transitions inside cards, no remounting images, no CSS masks on things that fade.
 - Keep focus-driven state out of components that render lists.
 - Never seek the video unless the viewer asked to. On a TV even a one-millisecond seek costs seconds.
+- One animation per property per element: two animations of `transform` on one element run on the main thread.
+- Nothing new may be drawn while a launch animation plays: the first draw of a screen ties up the TV's GPU thread.
 - Measure on the TV before and after. Changes chosen by eye have gone both ways. Measure with the lightest tool that answers the question: tracing and the Network domain change the result.
