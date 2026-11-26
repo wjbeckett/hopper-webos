@@ -123,6 +123,7 @@ Keep each concern in its own layer:
   - `keyboard.ts` tracks whether the TV's on-screen keyboard is showing (`keyboardStateChange`), so Back can leave it to the keyboard.
   - `displayHdr.ts` asks the TV's config service (`tv.model.supportHDR`) whether the screen shows HDR, because Chrome 87 has no `dynamic-range` media query. Without it Silo converts every HDR title to SDR.
   - `luna.ts` makes a one-off Luna call through `PalmServiceBridge`. Use it for new Luna calls: LG's `webOSTV.js` (`window.webOS`) is not loaded, so `window.webOS.service.request` is undefined on the TV.
+  - `classicScripts.ts` is used by the build, not the app: it makes the built `index.html` load the SystemJS chunks with plain scripts (see the webOS gotchas).
   - The other modules are `captions` (the TV's caption settings), `dolbyVision`, `device` and `youtube`.
 - **`services/pairing/`** is a Node 12 webOS JS service (`com.hopperapp.hopper.service`). It advertises `_silopair-roku._tcp` over mDNS and relays phone pairing frames. It also carries phone remote control (`control.js`, the `control*` methods): it advertises `_silocast-roku._tcp`, accepts local-network phones on TCP 52817, sends the TV's hello, answers pings, and pushes everything else to the app through the `controlEvents` subscription. `scripts/package-webos.sh` packages it into the same IPK. Write it in ES5-ish style: no optional chaining and no `??`. Browser mDNS doesn't exist, so keep manual and saved-server management in place.
 
@@ -158,6 +159,7 @@ Keep each concern in its own layer:
 
 ## webOS runtime gotchas (verified on Chrome 87 TVs)
 - **The oldest supported TV is webOS 6 (Chrome 79).** The build target is `chrome79`, so esbuild lowers syntax (`?.`, `??`) and `inset: 0`, but adds no polyfills: a browser API newer than Chrome 79 needs a guard. Write multi-value `inset` and `padding-inline` as longhands. Flex `gap` (Chrome 84) is covered by `flex-gap.css`, which the build generates (`src/platform/flexGapFallback.ts`) and `src/platform/flexGap.ts` loads, ahead of the main stylesheet, only where flex gap is missing. webOS 4 and 5 are not supported (`docs/DECISIONS.md`).
+- **No module scripts and no `crossorigin` on the app's own files** (#223). An installed app's page is a `file://` page, and webOS 6 refuses CORS-mode loads from it (`type="module"`, or any tag with `crossorigin`), so the app never started there and stayed on the splash. webOS 22 allows them, so testing on it doesn't catch this. The build emits SystemJS chunks (`format: "system"`, one stylesheet) and `src/platform/classicScripts.ts` rewrites the built `index.html` to load them with plain scripts; the build fails if a module script or `crossorigin` tag is left. It also patches SystemJS so a failed chunk can be loaded again (lazy screens retry). To check a build the way webOS 6 loads it, open `dist/index.html` straight from disk in Chrome: it must reach the first screen.
 - No CSS `:has()`.
 - CSS transforms on SVG elements need `transform-box: fill-box`.
 - Video renders on a hardware layer, so inspector screenshots show a blank player.
