@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { classicScriptsHtml } from "./src/platform/classicScripts";
 import { flexGapFallback } from "./src/platform/flexGapFallback";
 
 /**
@@ -47,13 +48,26 @@ export default defineConfig({
     },
     {
       // The stand-in for flex gap on Chrome 79 (webOS 6), loaded only there (platform/flexGap.ts).
+      // After Vite's own plugins: with cssCodeSplit off, Vite emits the one stylesheet in its
+      // generateBundle.
       name: "hopper-flex-gap-fallback",
       apply: "build",
+      enforce: "post",
       generateBundle(_options, bundle) {
         const css = Object.values(bundle).filter(file => file.type === "asset" && file.fileName.endsWith(".css"));
         if (css.length !== 1) this.error(`expected one stylesheet in the bundle, found ${css.length}`);
         const source = (css[0] as { source: string | Uint8Array }).source;
         this.emitFile({ type: "asset", fileName: "flex-gap.css", source: flexGapFallback(typeof source === "string" ? source : new TextDecoder().decode(source)) });
+      }
+    },
+    {
+      // webOS 6 won't load an installed app's module scripts or crossorigin tags (#223), so the
+      // built page loads the SystemJS chunks with plain scripts (platform/classicScripts.ts).
+      name: "hopper-classic-scripts",
+      apply: "build",
+      transformIndexHtml: {
+        order: "post",
+        handler: html => classicScriptsHtml(html, readFileSync(resolve(__dirname, "node_modules/systemjs/dist/s.min.js"), "utf8"))
       }
     },
     {
@@ -97,6 +111,12 @@ export default defineConfig({
     // webOS 6 (Chrome 79) is the oldest supported TV. esbuild lowers newer syntax (optional
     // chaining, ??) and simple CSS such as `inset: 0` for it; see docs/DECISIONS.md.
     target: "chrome79",
+    // SystemJS chunks, not ES modules: webOS 6 won't load an installed app's module scripts (#223).
+    // Lazy screens and hls.js stay separate files. One stylesheet, linked from index.html, so no
+    // chunk loads CSS of its own.
+    cssCodeSplit: false,
+    modulePreload: false,
+    rollupOptions: { output: { format: "system" } },
     outDir: "dist",
     emptyOutDir: true
   }
