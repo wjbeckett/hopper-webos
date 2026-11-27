@@ -22,9 +22,13 @@ const MODULE_PRELOAD = /[ \t]*<link rel="modulepreload"[^>]*>\n?/g;
  *   app's own file, so none is ever loaded crossorigin.
  * - SystemJS keeps a failed load in its registry and hands the same failure to every later import,
  *   where a native dynamic import tries the file again. Lazy screens retry a failed load (#208), so
- *   a failure removes the failed files from the registry, and every entry that depends on one.
+ *   a failure removes from the registry every entry that failed: a file that didn't load (`er`), one
+ *   whose linking was rejected, and every entry that depends on one. Linking only waits for each
+ *   dependency to be instantiated, so in screen -> shared -> leaf with leaf missing, shared has
+ *   neither `er` nor `d`, only a rejected link promise (`L`). Its rejection is read before cleaning
+ *   up; entries still loading for another import are left alone. Modules that loaded stay.
  */
-function patchSystem() {
+export function patchSystem() {
   /* eslint-disable */
   var System = (window as any).System;
   var proto = System.constructor.prototype;
@@ -42,17 +46,26 @@ function patchSystem() {
       var registry = loader[keys.length ? keys[0] : "@"];
       var failed: Record<string, boolean> = {};
       try { failed[loader.resolve(id, typeof parentUrl === "string" ? parentUrl : undefined)] = true; } catch (_) { /* unresolvable: nothing was registered */ }
-      for (var changed = true; changed && registry;) {
-        changed = false;
-        for (var key in registry) {
-          var entry = registry[key];
-          if (failed[key] || entry.er || (entry.d && entry.d.some(function (dep: { id: string }) { return failed[dep.id]; }))) {
-            delete registry[key];
-            failed[key] = changed = true;
+      // A rejected link promise has settled by now; a task later its handler has run.
+      for (var linking in registry) {
+        if (registry[linking].d || !registry[linking].L) continue;
+        registry[linking].L.then(null, (function (key: string) {
+          return function () { failed[key] = true; };
+        })(linking));
+      }
+      return new Promise(function (settled) { setTimeout(settled, 0); }).then(function () {
+        for (var changed = true; changed && registry;) {
+          changed = false;
+          for (var key in registry) {
+            var entry = registry[key];
+            if (failed[key] || entry.er || (entry.d && entry.d.some(function (dep: { id: string }) { return failed[dep.id]; }))) {
+              delete registry[key];
+              failed[key] = changed = true;
+            }
           }
         }
-      }
-      throw error;
+        throw error;
+      });
     });
   };
 }

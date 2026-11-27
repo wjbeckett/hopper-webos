@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { classicScriptsHtml } from "./classicScripts";
+import { classicScriptsHtml, patchSystem } from "./classicScripts";
 
 const built = `<!doctype html>
 <html>
@@ -32,5 +34,48 @@ describe("classicScriptsHtml (#223)", () => {
     expect(() => classicScriptsHtml(built.replace(/<script type="module"[^\n]*\n/, ""), loader)).toThrow(/one entry script/);
     expect(() => classicScriptsHtml(built.replace("<body>", "<body><img crossorigin src=x>"), loader)).toThrow(/crossorigin/);
     expect(() => classicScriptsHtml(built, "x</script>y")).toThrow(/inlined/);
+  });
+});
+
+describe("patchSystem retry after a failed load (#208, #223)", () => {
+  // The real SystemJS minimal loader, with instantiate replaced so the test decides which files
+  // exist. Each module counts its executions, so a module that loaded is seen to stay loaded.
+  function loader() {
+    (window as any).System = undefined;
+    window.eval(readFileSync(resolve(__dirname, "../../node_modules/systemjs/dist/s.js"), "utf8"));
+    const System = (window as any).System;
+    patchSystem();
+    const missing = new Set<string>();
+    const runs: Record<string, number> = {};
+    const graph: Record<string, string[]> = { screen: ["shared", "core"], shared: ["leaf", "core"], leaf: [], core: [] };
+    System.resolve = (id: string) => `app:${id.replace(/^app:/, "")}`;
+    System.instantiate = (url: string) => {
+      const name = url.slice(4);
+      if (missing.has(name)) throw new Error(`no ${name}`);
+      return [graph[name], (_export: (key: string, value: unknown) => void) => ({
+        setters: graph[name].map(() => () => {}),
+        execute() { runs[name] = (runs[name] || 0) + 1; _export("name", name); }
+      })];
+    };
+    return { System, missing, runs };
+  }
+
+  it("loads screen -> shared -> leaf again once the missing leaf is back", async () => {
+    const { System, missing, runs } = loader();
+    await System.import("core");
+    missing.add("leaf");
+    await expect(System.import("screen")).rejects.toThrow(/no leaf/);
+    await expect(System.import("screen")).rejects.toThrow(/no leaf/);
+    missing.delete("leaf");
+    await expect(System.import("screen")).resolves.toMatchObject({ name: "screen" });
+    expect(runs).toEqual({ core: 1, leaf: 1, shared: 1, screen: 1 });
+  });
+
+  it("loads a screen again once its own file is back", async () => {
+    const { System, missing } = loader();
+    missing.add("screen");
+    await expect(System.import("screen")).rejects.toThrow(/no screen/);
+    missing.delete("screen");
+    await expect(System.import("screen")).resolves.toMatchObject({ name: "screen" });
   });
 });
